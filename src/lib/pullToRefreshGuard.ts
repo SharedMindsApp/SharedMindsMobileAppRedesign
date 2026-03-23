@@ -10,6 +10,7 @@ import { isStandaloneApp } from './appContext';
 
 let isGuardActive = false;
 const EDGE_GESTURE_THRESHOLD_PX = 24;
+const TOP_GESTURE_THRESHOLD_PX = 28;
 
 function isScrollableElement(node: HTMLElement): boolean {
   const style = window.getComputedStyle(node);
@@ -68,6 +69,7 @@ export function initPullToRefreshGuard(): void {
   let touchStartY = 0;
   let touchCurrentY = 0;
   let touchStartX = 0;
+  let touchStartedNearTop = false;
 
   const handleTouchStart = (event: TouchEvent) => {
     const touch = event.touches[0];
@@ -76,6 +78,7 @@ export function initPullToRefreshGuard(): void {
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
     touchCurrentY = touch.clientY;
+    touchStartedNearTop = touch.clientY <= TOP_GESTURE_THRESHOLD_PX;
   };
 
   const handleTouchMove = (event: TouchEvent) => {
@@ -99,6 +102,12 @@ export function initPullToRefreshGuard(): void {
       return;
     }
 
+    // Only treat this as a pull-to-refresh gesture if the touch started
+    // right at the top edge. Regular scroll drags inside the app should pass through.
+    if (!touchStartedNearTop) {
+      return;
+    }
+
     if (hasScrollableAncestorAboveTop(event.target)) {
       return;
     }
@@ -118,6 +127,7 @@ export function initPullToRefreshGuard(): void {
     touchStartX = 0;
     touchStartY = 0;
     touchCurrentY = 0;
+    touchStartedNearTop = false;
   };
 
   document.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -135,7 +145,6 @@ export function initPullToRefreshGuard(): void {
         html, body, #root {
           overscroll-behavior-y: contain;
           overscroll-behavior-x: contain;
-          touch-action: manipulation;
         }
       }
     `;

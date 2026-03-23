@@ -8,7 +8,7 @@
 // We don't need to pre-cache specific filenames since they change with each build.
 
 // Phase 3C: Cache versioning for clean updates
-const CACHE_NAME = 'shared-minds-shell-v3-supabase-cutover';
+const CACHE_NAME = 'shared-minds-shell-v4-pwa-gesture-fix';
 // Note: Cache name is static - service worker updates handle cache invalidation
 // Shell files to pre-cache (static assets that don't change)
 const SHELL_FILES = [
