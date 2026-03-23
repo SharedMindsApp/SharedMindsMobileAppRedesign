@@ -9,6 +9,7 @@
 import { isStandaloneApp } from './appContext';
 
 let isGuardActive = false;
+const EDGE_GESTURE_THRESHOLD_PX = 24;
 
 function isScrollableElement(node: HTMLElement): boolean {
   const style = window.getComputedStyle(node);
@@ -32,6 +33,26 @@ function hasScrollableAncestorAboveTop(target: EventTarget | null): boolean {
   return false;
 }
 
+function hasHorizontallyScrollableAncestor(target: EventTarget | null): boolean {
+  let current = target instanceof HTMLElement ? target : null;
+
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current);
+    const overflowX = style.overflowX;
+    const canScrollX =
+      (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'overlay') &&
+      current.scrollWidth > current.clientWidth;
+
+    if (canScrollX) {
+      return true;
+    }
+
+    current = current.parentElement;
+  }
+
+  return false;
+}
+
 /**
  * Initialize pull-to-refresh suppression for installed PWAs.
  * This blocks the browser refresh gesture but does not replace it with
@@ -46,11 +67,13 @@ export function initPullToRefreshGuard(): void {
 
   let touchStartY = 0;
   let touchCurrentY = 0;
+  let touchStartX = 0;
 
   const handleTouchStart = (event: TouchEvent) => {
     const touch = event.touches[0];
     if (!touch) return;
 
+    touchStartX = touch.clientX;
     touchStartY = touch.clientY;
     touchCurrentY = touch.clientY;
   };
@@ -59,8 +82,18 @@ export function initPullToRefreshGuard(): void {
     const touch = event.touches[0];
     if (!touch) return;
 
+    const deltaX = touch.clientX - touchStartX;
     touchCurrentY = touch.clientY;
     const deltaY = touchCurrentY - touchStartY;
+    const startNearLeftEdge = touchStartX <= EDGE_GESTURE_THRESHOLD_PX;
+    const startNearRightEdge = window.innerWidth - touchStartX <= EDGE_GESTURE_THRESHOLD_PX;
+
+    if ((startNearLeftEdge || startNearRightEdge) && Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 12) {
+      if (!hasHorizontallyScrollableAncestor(event.target)) {
+        event.preventDefault();
+      }
+      return;
+    }
 
     if (deltaY <= 0) {
       return;
@@ -82,6 +115,7 @@ export function initPullToRefreshGuard(): void {
   };
 
   const handleTouchEnd = () => {
+    touchStartX = 0;
     touchStartY = 0;
     touchCurrentY = 0;
   };
@@ -98,9 +132,10 @@ export function initPullToRefreshGuard(): void {
         overscroll-behavior-y: contain;
       }
       @media (display-mode: standalone) {
-        html, body {
+        html, body, #root {
           overscroll-behavior-y: contain;
           overscroll-behavior-x: contain;
+          touch-action: manipulation;
         }
       }
     `;
