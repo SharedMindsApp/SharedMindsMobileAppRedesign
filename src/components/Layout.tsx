@@ -227,7 +227,7 @@ export function Layout({ children }: LayoutProps) {
       !location.pathname.endsWith('/shared'));
 
   return (
-    <div className="core-app-shell min-h-screen-safe bg-surface" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", overflowY: 'visible' }}>
+    <div className="core-app-shell flex min-h-screen-safe flex-col bg-surface" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
       {!isSpacesPage && (
         <nav className={`overflow-x-hidden overflow-y-visible fixed top-0 inset-x-0 z-50 backdrop-blur-xl ${config.appTheme === 'dark'
           ? 'bg-gray-900/92 border-b border-gray-700/40'
