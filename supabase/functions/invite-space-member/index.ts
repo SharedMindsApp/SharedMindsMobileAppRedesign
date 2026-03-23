@@ -271,6 +271,7 @@ Deno.serve(async (req: Request) => {
       const spaceType = space.context_type === 'household' ? 'household' : 'team';
       const safeInviterName = escapeHtml(inviterName);
       const safeSpaceName = escapeHtml(spaceName);
+      const safeOrigin = escapeHtml(origin);
 
       const emailSubject = `You've been invited to join ${spaceName} on SharedMinds`;
       const emailBody = `
@@ -282,11 +283,20 @@ Deno.serve(async (req: Request) => {
             <p><a href="${inviteUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Accept Invitation</a></p>
             <p>Or copy and paste this link into your browser:</p>
             <p>${inviteUrl}</p>
+            <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
+            <h3 style="margin:0 0 12px;">Install SharedMinds on your device</h3>
+            <p style="margin:0 0 12px;">After you open SharedMinds, you can install it like an app for quicker access.</p>
+            <ul style="padding-left:20px; margin:0 0 12px;">
+              <li><strong>iPhone or iPad:</strong> Open in Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</li>
+              <li><strong>Android:</strong> Open in Chrome, tap the browser menu, then choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+              <li><strong>Desktop:</strong> Open SharedMinds in Chrome or Edge and click the <strong>Install</strong> icon in the address bar.</li>
+            </ul>
+            <p style="margin:0 0 12px;">Open SharedMinds here: <a href="${origin}">${safeOrigin}</a></p>
             <p>If you didn't expect this invitation, you can safely ignore this email.</p>
           </body>
         </html>
       `;
-      const emailText = `${inviterName} has invited you to join the ${spaceType} "${spaceName}" on SharedMinds.\n\nAccept the invitation:\n${inviteUrl}\n\nIf you didn't expect this invitation, you can safely ignore this email.`;
+      const emailText = `${inviterName} has invited you to join the ${spaceType} "${spaceName}" on SharedMinds.\n\nAccept the invitation:\n${inviteUrl}\n\nInstall SharedMinds on your device:\n- iPhone or iPad: open in Safari, tap Share, then Add to Home Screen.\n- Android: open in Chrome, tap the browser menu, then Install app or Add to Home screen.\n- Desktop: open SharedMinds in Chrome or Edge and click the Install icon in the address bar.\n\nOpen SharedMinds here:\n${origin}\n\nIf you didn't expect this invitation, you can safely ignore this email.`;
 
       emailDelivery = await sendInviteEmailWithResend({
         to: email.toLowerCase(),

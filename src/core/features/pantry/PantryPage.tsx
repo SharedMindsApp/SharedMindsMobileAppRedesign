@@ -43,7 +43,10 @@ export function PantryPage() {
   }
 
   return (
-    <div className="space-y-5 sm:space-y-7">
+    <div
+      className="space-y-5 sm:space-y-7 overscroll-contain"
+      style={{ touchAction: 'pan-y pinch-zoom' }}
+    >
       <div className="sticky top-14 sm:top-16 z-30 -mx-1 px-1 sm:mx-0 sm:px-0">
         <div className="rounded-[1.6rem] border border-slate-200/70 bg-white/82 p-2 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.32)] backdrop-blur-md">
           <div className="hidden sm:flex flex-wrap items-center gap-1">
@@ -68,7 +71,13 @@ export function PantryPage() {
             })}
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 sm:hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div
+            className="flex items-center gap-2 overflow-x-auto pb-0.5 sm:hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x',
+            }}
+          >
             {PANTRY_TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
