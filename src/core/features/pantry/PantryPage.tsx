@@ -47,8 +47,8 @@ export function PantryPage() {
       className="space-y-5 sm:space-y-7 overscroll-contain"
       style={{ touchAction: 'pan-y pinch-zoom' }}
     >
-      <div className="sticky top-14 sm:top-16 z-30 -mx-1 px-1 sm:mx-0 sm:px-0">
-        <div className="rounded-[1.6rem] border border-slate-200/70 bg-white/82 p-2 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.32)] backdrop-blur-md">
+      <div className="sticky top-0 z-30 -mx-3 border-b border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))] px-3 pb-3 pt-1 backdrop-blur-md sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0">
+        <div className="rounded-[1.6rem] border border-slate-200/70 bg-white/88 p-2 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.32)] backdrop-blur-md">
           <div className="hidden sm:flex flex-wrap items-center gap-1">
             {PANTRY_TABS.map((tab) => {
               const Icon = tab.icon;
