@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pantry Analytics - SharedMinds</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-highest": "#dfe3e7",
+              "on-primary": "#f9f8ff",
+              "on-primary-fixed-variant": "#001435",
+              "secondary-dim": "#44546a",
+              "primary-fixed-dim": "#317bef",
+              "error": "#a83836",
+              "on-secondary-fixed": "#314055",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "on-primary-container": "#000311",
+              "on-tertiary-fixed": "#00452d",
+              "error-container": "#fa746f",
+              "on-tertiary-container": "#005a3c",
+              "tertiary-fixed": "#69f6b8",
+              "surface-container-low": "#f2f4f6",
+              "primary": "#005bc4",
+              "inverse-surface": "#0c0e10",
+              "secondary-fixed-dim": "#c5d6f0",
+              "on-error-container": "#6e0a12",
+              "error-dim": "#67040d",
+              "primary-container": "#4388fd",
+              "on-secondary-container": "#435368",
+              "surface-dim": "#d7dadf",
+              "background": "#f9f9fb",
+              "tertiary-container": "#69f6b8",
+              "tertiary": "#006d4a",
+              "on-surface": "#2e3336",
+              "inverse-on-surface": "#9c9d9f",
+              "surface-container": "#eceef1",
+              "on-surface-variant": "#5b6063",
+              "surface-container-lowest": "#ffffff",
+              "inverse-primary": "#4d8eff",
+              "tertiary-fixed-dim": "#58e7ab",
+              "surface-container-high": "#e6e8ec",
+              "secondary": "#506076",
+              "on-error": "#fff7f6",
+              "surface-bright": "#f9f9fb",
+              "tertiary-dim": "#005f40",
+              "surface-tint": "#005bc4",
+              "secondary-container": "#d3e4fe",
+              "outline": "#777b7f",
+              "on-tertiary-fixed-variant": "#006544",
+              "surface": "#f9f9fb",
+              "outline-variant": "#aeb2b6",
+              "primary-fixed": "#4388fd",
+              "on-background": "#2e3336",
+              "primary-dim": "#004fad",
+              "on-tertiary": "#e6ffee",
+              "on-secondary": "#f7f9ff",
+              "secondary-fixed": "#d3e4fe",
+              "on-primary-fixed": "#000000",
+              "surface-variant": "#dfe3e7"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        h1, h2, h3 {
+            font-family: 'Manrope', sans-serif;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="w-full top-0 z-50 sticky bg-[#f2f4f6] dark:bg-[#1a1c1e] transition-colors duration-300">
+<div class="flex items-center justify-between px-6 py-4 w-full">
+<div class="flex items-center gap-4">
+<button class="hover:bg-[#eceef1] dark:hover:bg-[#2e3336] rounded-full transition-all p-2 active:scale-95 duration-200 ease-in-out">
+<span class="material-symbols-outlined text-[#5b6063] dark:text-[#aeb2b6]">arrow_back</span>
+</button>
+<h1 class="font-['Manrope'] text-2xl font-semibold tracking-tight text-[#2e3336] dark:text-white">Pantry Analytics</h1>
+</div>
+<div class="flex gap-2">
+<button class="hover:bg-[#eceef1] dark:hover:bg-[#2e3336] rounded-full transition-all p-2 active:scale-95 duration-200 ease-in-out">
+<span class="material-symbols-outlined text-[#5b6063] dark:text-[#aeb2b6]">share</span>
+</button>
+</div>
+</div>
+</header>
+<main class="max-w-4xl mx-auto px-6 pt-8 space-y-10">
+<!-- Bento Grid Section: Top Row -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- Expiry Analytics Card -->
+<div class="md:col-span-7 bg-surface-container-lowest p-8 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-outline-variant/10 flex flex-col justify-between min-h-[320px]">
+<div>
+<h2 class="text-xl font-bold tracking-tight mb-1">Expiry Horizon</h2>
+<p class="text-on-surface-variant text-sm mb-6">Inventory urgency overview</p>
+</div>
+<div class="flex items-end justify-between gap-4 h-40">
+<div class="flex-1 flex flex-col items-center gap-3">
+<div class="w-full bg-error-container/20 rounded-t-lg relative group h-full flex flex-col justify-end">
+<div class="bg-error-container w-full rounded-t-lg transition-all" style="height: 35%;"></div>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">&lt; 3 Days</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-3">
+<div class="w-full bg-primary-container/20 rounded-t-lg relative group h-full flex flex-col justify-end">
+<div class="bg-primary-container w-full rounded-t-lg transition-all" style="height: 65%;"></div>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">&lt; 7 Days</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-3">
+<div class="w-full bg-surface-container/40 rounded-t-lg relative group h-full flex flex-col justify-end">
+<div class="bg-surface-container-highest w-full rounded-t-lg transition-all" style="height: 90%;"></div>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">&lt; 30 Days</span>
+</div>
+</div>
+</div>
+<!-- Storage Efficiency Card -->
+<div class="md:col-span-5 bg-primary rounded-xl p-8 text-on-primary flex flex-col justify-between shadow-lg shadow-primary/10 relative overflow-hidden">
+<!-- Decorative Circle -->
+<div class="absolute -top-10 -right-10 w-40 h-40 bg-primary-container/20 rounded-full blur-3xl"></div>
+<div class="z-10">
+<h2 class="text-xl font-bold tracking-tight mb-1">Rotation Score</h2>
+<p class="text-primary-container font-medium opacity-90 text-sm">Mindful Management</p>
+</div>
+<div class="z-10 py-4">
+<div class="text-6xl font-extrabold tracking-tighter">92<span class="text-2xl font-semibold opacity-70">%</span></div>
+<div class="flex items-center gap-2 mt-2">
+<span class="material-symbols-outlined text-tertiary-fixed text-sm" style="font-variation-settings: 'FILL' 1;">eco</span>
+<span class="text-sm font-medium">8.4kg Waste Avoided</span>
+</div>
+</div>
+<div class="z-10 pt-4 border-t border-white/10">
+<p class="text-xs font-medium uppercase tracking-widest opacity-60 mb-2">Current Status</p>
+<div class="h-2 w-full bg-white/20 rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-fixed w-[92%] rounded-full"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Insights Card -->
+<section class="bg-surface-container-low p-6 rounded-lg flex flex-col md:flex-row items-start md:items-center gap-6">
+<div class="bg-white p-4 rounded-full shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">lightbulb</span>
+</div>
+<div class="flex-1">
+<h3 class="font-bold text-lg mb-1">Mindful Tip</h3>
+<p class="text-on-surface-variant leading-relaxed">
+                    You tend to waste <span class="text-primary font-bold">15%</span> of your 'Fresh' category. Consider smaller, more frequent purchases to align with your consumption rhythm.
+                </p>
+</div>
+<button class="bg-primary px-6 py-3 rounded-full text-on-primary text-sm font-bold shadow-sm active:scale-95 transition-transform shrink-0">
+                Adjust Goals
+            </button>
+</section>
+<!-- Middle Section: Category Breakdown -->
+<section>
+<div class="flex items-end justify-between mb-6">
+<div>
+<h2 class="text-2xl font-bold tracking-tight">Category Breakdown</h2>
+<p class="text-on-surface-variant">Investment by inventory type</p>
+</div>
+<button class="text-primary font-bold text-sm flex items-center gap-1">
+                    See All <span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+<div class="flex gap-4 overflow-x-auto hide-scrollbar pb-4 -mx-6 px-6">
+<!-- Category Item -->
+<div class="min-w-[160px] bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10 shadow-sm">
+<div class="w-10 h-10 bg-blue-50 text-primary rounded-lg flex items-center justify-center mb-4">
+<span class="material-symbols-outlined">restaurant</span>
+</div>
+<div class="text-sm font-bold text-on-surface">Fresh</div>
+<div class="text-xl font-extrabold mt-1">$142.50</div>
+<div class="text-[10px] text-on-surface-variant font-medium mt-2">24 ITEMS</div>
+</div>
+<!-- Category Item -->
+<div class="min-w-[160px] bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10 shadow-sm">
+<div class="w-10 h-10 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center mb-4">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+<div class="text-sm font-bold text-on-surface">Dry Goods</div>
+<div class="text-xl font-extrabold mt-1">$89.20</div>
+<div class="text-[10px] text-on-surface-variant font-medium mt-2">48 ITEMS</div>
+</div>
+<!-- Category Item -->
+<div class="min-w-[160px] bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10 shadow-sm">
+<div class="w-10 h-10 bg-emerald-50 text-tertiary rounded-lg flex items-center justify-center mb-4">
+<span class="material-symbols-outlined">psychology</span>
+</div>
+<div class="text-sm font-bold text-on-surface">Harvest</div>
+<div class="text-xl font-extrabold mt-1">$56.00</div>
+<div class="text-[10px] text-on-surface-variant font-medium mt-2">12 ITEMS</div>
+</div>
+<!-- Category Item -->
+<div class="min-w-[160px] bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/10 shadow-sm">
+<div class="w-10 h-10 bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center mb-4">
+<span class="material-symbols-outlined">shelves</span>
+</div>
+<div class="text-sm font-bold text-on-surface">Cache</div>
+<div class="text-xl font-extrabold mt-1">$210.15</div>
+<div class="text-[10px] text-on-surface-variant font-medium mt-2">102 ITEMS</div>
+</div>
+</div>
+</section>
+<!-- Bottom Section: Spending Trends -->
+<section class="bg-surface-container p-8 rounded-xl">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+<div>
+<h2 class="text-xl font-bold tracking-tight">Spending Trends</h2>
+<p class="text-on-surface-variant text-sm">Monthly food investment</p>
+</div>
+<div class="flex gap-2 bg-surface-container-low p-1 rounded-full">
+<button class="px-4 py-1.5 rounded-full text-xs font-bold bg-white shadow-sm">6 Months</button>
+<button class="px-4 py-1.5 rounded-full text-xs font-bold text-on-surface-variant">Yearly</button>
+</div>
+</div>
+<!-- Simplified Line Graph -->
+<div class="relative h-48 w-full mt-4 flex items-end justify-between px-2">
+<!-- SVG Line Graph Background -->
+<svg class="absolute inset-0 w-full h-full preserve-3d" preserveaspectratio="none" viewbox="0 0 400 100">
+<path d="M0,80 Q50,70 100,85 T200,60 T300,40 T400,20" fill="none" stroke="#005bc4" stroke-linecap="round" stroke-width="3"></path>
+<path d="M0,80 Q50,70 100,85 T200,60 T300,40 T400,20 V100 H0 Z" fill="url(#grad)" opacity="0.1"></path>
+<defs>
+<lineargradient id="grad" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#005bc4;stop-opacity:1"></stop>
+<stop offset="100%" style="stop-color:#005bc4;stop-opacity:0"></stop>
+</lineargradient>
+</defs>
+</svg>
+<!-- Data Points (Markers) -->
+<div class="flex flex-col items-center gap-2 z-10">
+<div class="w-2 h-2 rounded-full bg-primary ring-4 ring-primary/10"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">OCT</span>
+</div>
+<div class="flex flex-col items-center gap-2 z-10">
+<div class="w-2 h-2 rounded-full bg-primary ring-4 ring-primary/10"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">NOV</span>
+</div>
+<div class="flex flex-col items-center gap-2 z-10">
+<div class="w-2 h-2 rounded-full bg-primary ring-4 ring-primary/10"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">DEC</span>
+</div>
+<div class="flex flex-col items-center gap-2 z-10">
+<div class="w-2 h-2 rounded-full bg-primary ring-4 ring-primary/10"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">JAN</span>
+</div>
+<div class="flex flex-col items-center gap-2 z-10">
+<div class="w-2 h-2 rounded-full bg-primary ring-4 ring-primary/10"></div>
+<span class="text-[10px] font-bold text-on-surface-variant">FEB</span>
+</div>
+<div class="flex flex-col items-center gap-2 z-10">
+<div class="w-3 h-3 rounded-full bg-white border-2 border-primary ring-4 ring-primary/20 scale-125"></div>
+<span class="text-[10px] font-bold text-primary">MAR</span>
+</div>
+</div>
+<div class="mt-8 flex justify-center">
+<div class="bg-white/50 backdrop-blur-sm px-6 py-4 rounded-xl border border-white/40 flex gap-10">
+<div class="text-center">
+<div class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Avg Month</div>
+<div class="text-lg font-extrabold">$312.40</div>
+</div>
+<div class="text-center border-l border-outline-variant/20 pl-10">
+<div class="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">Peak Spend</div>
+<div class="text-lg font-extrabold">$482.00</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-[3rem] border-t border-[#aeb2b6]/15 bg-[#f9f9fb]/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<div class="flex justify-around items-center w-full px-4 pb-6 pt-3">
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors tap-highlight-transparent active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined mb-1">inventory_2</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-[#eceef1] dark:bg-[#2e3336] text-[#005bc4] dark:text-[#4388fd] rounded-[1.5rem] px-5 py-2 tap-highlight-transparent active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Insights</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors tap-highlight-transparent active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined mb-1">shopping_cart</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Shopping</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors tap-highlight-transparent active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Settings</span>
+</a>
+</div>
+</nav>
+</body></html>

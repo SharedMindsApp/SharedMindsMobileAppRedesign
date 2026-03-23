@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Check-Ins | SharedMinds</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary": "#f9f8ff",
+              "primary-container": "#4388fd",
+              "outline-variant": "#aeb2b6",
+              "on-tertiary-container": "#005a3c",
+              "on-tertiary": "#e6ffee",
+              "surface": "#f9f9fb",
+              "surface-dim": "#d7dadf",
+              "secondary-dim": "#44546a",
+              "primary-fixed": "#4388fd",
+              "inverse-on-surface": "#9c9d9f",
+              "on-tertiary-fixed": "#00452d",
+              "inverse-surface": "#0c0e10",
+              "on-secondary-fixed": "#314055",
+              "tertiary-container": "#69f6b8",
+              "background": "#f9f9fb",
+              "on-background": "#2e3336",
+              "error-container": "#fa746f",
+              "on-surface": "#2e3336",
+              "surface-container-low": "#f2f4f6",
+              "on-primary-container": "#000311",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-dim": "#005f40",
+              "on-primary-fixed": "#000000",
+              "inverse-primary": "#4d8eff",
+              "surface-container-high": "#e6e8ec",
+              "secondary": "#506076",
+              "primary-fixed-dim": "#317bef",
+              "on-secondary": "#f7f9ff",
+              "tertiary": "#006d4a",
+              "secondary-fixed": "#d3e4fe",
+              "on-error-container": "#6e0a12",
+              "tertiary-fixed": "#69f6b8",
+              "surface-bright": "#f9f9fb",
+              "on-tertiary-fixed-variant": "#006544",
+              "primary-dim": "#004fad",
+              "on-error": "#fff7f6",
+              "on-primary-fixed-variant": "#001435",
+              "outline": "#777b7f",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "surface-container": "#eceef1",
+              "secondary-fixed-dim": "#c5d6f0",
+              "surface-variant": "#dfe3e7",
+              "on-secondary-container": "#435368",
+              "on-surface-variant": "#5b6063",
+              "secondary-container": "#d3e4fe",
+              "tertiary-fixed-dim": "#58e7ab",
+              "error-dim": "#67040d",
+              "error": "#a83836",
+              "surface-container-highest": "#dfe3e7",
+              "surface-tint": "#005bc4",
+              "primary": "#005bc4"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .signature-gradient {
+            background: linear-gradient(135deg, #005bc4 0%, #4388fd 100%);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="w-full sticky top-0 z-50 bg-[#f9f9fb] dark:bg-[#0c0e10] flex items-center justify-between px-6 py-4">
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors active:scale-95 duration-200 rounded-full">
+<span class="material-symbols-outlined text-blue-600 dark:text-blue-400" data-icon="menu">menu</span>
+</button>
+<h1 class="text-blue-700 dark:text-blue-400 font-['Manrope'] font-extrabold tracking-tighter text-lg">SharedMinds</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[#5b6063] dark:text-[#aeb2b6] font-['Plus_Jakarta_Sans'] font-semibold text-sm hidden md:block">Mindful User</span>
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden border-2 border-primary/10">
+<img alt="User avatar" data-alt="Close up portrait of a smiling user" src="https://lh3.googleusercontent.com/aida-public/AB6AXuABsfuBDm9x4RV0JTVUj5EB69Cb5Mxyy1790uzmLUJaWKy4HLN5PVvXaD_4L3-DahwtYb4RJOUkx_jpa2fedrXurtruvypVeMRYbTzT8XicjRzILq24lca_shTp7b3j4JXFJ4UeHC4QuE2LjNG1zDT9mW8c1660e1zgcPHTnoqqt18u1rMc8DK60yLEgFH69I_ZCDnw2FPYYa_WmZ4L2X3pdBakn0VaW8VwhLUznhjcRL7CGXv4hawcuLv0d2aJWkhQogalmBhSo30"/>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 pt-8 pb-32">
+<!-- Header Section with Asymmetry -->
+<section class="mb-12 md:ml-12">
+<h2 class="font-headline text-4xl md:text-5xl font-extrabold text-on-surface tracking-tight mb-2">Check-Ins</h2>
+<p class="text-on-surface-variant text-lg max-w-xl">A quiet moment to anchor your mind and observe your flow.</p>
+</section>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column: Start New Check-in (The Focus Card) -->
+<div class="lg:col-span-7 space-y-6">
+<div class="bg-surface-container-lowest p-8 md:p-10 rounded-xl shadow-[0_24px_32px_rgba(0,91,196,0.04)] relative overflow-hidden">
+<div class="relative z-10">
+<div class="flex items-center gap-3 mb-6">
+<div class="p-2 bg-tertiary/10 rounded-lg">
+<span class="material-symbols-outlined text-tertiary" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<span class="text-tertiary font-bold text-sm tracking-widest uppercase">AI REFLECTION</span>
+</div>
+<h3 class="font-headline text-2xl md:text-3xl font-bold mb-4 text-on-surface">How are you feeling right now?</h3>
+<p class="text-on-surface-variant mb-8 text-lg italic">"You've been focused on 'Projects' for 3 hours. It's a good time to check your mental energy levels."</p>
+<!-- Mood Spectrum -->
+<div class="mb-10">
+<label class="block text-sm font-bold text-on-surface-variant mb-4 tracking-wide">MOOD SPECTRUM</label>
+<div class="flex justify-between items-center gap-2">
+<button class="flex-1 flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-surface-container transition-all active:scale-95 group">
+<span class="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform" data-icon="sentiment_very_dissatisfied">sentiment_very_dissatisfied</span>
+<span class="text-[10px] font-bold text-on-surface-variant">STRUGGLING</span>
+</button>
+<button class="flex-1 flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-surface-container transition-all active:scale-95 group">
+<span class="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform" data-icon="sentiment_dissatisfied">sentiment_dissatisfied</span>
+<span class="text-[10px] font-bold text-on-surface-variant">HEAVY</span>
+</button>
+<button class="flex-1 flex flex-col items-center gap-2 p-4 rounded-xl bg-primary-container/10 border-2 border-primary-container text-primary flex-col items-center gap-2 p-4 rounded-xl active:scale-95 group">
+<span class="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform" data-icon="sentiment_neutral" style="font-variation-settings: 'FILL' 1;">sentiment_neutral</span>
+<span class="text-[10px] font-bold">BALANCED</span>
+</button>
+<button class="flex-1 flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-surface-container transition-all active:scale-95 group">
+<span class="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform" data-icon="sentiment_satisfied">sentiment_satisfied</span>
+<span class="text-[10px] font-bold text-on-surface-variant">CALM</span>
+</button>
+<button class="flex-1 flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-surface-container transition-all active:scale-95 group">
+<span class="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform" data-icon="sentiment_very_satisfied">sentiment_very_satisfied</span>
+<span class="text-[10px] font-bold text-on-surface-variant">RADIANT</span>
+</button>
+</div>
+</div>
+<!-- Energy Field -->
+<div class="mb-10">
+<label class="block text-sm font-bold text-on-surface-variant mb-4 tracking-wide">ENERGY LEVEL</label>
+<div class="relative h-12 bg-surface-container rounded-full flex items-center px-2">
+<div class="absolute left-0 h-full w-2/3 signature-gradient rounded-full opacity-20"></div>
+<div class="w-8 h-8 bg-white rounded-full shadow-lg border-2 border-primary absolute left-[65%] cursor-pointer"></div>
+<div class="w-full flex justify-between px-6 pointer-events-none">
+<span class="text-xs font-bold text-on-surface-variant/50">LOW</span>
+<span class="text-xs font-bold text-on-surface-variant/50">HIGH</span>
+</div>
+</div>
+</div>
+<!-- Text Input -->
+<div class="mb-8">
+<textarea class="w-full h-32 bg-surface-container-highest border-none rounded-xl p-6 text-on-surface placeholder:text-on-surface-variant/40 focus:ring-2 focus:ring-primary/20 transition-all resize-none" placeholder="Describe your current state of mind..."></textarea>
+</div>
+<button class="w-full h-14 signature-gradient text-white font-bold text-lg rounded-full shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:opacity-90 transition-opacity active:scale-[0.98]">
+<span class="material-symbols-outlined" data-icon="check">check</span>
+                            Complete Check-in
+                        </button>
+</div>
+<!-- Decorative Background Element -->
+<div class="absolute -top-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl"></div>
+</div>
+</div>
+<!-- Right Column: Stats & History -->
+<div class="lg:col-span-5 space-y-6">
+<!-- Weekly Trend Visualization -->
+<div class="bg-surface-container-low p-8 rounded-xl">
+<div class="flex justify-between items-center mb-6">
+<h4 class="font-headline font-bold text-lg text-on-surface">Weekly Flow</h4>
+<span class="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase">Last 7 Days</span>
+</div>
+<div class="h-40 flex items-end justify-between gap-2 px-2">
+<!-- Simple bar visualization for ADHD friendly readability -->
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-16 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">MON</span>
+</div>
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-20 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">TUE</span>
+</div>
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-12 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">WED</span>
+</div>
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-24 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">THU</span>
+</div>
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-18 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">FRI</span>
+</div>
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-8 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">SAT</span>
+</div>
+<div class="flex-1 space-y-2">
+<div class="w-full bg-primary/20 rounded-t-lg h-24 relative overflow-hidden">
+<div class="absolute bottom-0 w-full bg-primary h-14 rounded-t-lg"></div>
+</div>
+<span class="block text-center text-[10px] font-bold text-on-surface-variant">SUN</span>
+</div>
+</div>
+</div>
+<!-- History List -->
+<div class="space-y-4">
+<div class="flex justify-between items-center px-2">
+<h4 class="font-headline font-bold text-lg text-on-surface">Recent History</h4>
+<button class="text-primary text-sm font-bold hover:underline">View All</button>
+</div>
+<!-- History Items -->
+<div class="space-y-3">
+<div class="bg-surface-container-low p-5 rounded-xl flex items-center gap-4 hover:bg-surface-container transition-colors group">
+<div class="w-12 h-12 rounded-full bg-tertiary-container/30 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" data-icon="sentiment_satisfied" style="font-variation-settings: 'FILL' 1;">sentiment_satisfied</span>
+</div>
+<div class="flex-1">
+<h5 class="font-bold text-on-surface text-sm">Balanced &amp; Focused</h5>
+<p class="text-xs text-on-surface-variant">Felt productive after the morning walk.</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] font-bold text-on-surface-variant uppercase">TODAY</p>
+<p class="text-[10px] text-on-surface-variant/60">09:45 AM</p>
+</div>
+</div>
+<div class="bg-surface-container-low p-5 rounded-xl flex items-center gap-4 hover:bg-surface-container transition-colors group">
+<div class="w-12 h-12 rounded-full bg-error-container/20 flex items-center justify-center text-error">
+<span class="material-symbols-outlined" data-icon="sentiment_dissatisfied" style="font-variation-settings: 'FILL' 1;">sentiment_dissatisfied</span>
+</div>
+<div class="flex-1">
+<h5 class="font-bold text-on-surface text-sm">Feeling Overwhelmed</h5>
+<p class="text-xs text-on-surface-variant">Too many small tasks on the list.</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] font-bold text-on-surface-variant uppercase">YESTERDAY</p>
+<p class="text-[10px] text-on-surface-variant/60">04:20 PM</p>
+</div>
+</div>
+<div class="bg-surface-container-low p-5 rounded-xl flex items-center gap-4 hover:bg-surface-container transition-colors group">
+<div class="w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="sentiment_very_satisfied" style="font-variation-settings: 'FILL' 1;">sentiment_very_satisfied</span>
+</div>
+<div class="flex-1">
+<h5 class="font-bold text-on-surface text-sm">Deep Flow State</h5>
+<p class="text-xs text-on-surface-variant">Finished the logic for the project.</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] font-bold text-on-surface-variant uppercase">AUG 24</p>
+<p class="text-[10px] text-on-surface-variant/60">11:15 AM</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#f9f9fb]/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg rounded-t-[3rem] border-t border-[#aeb2b6]/15 shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="today">today</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="assignment">assignment</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Tasks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-2xl px-4 py-2 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="fact_check" style="font-variation-settings: 'FILL' 1;">fact_check</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Check-Ins</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="account_tree">account_tree</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Projects</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="calendar_today">calendar_today</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold">Calendar</span>
+</a>
+</nav>
+</body></html>

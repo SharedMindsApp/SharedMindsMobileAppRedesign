@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SharedMinds - Weekly Focus</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "error-dim": "#67040d",
+              "on-primary-container": "#000311",
+              "inverse-surface": "#0c0e10",
+              "surface-variant": "#dfe3e7",
+              "secondary-fixed-dim": "#c5d6f0",
+              "inverse-primary": "#4d8eff",
+              "tertiary-container": "#69f6b8",
+              "inverse-on-surface": "#9c9d9f",
+              "primary-dim": "#004fad",
+              "on-background": "#2e3336",
+              "surface-container-high": "#e6e8ec",
+              "on-error": "#fff7f6",
+              "primary": "#005bc4",
+              "outline-variant": "#aeb2b6",
+              "secondary": "#506076",
+              "primary-fixed": "#4388fd",
+              "on-tertiary-fixed": "#00452d",
+              "surface-container-low": "#f2f4f6",
+              "on-primary": "#f9f8ff",
+              "surface-container-lowest": "#ffffff",
+              "tertiary": "#006d4a",
+              "on-tertiary-container": "#005a3c",
+              "surface": "#f9f9fb",
+              "on-secondary": "#f7f9ff",
+              "outline": "#777b7f",
+              "on-tertiary": "#e6ffee",
+              "secondary-dim": "#44546a",
+              "surface-bright": "#f9f9fb",
+              "primary-fixed-dim": "#317bef",
+              "on-surface": "#2e3336",
+              "on-secondary-fixed": "#314055",
+              "on-tertiary-fixed-variant": "#006544",
+              "tertiary-dim": "#005f40",
+              "surface-container-highest": "#dfe3e7",
+              "on-surface-variant": "#5b6063",
+              "secondary-fixed": "#d3e4fe",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "error": "#a83836",
+              "tertiary-fixed": "#69f6b8",
+              "on-primary-fixed-variant": "#001435",
+              "on-primary-fixed": "#000000",
+              "tertiary-fixed-dim": "#58e7ab",
+              "surface-tint": "#005bc4",
+              "surface-container": "#eceef1",
+              "surface-dim": "#d7dadf",
+              "on-error-container": "#6e0a12",
+              "background": "#f9f9fb",
+              "error-container": "#fa746f",
+              "primary-container": "#4388fd",
+              "secondary-container": "#d3e4fe",
+              "on-secondary-container": "#435368"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      body { font-family: 'Plus Jakarta Sans', sans-serif; }
+      h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-32">
+<!-- TopAppBar Section -->
+<header class="w-full top-0 sticky z-50 bg-[#f9f9fb] dark:bg-[#0c0e10] flex justify-between items-center px-6 py-4 w-full transition-colors duration-300">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#005bc4] dark:text-[#4388fd] text-2xl" data-icon="calendar_today">calendar_today</span>
+<h1 class="font-['Manrope'] font-bold text-lg tracking-tight text-[#2e3336] dark:text-[#eceef1]">Today, Oct 24</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container border border-outline-variant/10">
+<img alt="User profile avatar" data-alt="Minimalist circular user profile avatar icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfyAHmNuMmwn2t2qMyvTHmBaJU3qIVyuUwDeVWZBfslF3a3FCIeyrt1C32PKY3aa5X8C5YtoLZ2Z3e25UDZvWFwkJqdd3mBN1TMpwQoTdskxG85fXvnt5BCrcX5MIm69YqknKaSjJRHH0kpBic4bGt2_1iegPA-qrD1ygiy68ti0j6NbO-_Al82ig2uwrk37xUdT95hDnGvsT2rT7QR-BWH34kkFHVzpghmfEfVWf-H6KNktBWjZEf_kQqPE8Pgu_1XJDLj3FQbhc"/>
+</div>
+</header>
+<main class="max-w-2xl mx-auto px-6">
+<!-- Weekly Scroller -->
+<section class="mt-4 mb-10 overflow-x-auto no-scrollbar flex gap-4 py-2">
+<div class="flex flex-col items-center min-w-[56px] py-3 rounded-2xl text-on-surface-variant">
+<span class="text-xs font-semibold mb-2 opacity-60">MON</span>
+<span class="text-lg font-bold">22</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-3 rounded-full bg-primary text-on-primary shadow-lg shadow-primary/20">
+<span class="text-xs font-semibold mb-2">TUE</span>
+<span class="text-xl font-extrabold">23</span>
+</div>
+<div class="flex flex-col items-center min-w-[56px] py-3 rounded-2xl text-on-surface-variant">
+<span class="text-xs font-semibold mb-2 opacity-60">WED</span>
+<span class="text-lg font-bold">24</span>
+</div>
+<div class="flex flex-col items-center min-w-[56px] py-3 rounded-2xl text-on-surface-variant">
+<span class="text-xs font-semibold mb-2 opacity-60">THU</span>
+<span class="text-lg font-bold">25</span>
+</div>
+<div class="flex flex-col items-center min-w-[56px] py-3 rounded-2xl text-on-surface-variant">
+<span class="text-xs font-semibold mb-2 opacity-60">FRI</span>
+<span class="text-lg font-bold">26</span>
+</div>
+<div class="flex flex-col items-center min-w-[56px] py-3 rounded-2xl text-on-surface-variant">
+<span class="text-xs font-semibold mb-2 opacity-60">SAT</span>
+<span class="text-lg font-bold">27</span>
+</div>
+<div class="flex flex-col items-center min-w-[56px] py-3 rounded-2xl text-on-surface-variant">
+<span class="text-xs font-semibold mb-2 opacity-60">SUN</span>
+<span class="text-lg font-bold">28</span>
+</div>
+</section>
+<!-- Timeline Content -->
+<div class="relative space-y-12">
+<!-- Central Timeline Line -->
+<div class="absolute left-4 top-4 bottom-4 w-px bg-outline-variant/20 -z-10"></div>
+<!-- Morning Segment -->
+<section>
+<div class="flex items-center gap-4 mb-6">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="wb_sunny">wb_sunny</span>
+</div>
+<h2 class="text-sm font-bold tracking-widest text-on-surface-variant uppercase">Morning Flow</h2>
+</div>
+<div class="space-y-4 ml-4 pl-8">
+<!-- Event Card 1 -->
+<div class="bg-surface-container-lowest rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex justify-between items-start mb-3">
+<span class="text-xs font-medium text-primary px-3 py-1 bg-primary/5 rounded-full">GROWDO</span>
+<span class="text-[10px] font-bold text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="schedule">schedule</span>
+                                09:00 AM - 11:30 AM
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-on-surface mb-4">Hyperfocus Session</h3>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+<span class="material-symbols-outlined text-[16px]" data-icon="bolt">bolt</span>
+                                Hyperfocus Required
+                            </span>
+</div>
+</div>
+</div>
+</section>
+<!-- Midday Segment -->
+<section>
+<div class="flex items-center gap-4 mb-6">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-sm text-tertiary" data-icon="routine">routine</span>
+</div>
+<h2 class="text-sm font-bold tracking-widest text-on-surface-variant uppercase">Midday Sync</h2>
+</div>
+<div class="space-y-4 ml-4 pl-8">
+<!-- Event Card 2 -->
+<div class="bg-surface-container-lowest rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-tertiary"></div>
+<div class="flex justify-between items-start mb-3">
+<span class="text-xs font-medium text-tertiary px-3 py-1 bg-tertiary/5 rounded-full">SHAREDMINDS</span>
+<span class="text-[10px] font-bold text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="schedule">schedule</span>
+                                01:00 PM - 02:00 PM
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-on-surface mb-4">Team Design Sync</h3>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary/10 text-tertiary text-xs font-semibold">
+<span class="material-symbols-outlined text-[16px]" data-icon="groups">groups</span>
+                                Social Energy
+                            </span>
+</div>
+</div>
+</div>
+</section>
+<!-- Evening Segment -->
+<section>
+<div class="flex items-center gap-4 mb-6">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/10">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="bedtime">bedtime</span>
+</div>
+<h2 class="text-sm font-bold tracking-widest text-on-surface-variant uppercase">Evening Wind Down</h2>
+</div>
+<div class="space-y-4 ml-4 pl-8">
+<!-- Event Card 3 -->
+<div class="bg-surface-container-lowest rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-outline-variant"></div>
+<div class="flex justify-between items-start mb-3">
+<span class="text-xs font-medium text-on-surface-variant px-3 py-1 bg-surface-container rounded-full">SELF</span>
+<span class="text-[10px] font-bold text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="schedule">schedule</span>
+                                06:30 PM - 07:30 PM
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-on-surface mb-4">Weekly Reflection</h3>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary/10 text-secondary text-xs font-semibold">
+<span class="material-symbols-outlined text-[16px]" data-icon="self_care">self_care</span>
+                                Rest Sync
+                            </span>
+</div>
+</div>
+<!-- Quick Capture Area -->
+<div class="mt-8">
+<div class="border-2 border-dashed border-outline-variant/30 rounded-lg p-4 flex items-center justify-between bg-surface-container-low/30 cursor-pointer hover:bg-surface-container-low transition-colors">
+<span class="text-on-surface-variant text-sm font-medium italic">Drop a thought or task for tonight...</span>
+<button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg shadow-primary/20 active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar Section -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-2 bg-white/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg rounded-t-[3rem] border-t border-[#aeb2b6]/15 shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:bg-[#f2f4f6] dark:hover:bg-[#1a1c1e] rounded-full active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="wb_sunny">wb_sunny</span>
+<span class="font-['Plus_Jakarta_Sans'] font-medium text-[10px] mt-1">Today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:bg-[#f2f4f6] dark:hover:bg-[#1a1c1e] rounded-full active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="check_circle">check_circle</span>
+<span class="font-['Plus_Jakarta_Sans'] font-medium text-[10px] mt-1">Tasks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:bg-[#f2f4f6] dark:hover:bg-[#1a1c1e] rounded-full active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="analytics">analytics</span>
+<span class="font-['Plus_Jakarta_Sans'] font-medium text-[10px] mt-1">Check-Ins</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:bg-[#f2f4f6] dark:hover:bg-[#1a1c1e] rounded-full active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="folder_open">folder_open</span>
+<span class="font-['Plus_Jakarta_Sans'] font-medium text-[10px] mt-1">Projects</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-[#eceef1] dark:bg-[#4388fd]/20 text-[#005bc4] dark:text-[#4388fd] rounded-full px-4 py-2 active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="event" style="font-variation-settings: 'FILL' 1;">event</span>
+<span class="font-['Plus_Jakarta_Sans'] font-medium text-[10px] mt-1">Calendar</span>
+</a>
+</nav>
+</body></html>

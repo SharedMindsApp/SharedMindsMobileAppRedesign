@@ -1,0 +1,87 @@
+# Core Migration Handover: Implementation Plan
+
+This plan focuses on replacing the temporary local core data layer with the real V1 Supabase schema, establishing the shared ownership model, and wiring up the remaining essential visual shell pieces (Calendar & Space switching) to meet V1 requirements.
+
+## User Review Required
+
+> [!WARNING]
+> This plan involves overhauling the data context which will break the current seeded local state in the app.
+> Are you ready to proceed with real Supabase authentication, or do you expect to use anonymous/local offline-only fallback during this phase?
+
+## Proposed Changes
+
+### Phase A: Real Backend Spine
+
+#### 1. Supabase Migrations
+- **Done**: Generated migration `20260318182822_v1_identity_and_ownership.sql` which implements the Identity and Ownership spine from the V1 Blueprint (`profiles`, `user_settings`, `spaces`, `space_members`, `person_connections`).
+- Includes RLS helper functions, updated_at triggers, and row-level security policies.
+
+#### 2. Authentication Bootstrap
+- **[MODIFY]** `src/lib/supabase.ts` (if it exists) or **[NEW]** create a Supabase client.
+- **[NEW]** `src/core/auth/AuthProvider.tsx` to handle Supabase session state (`onAuthStateChange`).
+- **[MODIFY]** `src/core/CoreApp.tsx` and `src/core/layout/CoreShell.tsx` to wrap the app with `AuthProvider`.
+- Unauthenticated users will be redirected to a simple Login/Signup screen.
+- Create a `useAuth` hook providing the current user ID.
+
+#### 3. Space Bootstrap Service
+- **[NEW]** `src/core/services/SpaceService.ts` to coordinate reading and creating `spaces` and `space_members`.
+- On login, check if the user has an active `personal` space. If not, create one automatically.
+
+---
+
+### Phase B: CoreDataContext Replacement
+
+#### 1. Repository / Services Layer
+- **[NEW]** `src/core/services/` logic (e.g. `TaskService.ts`, `ProjectService.ts`) to wrap queries against Supabase tables.
+- **[MODIFY]** `src/core/data/CoreDataContext.tsx`
+  - Remove the static `seedState()` block.
+  - Implement a `useQuery`/`useEffect` syncing pattern that pulls the `currentBrainStateId`, `projects`, `tasks`, etc. from the respective APIs.
+  - Since the UI heavily relies on synchronous access through context, we can maintain the context but drive its store via optimistic updates mapping back to Supabase RPCs/inserts.
+  - For phase B, we'll connect identity, user settings, projects, and active tasks. Components like `TodayPage` and `ProjectsPage` will use the actual DB state.
+
+---
+
+### Phase C: Calendar + Collaboration
+
+#### 1. Real Calendar Route
+- **[NEW]** `src/core/features/calendar/CalendarPage.tsx`.
+- **[MODIFY]** `src/core/coreData.ts` to add the `calendar` route into `corePrimaryNavItems` or `coreSecondaryNavItems`.
+- **[MODIFY]** `src/core/CoreApp.tsx` and `src/core/layout/CoreShell.tsx` to add `<Route path="calendar" element={<CalendarPage />} />`.
+
+#### 2. Personal/Shared Space Switching UI
+- **[MODIFY]** `src/core/layout/CoreShell.tsx` banner section indicating "Current space".
+- **[NEW]** A dropdown/modal to switch `activeSpaceId` in context between "Personal Space" and any joined Shared Spaces.
+- **[MODIFY]** `CoreDataContext` to store `activeSpaceId` and use it when filtering items (projects, tasks, calendar entries).
+
+---
+
+### Phase G: Original UI Restoration (The "Best of Both")
+
+#### 1. Restore the Original Shell Layout
+We must deprecate the overly flat `/src/core/layout/CoreShell.tsx` and bring back the original rich container.
+- **[MODIFY]** `src/core/CoreApp.tsx`
+  - Change the root route wrapper from `<CoreShell>` to the original `<Layout>` from `src/components/Layout.tsx`.
+- **[MODIFY]** `src/components/Layout.tsx`
+  - Splice the new `<SpaceSwitcher>` (from `src/core/features/spaces/`) into the original header/sidebar so space navigation works natively within the premium shell.
+
+#### 2. Reclaim the Dynamic Dashboard
+The original app featured a widget-powered masonry dashboard which was removed in the redesign in favor of a static list.
+- **[MODIFY]** `src/core/CoreApp.tsx`
+  - Change the `/today` or `/home` index route to point to the original `<Dashboard>` (`src/components/Dashboard.tsx`) instead of `<TodayPage>`.
+- **[MODIFY]** `src/components/Dashboard.tsx` (and its sub-widgets like `SectionActivities`, `SectionCheckIn`)
+  - Swap out the legacy Prisma-driven `useDataContext()` or data fetching with the new `useCoreData()` context which provides live synced Supabase V1 arrays (`tasks`, `checkins`, etc).
+  - This instantly populates the premium original widgets with the exact same scalable data the Redesign uses.
+
+#### 3. Targeted Feature Re-Wiring
+- Map the complex V0 interactions (Check-ins, Guardrails, Tracking) to the new `DailyOSService` hooks, ensuring the visual integrity remains untouched while the data flows directly into Supabase.
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run build` to ensure the re-introduced Original UI components successfully compile under the new context structure.
+
+### Manual Verification
+1. Boot the app via `npm run dev`.
+2. Observe the application boundary uses the original premium glassmorphic sidebar and header.
+3. Validate that the Space Switcher appears in the header and correctly triggers changes to `activeSpaceId`.
+4. Validate the Dashboard successfully renders the masonry widget grid and fetches live V1 Tasks and Check-ins instead of crashing on the old Prisma scheme.

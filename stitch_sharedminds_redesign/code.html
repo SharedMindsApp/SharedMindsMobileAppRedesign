@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>SharedMinds - ADHD-Optimized Workspace</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#3B82F6",
+                        "primary-dim": "#004fad",
+                        "primary-container": "#4388fd",
+                        "on-primary": "#f9f8ff",
+                        "on-primary-container": "#000311",
+                        "secondary": "#506076",
+                        "secondary-container": "#d3e4fe",
+                        "on-secondary-container": "#435368",
+                        "tertiary": "#006d4a",
+                        "tertiary-container": "#69f6b8",
+                        "surface": "#f9f9fb",
+                        "on-surface": "#2e3336",
+                        "on-surface-variant": "#5b6063",
+                        "outline": "#777b7f",
+                        "background": "#f9f9fb",
+                    },
+                    fontFamily: {
+                        headline: ["Manrope", "sans-serif"],
+                        body: ["Plus Jakarta Sans", "sans-serif"],
+                        label: ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        DEFAULT: "1rem",
+                        lg: "2rem",
+                        xl: "3rem",
+                        full: "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+        .signature-gradient {
+            background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { min-height: 100vh; overflow-x: hidden; }
+        .glass-nav { backdrop-filter: blur(12px); background-color: rgba(255, 255, 255, 0.8); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body text-on-surface">
+    <div id="root"></div>
+
+    <!-- React and Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+        // --- Shared Components ---
+
+        const TopAppBar = ({ title = "SharedMinds", showBack = false }) => {
+            const navigate = useNavigate();
+            return (
+                <header class="fixed top-0 w-full z-50 glass-nav border-b border-slate-100 flex items-center justify-between px-6 h-16">
+                    <div class="flex items-center gap-4">
+                        {showBack ? (
+                            <button onClick={() => navigate(-1)} class="text-primary p-2 rounded-full hover:bg-primary/5 transition-colors">
+                                <span class="material-symbols-outlined">arrow_back</span>
+                            </button>
+                        ) : (
+                            <button class="text-primary p-2 rounded-full hover:bg-primary/5 transition-colors">
+                                <span class="material-symbols-outlined">menu</span>
+                            </button>
+                        )}
+                        <h1 class="font-headline font-extrabold text-primary text-xl tracking-tight">{title}</h1>
+                    </div>
+                    <Link to="/profile" class="w-10 h-10 rounded-full border-2 border-primary/20 overflow-hidden">
+                        <img alt="User" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4AHj5zc5A6d8qUDtzxy9K2-M4NMxmIs7JrQh-2jXv7Lg-yO3GW7aL0jG4mCVtYoT6hN1DodyO2zgYOGHec7eXObRnp7IOKKCAXNpmEf-n0eT-plHrQsn7judEv3OJaNPrBm9UNs8ryeWBYmDOJYohvyhFdViCNXqdzZSFivuuwzGqusLBr4A4zgedUKN5wHK8Cl2dF3cnBGh0a1U8sQEy1QkKpg7mY8xVV7hsD2QHPfAMrmo46pOJJnskU5270emXeYw8YI6Ahys"/>
+                    </Link>
+                </header>
+            );
+        };
+
+        const BottomNav = () => {
+            const location = useLocation();
+            const navItems = [
+                { path: "/", icon: "today", label: "Today" },
+                { path: "/tasks", icon: "checklist", label: "Tasks" },
+                { path: "/checkins", icon: "fact_check", label: "Check-Ins" },
+                { path: "/projects", icon: "account_tree", label: "Projects" },
+                { path: "/calendar", icon: "calendar_month", label: "Calendar" }
+            ];
+
+            return (
+                <nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-20 bg-white/90 backdrop-blur-xl border-t border-slate-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] rounded-t-[2.5rem] pb-safe">
+                    {navItems.map(item => {
+                        const isActive = location.pathname === item.path;
+                        return (
+                            <Link key={item.path} to={item.path} class={`flex flex-col items-center justify-center transition-all ${isActive ? 'text-primary scale-110' : 'text-slate-400 opacity-60'}`}>
+                                <span class={`material-symbols-outlined ${isActive ? 'fill-icon' : ''}`}>{item.icon}</span>
+                                <span class="text-[10px] font-bold tracking-wide mt-0.5">{item.label}</span>
+                            </Link>
+                        );
+                    })}
+                </nav>
+            );
+        };
+
+        const FAB = () => (
+            <button class="fixed right-6 bottom-24 signature-gradient text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all z-40 border-4 border-white">
+                <span class="material-symbols-outlined text-2xl font-bold">add</span>
+            </button>
+        );
+
+        // --- Screens ---
+
+        const ScreenOnboarding = () => {
+            const navigate = useNavigate();
+            return (
+                <div class="min-h-screen flex flex-col items-center px-6 pt-12 pb-8 max-w-lg mx-auto w-full">
+                    <nav class="w-full flex flex-col items-center gap-4 mb-12">
+                        <div class="flex items-center gap-2">
+                            <span class="w-12 h-1.5 bg-primary rounded-full"></span>
+                            <span class="w-12 h-1.5 bg-slate-200 rounded-full"></span>
+                            <span class="w-12 h-1.5 bg-slate-200 rounded-full"></span>
+                        </div>
+                        <span class="text-on-surface-variant text-xs font-bold uppercase tracking-widest">Step 1 of 3</span>
+                    </nav>
+                    <header class="text-center mb-10">
+                        <div class="mb-6 inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-2xl">
+                            <span class="material-symbols-outlined text-primary text-3xl">psychology_alt</span>
+                        </div>
+                        <h1 class="font-headline text-3xl font-extrabold text-on-surface tracking-tight mb-3">Brain Profile</h1>
+                        <p class="text-on-surface-variant text-base leading-relaxed">Welcome to mindful curation. Let's tailor your experience to your flow.</p>
+                    </header>
+                    <section class="flex flex-col gap-4 w-full mb-10">
+                        <button class="flex items-start p-5 bg-white rounded-[2rem] border-2 border-transparent shadow-sm text-left">
+                            <div class="w-12 h-12 shrink-0 rounded-xl bg-emerald-100 flex items-center justify-center mr-4">
+                                <span class="material-symbols-outlined text-emerald-600">waves</span>
+                            </div>
+                            <div class="flex-grow pt-0.5">
+                                <h3 class="font-headline font-bold text-lg">Steady</h3>
+                                <p class="text-on-surface-variant text-sm">Grounding focus for deep work.</p>
+                            </div>
+                        </button>
+                        <button class="flex items-start p-5 bg-white rounded-[2rem] border-2 border-primary shadow-md text-left">
+                            <div class="w-12 h-12 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center mr-4">
+                                <span class="material-symbols-outlined text-primary">auto_awesome</span>
+                            </div>
+                            <div class="flex-grow pt-0.5">
+                                <div class="flex items-center gap-2 mb-0.5">
+                                    <h3 class="font-headline font-bold text-lg">Flow</h3>
+                                    <span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-extrabold uppercase rounded-full">Recommended</span>
+                                </div>
+                                <p class="text-on-surface-variant text-sm">A balanced state of creativity.</p>
+                            </div>
+                            <span class="material-symbols-outlined text-primary ml-2 fill-icon">check_circle</span>
+                        </button>
+                    </section>
+                    <button onClick={() => navigate('/')} class="signature-gradient text-white w-full py-4 rounded-full font-headline font-bold shadow-xl active:scale-95 transition-all mt-auto">
+                        Continue
+                    </button>
+                </div>
+            );
+        };
+
+        const ScreenToday = () => {
+            const [state, setState] = useState('Steady');
+            return (
+                <div class="pb-32">
+                    <TopAppBar />
+                    <main class="pt-24 px-6 max-w-2xl mx-auto space-y-10">
+                        <section class="space-y-4">
+                            <div class="space-y-1">
+                                <h2 class="font-headline text-3xl font-extrabold tracking-tight">How's your mind?</h2>
+                                <p class="text-on-surface-variant">Align your tools with your energy.</p>
+                            </div>
+                            <div class="flex overflow-x-auto pb-2 gap-3 hide-scrollbar -mx-2 px-2">
+                                {['Hyperfocus', 'Steady', 'Creative', 'Brain Fog', 'Low Fuel'].map(s => (
+                                    <button key={s} onClick={() => setState(s)} className={`flex items-center gap-2 px-5 py-3 rounded-full whitespace-nowrap transition-all ${state === s ? 'bg-primary text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500'}`}>
+                                        <span class="material-symbols-outlined text-lg">{s === 'Hyperfocus' ? 'bolt' : s === 'Steady' ? 'waves' : 'filter_drama'}</span>
+                                        <span class="text-sm font-bold">{s}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section class="space-y-5">
+                            <div class="flex items-end justify-between">
+                                <h3 class="text-xl font-bold">Today's Focus</h3>
+                                <button class="text-primary font-bold text-sm">Manage All</button>
+                            </div>
+                            <div class="space-y-4">
+                                <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group">
+                                    <div class="flex items-center gap-4">
+                                        <button class="w-11 h-11 rounded-full border-2 border-primary/20 flex items-center justify-center text-primary">
+                                            <span class="material-symbols-outlined">radio_button_unchecked</span>
+                                        </button>
+                                        <div>
+                                            <h4 class="font-bold">Finalize Q4 Architecture Strategy</h4>
+                                            <div class="flex gap-3 mt-1">
+                                                <span class="text-xs text-primary/80 flex items-center gap-1 font-semibold"><span class="material-symbols-outlined text-sm">schedule</span> 45m</span>
+                                                <span class="text-xs text-slate-400 flex items-center gap-1"><span class="material-symbols-outlined text-sm">label</span> GrowDo</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="material-symbols-outlined text-slate-300">more_vert</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-emerald-500 fill-icon">auto_awesome</span>
+                                    <h4 class="font-bold">Daily Momentum</h4>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <div class="relative w-16 h-16 flex items-center justify-center">
+                                        <svg class="w-full h-full -rotate-90">
+                                            <circle class="text-slate-100" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" stroke-width="5"></circle>
+                                            <circle class="text-emerald-500" cx="32" cy="32" fill="transparent" r="28" stroke="currentColor" stroke-dasharray="176" stroke-dashoffset="44" stroke-linecap="round" stroke-width="5"></circle>
+                                        </svg>
+                                        <span class="absolute text-sm font-extrabold">3/4</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500">One more task for a perfect streak!</p>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-primary">history</span>
+                                    <h4 class="font-bold">Action Log</h4>
+                                </div>
+                                <div class="space-y-3">
+                                    <div class="flex gap-3 text-xs">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-primary mt-1"></div>
+                                        <div>
+                                            <p class="font-bold">Planned Q4 Strategy</p>
+                                            <p class="text-slate-400">9:15 AM</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </main>
+                    <FAB />
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const ScreenTasks = () => {
+            return (
+                <div class="pb-32">
+                    <TopAppBar />
+                    <main class="pt-24 px-6 max-w-4xl mx-auto space-y-8">
+                        <header>
+                            <h2 class="text-4xl font-extrabold tracking-tight">Task Stack</h2>
+                            <div class="flex gap-3 mt-4 overflow-x-auto hide-scrollbar">
+                                <span class="bg-primary text-white px-4 py-1.5 rounded-full text-sm font-bold">Today</span>
+                                <span class="bg-slate-100 text-slate-500 px-4 py-1.5 rounded-full text-sm font-semibold">Upcoming</span>
+                                <span class="bg-slate-100 text-slate-500 px-4 py-1.5 rounded-full text-sm font-semibold">Done</span>
+                            </div>
+                        </header>
+                        <section class="space-y-4">
+                            <h3 class="text-sm font-bold uppercase tracking-widest text-slate-400">Deep Work (High Energy)</h3>
+                            <div class="bg-white p-6 rounded-2xl border-l-4 border-primary shadow-sm space-y-4">
+                                <div class="flex justify-between items-start">
+                                    <h4 class="text-lg font-bold">Refine UI Architecture</h4>
+                                    <span class="text-[10px] font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded uppercase">GrowDo</span>
+                                </div>
+                                <p class="text-sm text-slate-500">Finalize hierarchy for the mindful dashboard module.</p>
+                                <div class="flex gap-4 text-xs font-bold text-slate-400">
+                                    <span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">bolt</span> High Energy</span>
+                                    <span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">schedule</span> 10:30 AM</span>
+                                </div>
+                            </div>
+                        </section>
+                    </main>
+                    <FAB />
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const ScreenCheckIns = () => {
+            return (
+                <div class="pb-32">
+                    <TopAppBar />
+                    <main class="pt-24 px-6 max-w-4xl mx-auto space-y-8">
+                        <h2 class="text-3xl font-extrabold tracking-tight">Daily Check-In</h2>
+                        <div class="bg-white p-8 rounded-3xl shadow-xl shadow-primary/5 space-y-8 relative overflow-hidden">
+                            <div class="space-y-4">
+                                <h3 class="font-bold text-lg">How are you feeling right now?</h3>
+                                <div class="flex justify-between p-2 bg-slate-50 rounded-full">
+                                    {['sentiment_very_dissatisfied', 'sentiment_dissatisfied', 'sentiment_neutral', 'sentiment_satisfied', 'sentiment_very_satisfied'].map(icon => (
+                                        <button key={icon} className={`p-3 rounded-full transition-all ${icon === 'sentiment_neutral' ? 'bg-white shadow-md text-primary' : 'text-slate-300'}`}>
+                                            <span class="material-symbols-outlined text-3xl">{icon}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div class="space-y-4">
+                                <h3 class="font-bold text-lg">Current Energy</h3>
+                                <div class="relative h-2 bg-slate-100 rounded-full">
+                                    <div class="absolute inset-y-0 left-0 w-2/3 signature-gradient rounded-full"></div>
+                                    <div class="absolute top-1/2 left-2/3 -translate-y-1/2 -translate-x-1/2 w-6 h-6 bg-white border-2 border-primary rounded-full shadow-lg"></div>
+                                </div>
+                            </div>
+                            <textarea class="w-full h-32 bg-slate-50 border-none rounded-2xl p-4 focus:ring-2 focus:ring-primary/20 resize-none" placeholder="Dump your thoughts here..."></textarea>
+                            <button class="w-full py-4 signature-gradient text-white font-bold rounded-full shadow-lg active:scale-95 transition-all">
+                                Complete Entry
+                            </button>
+                        </div>
+                    </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const ScreenProjects = () => {
+            return (
+                <div class="pb-32">
+                    <TopAppBar />
+                    <main class="pt-24 px-6 max-w-5xl mx-auto space-y-8">
+                        <header class="flex justify-between items-end">
+                            <h2 class="text-4xl font-extrabold tracking-tight">Projects</h2>
+                            <button class="p-3 bg-primary/10 text-primary rounded-full"><span class="material-symbols-outlined">add</span></button>
+                        </header>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Link to="/project-detail" class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group">
+                                <div class="absolute top-0 right-0 p-6">
+                                    <div class="w-12 h-12 rounded-full signature-gradient flex items-center justify-center text-white">
+                                        <span class="material-symbols-outlined">architecture</span>
+                                    </div>
+                                </div>
+                                <span class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-1 rounded uppercase">Active</span>
+                                <h3 class="text-2xl font-black mt-4">GrowDo</h3>
+                                <p class="text-sm text-slate-500 mt-2">Mobile app for organic community gardening.</p>
+                                <div class="mt-8 space-y-2">
+                                    <div class="flex justify-between text-xs font-bold text-primary"><span>65% Momentum</span></div>
+                                    <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div class="h-full signature-gradient w-[65%] rounded-full"></div>
+                                    </div>
+                                </div>
+                            </Link>
+                        </div>
+                    </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const ScreenProjectDetail = () => {
+            return (
+                <div class="pb-32">
+                    <TopAppBar title="Project: GrowDo" showBack />
+                    <main class="pt-24 px-6 max-w-4xl mx-auto space-y-12">
+                        <section>
+                            <h2 class="text-5xl font-black tracking-tighter">GrowDo Architecture</h2>
+                            <p class="text-lg text-slate-500 mt-4 leading-relaxed">Defining core semantic layers for mindful interfaces.</p>
+                            <div class="mt-8 flex -space-x-3">
+                                {[1,2,3].map(i => <div key={i} class="w-10 h-10 rounded-full border-4 border-white bg-slate-200 overflow-hidden">
+                                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i+10}`} />
+                                </div>)}
+                                <div class="w-10 h-10 rounded-full border-4 border-white bg-slate-100 flex items-center justify-center text-xs font-bold">+2</div>
+                            </div>
+                        </section>
+                        <section class="space-y-4">
+                            <h3 class="text-sm font-bold uppercase tracking-widest text-slate-400">Project Momentum</h3>
+                            <div class="flex items-center gap-8 bg-white p-8 rounded-3xl shadow-sm">
+                                <div class="relative w-32 h-32 flex items-center justify-center">
+                                    <svg class="w-full h-full -rotate-90">
+                                        <circle class="text-slate-50" cx="64" cy="64" fill="transparent" r="56" stroke="currentColor" stroke-width="8"></circle>
+                                        <circle class="text-primary" cx="64" cy="64" fill="transparent" r="56" stroke="currentColor" stroke-dasharray="352" stroke-dashoffset="123" stroke-linecap="round" stroke-width="8"></circle>
+                                    </svg>
+                                    <span class="absolute text-2xl font-black">65%</span>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-lg">Next Milestone</p>
+                                    <p class="text-slate-500">Beta Component Library (Apr 05)</p>
+                                </div>
+                            </div>
+                        </section>
+                    </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const ScreenCalendar = () => {
+            return (
+                <div class="pb-32">
+                    <TopAppBar />
+                    <main class="pt-24 px-6 max-w-4xl mx-auto space-y-8">
+                        <header class="flex justify-between items-center">
+                            <div>
+                                <h2 class="text-3xl font-extrabold">October 2026</h2>
+                                <p class="text-slate-400 text-sm">Tuesday, Oct 20</p>
+                            </div>
+                            <button class="px-4 py-2 bg-primary/10 text-primary rounded-full font-bold">Today</button>
+                        </header>
+                        <section class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                            <div class="grid grid-cols-7 text-center mb-4">
+                                {['S','M','T','W','T','F','S'].map(d => <span key={d} class="text-[10px] font-bold text-slate-300 uppercase">{d}</span>)}
+                            </div>
+                            <div class="grid grid-cols-7 gap-y-2">
+                                {Array.from({length: 31}).map((_, i) => (
+                                    <div key={i} className={`aspect-square flex items-center justify-center relative cursor-pointer group`}>
+                                        <div className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${i+1 === 20 ? 'bg-primary text-white' : 'group-hover:bg-slate-50'}`}>
+                                            <span class="text-sm font-bold">{i+1}</span>
+                                        </div>
+                                        {[5,12,20,21,28].includes(i+1) && <div className={`absolute bottom-1 w-1 h-1 rounded-full ${i+1 === 20 ? 'bg-white' : 'bg-primary/40'}`}></div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                        <section class="space-y-4">
+                            <h3 class="font-bold text-xl">Upcoming Today</h3>
+                            <div class="bg-white p-5 rounded-2xl flex gap-4 items-center border border-slate-100">
+                                <div class="w-16 py-3 bg-slate-50 rounded-xl text-center">
+                                    <span class="block text-primary font-black">10:00</span>
+                                    <span class="text-[9px] text-slate-400 font-bold uppercase">90 min</span>
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="font-bold">Deep Work Session</h4>
+                                    <span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full uppercase">GrowDo</span>
+                                </div>
+                                <span class="material-symbols-outlined text-primary">psychology</span>
+                            </div>
+                        </section>
+                    </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const ScreenProfile = () => {
+            return (
+                <div class="pb-32">
+                    <TopAppBar title="Settings" showBack />
+                    <main class="pt-24 px-6 max-w-2xl mx-auto space-y-12">
+                        <section class="flex flex-col items-center text-center space-y-4">
+                            <div class="relative">
+                                <div class="w-24 h-24 rounded-3xl overflow-hidden shadow-xl border-4 border-white">
+                                    <img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4AHj5zc5A6d8qUDtzxy9K2-M4NMxmIs7JrQh-2jXv7Lg-yO3GW7aL0jG4mCVtYoT6hN1DodyO2zgYOGHec7eXObRnp7IOKKCAXNpmEf-n0eT-plHrQsn7judEv3OJaNPrBm9UNs8ryeWBYmDOJYohvyhFdViCNXqdzZSFivuuwzGqusLBr4A4zgedUKN5wHK8Cl2dF3cnBGh0a1U8sQEy1QkKpg7mY8xVV7hsD2QHPfAMrmo46pOJJnskU5270emXeYw8YI6Ahys"/>
+                                </div>
+                                <div class="absolute -bottom-1 -right-1 bg-primary p-1.5 rounded-full text-white shadow-md">
+                                    <span class="material-symbols-outlined text-sm">edit</span>
+                                </div>
+                            </div>
+                            <div>
+                                <h2 class="text-2xl font-extrabold tracking-tight">Alex Rivera</h2>
+                                <p class="text-slate-500 font-medium">San Francisco, CA</p>
+                            </div>
+                        </section>
+
+                        <section class="bg-white p-6 rounded-3xl shadow-sm space-y-8">
+                            <div class="space-y-6">
+                                <h3 class="font-bold text-lg text-primary">Core Preferences</h3>
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <p class="font-bold">Enable Voice Check-ins</p>
+                                            <p class="text-xs text-slate-400">Talk to your AI coach</p>
+                                        </div>
+                                        <div class="w-12 h-6 bg-primary rounded-full relative">
+                                            <div class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <p class="font-bold">Hyperfocus Mode Auto-trigger</p>
+                                            <p class="text-xs text-slate-400">Based on calendar priority</p>
+                                        </div>
+                                        <div class="w-12 h-6 bg-slate-200 rounded-full relative">
+                                            <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="space-y-4">
+                            <button class="w-full py-4 bg-slate-100 rounded-2xl font-bold flex justify-between px-6">
+                                Export Data <span class="material-symbols-outlined">download</span>
+                            </button>
+                            <button class="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-bold border border-red-100">
+                                Reset Workspace
+                            </button>
+                        </section>
+                    </main>
+                    <BottomNav />
+                </div>
+            );
+        };
+
+        const App = () => {
+            return (
+                <MemoryRouter>
+                    <Routes>
+                        <Route path="/onboarding" element={<ScreenOnboarding />} />
+                        <Route path="/" element={<ScreenToday />} />
+                        <Route path="/tasks" element={<ScreenTasks />} />
+                        <Route path="/checkins" element={<ScreenCheckIns />} />
+                        <Route path="/projects" element={<ScreenProjects />} />
+                        <Route path="/project-detail" element={<ScreenProjectDetail />} />
+                        <Route path="/calendar" element={<ScreenCalendar />} />
+                        <Route path="/profile" element={<ScreenProfile />} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

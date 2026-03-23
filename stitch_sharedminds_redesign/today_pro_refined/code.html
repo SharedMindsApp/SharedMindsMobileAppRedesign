@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Today Command Center | SharedMinds</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Plus_Jakarta_Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary-fixed-variant": "#006544",
+              "secondary-fixed-dim": "#c5d6f0",
+              "error-dim": "#67040d",
+              "error": "#a83836",
+              "primary-fixed": "#4388fd",
+              "on-tertiary": "#e6ffee",
+              "on-surface-variant": "#5b6063",
+              "surface-container-highest": "#dfe3e7",
+              "surface-dim": "#d7dadf",
+              "secondary": "#506076",
+              "on-primary-fixed-variant": "#001435",
+              "surface-tint": "#005bc4",
+              "tertiary-fixed": "#69f6b8",
+              "primary-fixed-dim": "#317bef",
+              "outline": "#777b7f",
+              "outline-variant": "#aeb2b6",
+              "surface-container-low": "#f2f4f6",
+              "primary": "#005bc4",
+              "error-container": "#fa746f",
+              "secondary-dim": "#44546a",
+              "on-tertiary-fixed": "#00452d",
+              "on-primary": "#f9f8ff",
+              "inverse-surface": "#0c0e10",
+              "background": "#f9f9fb",
+              "tertiary-container": "#69f6b8",
+              "surface-container-high": "#e6e8ec",
+              "primary-container": "#4388fd",
+              "surface-bright": "#f9f9fb",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-dim": "#005f40",
+              "secondary-fixed": "#d3e4fe",
+              "on-secondary-fixed": "#314055",
+              "on-secondary-container": "#435368",
+              "on-background": "#2e3336",
+              "on-error-container": "#6e0a12",
+              "tertiary": "#006d4a",
+              "tertiary-fixed-dim": "#58e7ab",
+              "on-error": "#fff7f6",
+              "on-tertiary-container": "#005a3c",
+              "inverse-primary": "#4d8eff",
+              "primary-dim": "#004fad",
+              "on-surface": "#2e3336",
+              "inverse-on-surface": "#9c9d9f",
+              "on-primary-fixed": "#000000",
+              "on-secondary": "#f7f9ff",
+              "secondary-container": "#d3e4fe",
+              "surface-container": "#eceef1",
+              "surface": "#f9f9fb",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "on-primary-container": "#000311",
+              "surface-variant": "#dfe3e7"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-50 bg-[#f2f4f6] dark:bg-[#1a1c1e] transition-colors duration-300 flex justify-between items-center px-6 py-4 w-full">
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-[#5b6063] dark:text-[#aeb2b6] hover:bg-[#eceef1] dark:hover:bg-[#2e3336] rounded-full transition-all p-2 active:scale-95 duration-200 ease-out">menu</button>
+<span class="text-[#005bc4] dark:text-[#4388fd] font-black tracking-tighter font-['Manrope'] font-bold text-xl tracking-tight">SharedMinds</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="hidden md:block text-sm font-medium text-on-surface-variant">Today is Monday, Oct 24</span>
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border-2 border-surface-container">
+<img alt="User Avatar" data-alt="Minimalist professional user profile avatar circle" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeVdgIKcwv-C32Pu4etcLIb1H-VbNXDRxlw853PnvPJsgCmq72GG0Zx9jfb2lqeqjlsPdStIgNUQ1B8OijdF16iSDcDihyG1iHVDTmJaOYDCurufrHXTNTrOnyKMuHLc13AcPlp6PYmMNFcd9CMJzc13-77UES3379JUxkbNLgiF5GRzTb_U9LBrD6-KoZuky4LyMgfWMW7v_OdBGXhT-e50zDnFIO_hAiPrEjzo2JDGUCXbXYh8J0ggefRgpe__MZRR4DoQO_-eQ"/>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 pt-8 space-y-10">
+<!-- Brain State Selector (High-end Editorial Header) -->
+<section class="space-y-6">
+<div class="space-y-1">
+<p class="text-primary font-semibold tracking-widest uppercase text-[10px] mb-2">Current Energy</p>
+<h1 class="text-4xl font-extrabold tracking-tight text-on-surface">How is your mind <span class="text-primary">aligned</span> now?</h1>
+</div>
+<div class="flex flex-wrap gap-3">
+<!-- Hyperfocus -->
+<button class="flex items-center gap-2 px-5 py-3 rounded-full bg-primary text-on-primary shadow-lg shadow-primary/20 hover:scale-105 transition-transform">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="text-sm font-bold">Hyperfocus</span>
+</button>
+<!-- Energised -->
+<button class="flex items-center gap-2 px-5 py-3 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-all">
+<span class="material-symbols-outlined">rocket_launch</span>
+<span class="text-sm font-semibold">Energised</span>
+</button>
+<!-- Steady -->
+<button class="flex items-center gap-2 px-5 py-3 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-all">
+<span class="material-symbols-outlined">balance</span>
+<span class="text-sm font-semibold">Steady</span>
+</button>
+<!-- Distracted -->
+<button class="flex items-center gap-2 px-5 py-3 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-all">
+<span class="material-symbols-outlined">bubble_chart</span>
+<span class="text-sm font-semibold">Distracted</span>
+</button>
+<!-- Low -->
+<button class="flex items-center gap-2 px-5 py-3 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-all">
+<span class="material-symbols-outlined">battery_2_bar</span>
+<span class="text-sm font-semibold">Low</span>
+</button>
+<!-- Brain Fog -->
+<button class="flex items-center gap-2 px-5 py-3 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-all">
+<span class="material-symbols-outlined">cloud</span>
+<span class="text-sm font-semibold">Brain Fog</span>
+</button>
+</div>
+</section>
+<!-- Bento Layout: Focus Project & Responsibilities -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- Focus Project Card -->
+<div class="lg:col-span-2 bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant/10 relative overflow-hidden flex flex-col md:flex-row items-center gap-8">
+<!-- Momentum Ring -->
+<div class="relative w-40 h-40 flex-shrink-0">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-container" cx="80" cy="80" fill="transparent" r="70" stroke="currentColor" stroke-width="12"></circle>
+<circle class="text-primary" cx="80" cy="80" fill="transparent" r="70" stroke="currentColor" stroke-dasharray="440" stroke-dashoffset="110" stroke-width="12"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-3xl font-black text-on-surface">75%</span>
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Momentum</span>
+</div>
+</div>
+<div class="space-y-4 flex-grow">
+<div>
+<span class="px-3 py-1 bg-tertiary-container text-on-tertiary-container rounded-full text-[10px] font-bold uppercase tracking-wider">Current Focus</span>
+<h2 class="text-3xl font-bold mt-2 text-on-surface">Q4 Brand Architecture</h2>
+<p class="text-on-surface-variant leading-relaxed mt-2">Finalizing the design language system and component library documentation for the client handoff.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-3 bg-primary text-on-primary rounded-full font-bold text-sm hover:opacity-90 transition-opacity">Continue Session</button>
+<button class="px-6 py-3 border border-outline-variant/30 text-primary rounded-full font-bold text-sm hover:bg-surface-container transition-colors">Details</button>
+</div>
+</div>
+<!-- Decorative Abstract Pattern -->
+<div class="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-primary/5 rounded-full blur-3xl"></div>
+</div>
+<!-- Daily Responsibilities Checklist -->
+<div class="bg-surface-container-low p-8 rounded-xl space-y-6">
+<h3 class="text-xl font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary">check_circle</span>
+                    Essentials
+                </h3>
+<div class="space-y-4">
+<div class="flex items-center gap-4 bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
+<div class="w-6 h-6 border-2 border-primary rounded-md flex items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined text-primary text-sm font-bold">check</span>
+</div>
+<div class="flex-grow">
+<p class="text-sm font-bold text-on-surface">Hydration Target</p>
+<p class="text-xs text-on-surface-variant">2.5L remaining</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant/40">water_drop</span>
+</div>
+<div class="flex items-center gap-4 bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
+<div class="w-6 h-6 border-2 border-outline-variant/40 rounded-md cursor-pointer"></div>
+<div class="flex-grow">
+<p class="text-sm font-bold text-on-surface">Morning Meds</p>
+<p class="text-xs text-on-surface-variant">Take with breakfast</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant/40">pill</span>
+</div>
+<div class="flex items-center gap-4 bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10 opacity-60">
+<div class="w-6 h-6 bg-primary border-2 border-primary rounded-md flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-sm font-bold">check</span>
+</div>
+<div class="flex-grow">
+<p class="text-sm font-bold text-on-surface line-through">15m Movement</p>
+<p class="text-xs text-on-surface-variant">Completed at 08:30</p>
+</div>
+<span class="material-symbols-outlined text-tertiary">fitbit</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Task Stack & Activity Log -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<!-- Recommended Task Stack -->
+<section class="space-y-6">
+<div class="flex items-center justify-between">
+<h3 class="text-2xl font-bold text-on-surface">Task Stack</h3>
+<button class="text-primary font-bold text-sm">View All</button>
+</div>
+<div class="space-y-3">
+<!-- Task Card -->
+<div class="group flex items-center gap-4 bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/5 hover:border-primary/20 transition-all shadow-sm">
+<button class="w-11 h-11 rounded-full border-2 border-outline-variant/30 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors shrink-0">
+<span class="material-symbols-outlined text-transparent group-hover:text-primary/40 transition-colors">check</span>
+</button>
+<div class="flex-grow">
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-error-container text-on-error-container">High Energy</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Project Alpha</span>
+</div>
+<h4 class="font-bold text-on-surface">Review technical specifications for API v2</h4>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">drag_indicator</span>
+</div>
+<!-- Task Card -->
+<div class="group flex items-center gap-4 bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/5 hover:border-primary/20 transition-all shadow-sm">
+<button class="w-11 h-11 rounded-full border-2 border-outline-variant/30 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-transparent">check</span>
+</button>
+<div class="flex-grow">
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-tertiary-container text-on-tertiary-container">Medium</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Admin</span>
+</div>
+<h4 class="font-bold text-on-surface">Process monthly expense reports</h4>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">drag_indicator</span>
+</div>
+<!-- Task Card -->
+<div class="group flex items-center gap-4 bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/5 hover:border-primary/20 transition-all shadow-sm">
+<button class="w-11 h-11 rounded-full border-2 border-outline-variant/30 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-transparent">check</span>
+</button>
+<div class="flex-grow">
+<div class="flex items-center gap-2 mb-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-surface-container text-on-surface-variant">Low Energy</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Inbox</span>
+</div>
+<h4 class="font-bold text-on-surface">Clear out newsletter backlog</h4>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">drag_indicator</span>
+</div>
+</div>
+</section>
+<!-- Activity Log & Parked Ideas -->
+<section class="space-y-8">
+<!-- Parked Ideas Input -->
+<div class="bg-primary/5 p-6 rounded-xl border border-primary/10 space-y-4">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">lightbulb</span>
+<h3 class="font-bold text-sm uppercase tracking-widest">Parked Ideas</h3>
+</div>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-none rounded-xl px-6 py-4 text-on-surface focus:ring-2 focus:ring-primary shadow-sm placeholder:text-on-surface-variant/40" placeholder="Quick capture for later..." type="text"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 bg-primary text-on-primary p-2 rounded-lg hover:scale-105 transition-transform">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</div>
+<!-- Reality Log -->
+<div class="space-y-4">
+<h3 class="text-xl font-bold text-on-surface">Reality Log</h3>
+<div class="space-y-0 relative before:absolute before:left-[15px] before:top-2 before:bottom-2 before:w-[2px] before:bg-surface-container">
+<div class="relative pl-10 pb-6">
+<div class="absolute left-0 top-1 w-8 h-8 rounded-full bg-primary-container flex items-center justify-center border-4 border-background z-10">
+<span class="material-symbols-outlined text-on-primary-container text-[16px]">psychology</span>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-sm font-bold text-on-surface">Entered Hyperfocus state</p>
+<p class="text-xs text-on-surface-variant">Feeling highly productive on the Brand project.</p>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant/60 uppercase">10:15 AM</span>
+</div>
+</div>
+<div class="relative pl-10 pb-6">
+<div class="absolute left-0 top-1 w-8 h-8 rounded-full bg-tertiary-container flex items-center justify-center border-4 border-background z-10">
+<span class="material-symbols-outlined text-on-tertiary-container text-[16px]">done_all</span>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-sm font-bold text-on-surface">Completed "Morning Yoga"</p>
+<p class="text-xs text-on-surface-variant">Movement goal achieved.</p>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant/60 uppercase">08:45 AM</span>
+</div>
+</div>
+<div class="relative pl-10">
+<div class="absolute left-0 top-1 w-8 h-8 rounded-full bg-surface-container flex items-center justify-center border-4 border-background z-10">
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">coffee</span>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-sm font-bold text-on-surface">Deep Work Session Start</p>
+<p class="text-xs text-on-surface-variant">Ready to tackle the stack.</p>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant/60 uppercase">08:00 AM</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-8 pt-4 bg-white/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg rounded-t-[3rem] border-t border-[#aeb2b6]/15 shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<button class="flex flex-col items-center justify-center text-[#005bc4] dark:text-[#4388fd] bg-[#eceef1] dark:bg-[#2e3336] rounded-[1.5rem] px-4 py-2 active:scale-90 transition-transform duration-300">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">today</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] font-semibold uppercase tracking-widest mt-1">Today</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 transition-transform duration-300">
+<span class="material-symbols-outlined">task_alt</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] font-semibold uppercase tracking-widest mt-1">Tasks</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 transition-transform duration-300">
+<span class="material-symbols-outlined">fact_check</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] font-semibold uppercase tracking-widest mt-1">Check-Ins</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 transition-transform duration-300">
+<span class="material-symbols-outlined">folder_open</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] font-semibold uppercase tracking-widest mt-1">Projects</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-4 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 transition-transform duration-300">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] font-semibold uppercase tracking-widest mt-1">Calendar</span>
+</button>
+</nav>
+<!-- Floating Action Button (Only on Mobile-ish context for creating new items) -->
+<div class="fixed bottom-32 right-8 z-40 hidden md:block">
+<button class="w-16 h-16 rounded-full bg-primary text-on-primary shadow-2xl shadow-primary/40 flex items-center justify-center active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</div>
+</body></html>

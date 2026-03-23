@@ -1,0 +1,178 @@
+/**
+ * People & Collaboration Guide Content
+ * 
+ * Phase 9: Comprehensive explanation of People, Collaboration, Privacy, and Permissions.
+ * 
+ * Explains how to collaborate with households, work teams, friends, and family with explicit permissions.
+ */
+
+export interface PeopleGuideSection {
+  id: string;
+  title: string;
+  icon: string;
+  content: string;
+  visualNote?: string;
+  connections?: Array<{
+    from: string;
+    to: string;
+    description: string;
+  }>;
+}
+
+export const PEOPLE_GUIDE_SECTIONS: PeopleGuideSection[] = [
+  {
+    id: 'what-is-collaboration',
+    title: 'What is Collaboration in SharedMinds?',
+    icon: '🤝',
+    content: 'Collaboration in SharedMinds means working together with other people on projects, spaces, calendars, and activities. You can collaborate with your household, work teams, friends, and family. Everything you create is private by default, and you choose exactly who can see and edit what.',
+    visualNote: 'Private by Default | Share Explicitly | Control Permissions',
+  },
+  {
+    id: 'who-can-you-collaborate-with',
+    title: 'Who Can You Collaborate With?',
+    icon: '👥',
+    content: 'You can collaborate with different groups of people for different purposes. Your household members can see Shared Spaces and shared calendars. Work teams can collaborate on Guardrails projects. Friends and family can be invited to specific projects or spaces. Each relationship has its own permissions.',
+    connections: [
+      {
+        from: 'Household',
+        to: 'Shared Spaces',
+        description: 'Household members automatically see Shared Spaces and can collaborate on shared calendars',
+      },
+      {
+        from: 'Work Teams',
+        to: 'Guardrails Projects',
+        description: 'Add team members to Guardrails projects with specific roles (owner, editor, viewer)',
+      },
+      {
+        from: 'Friends & Family',
+        to: 'Specific Projects',
+        description: 'Invite friends and family to specific projects or spaces with custom permissions',
+      },
+    ],
+  },
+  {
+    id: 'privacy-by-default',
+    title: 'Privacy by Default',
+    icon: '🔒',
+    content: 'Everything in SharedMinds starts as private to you. Your Personal Spaces, Personal Calendar, and individual projects are only visible to you. Nothing is shared automatically. You must explicitly choose to share something with others. This ensures your personal information stays private until you decide otherwise.',
+    visualNote: 'Everything Private → You Choose What to Share → Explicit Permissions',
+  },
+  {
+    id: 'permissions-and-roles',
+    title: 'Permissions and Roles',
+    icon: '⚙️',
+    content: 'When you share something, you control what others can do. Permissions include: View (see content), Edit (make changes), Comment (add notes), and Manage (control permissions). Roles like Owner, Editor, and Viewer bundle these permissions together. You can customize permissions for each person.',
+    connections: [
+      {
+        from: 'Owner',
+        to: 'Full Control',
+        description: 'Can view, edit, manage permissions, and delete content',
+      },
+      {
+        from: 'Editor',
+        to: 'Make Changes',
+        description: 'Can view and edit content, but cannot manage permissions',
+      },
+      {
+        from: 'Viewer',
+        to: 'Read Only',
+        description: 'Can view content but cannot make changes',
+      },
+    ],
+  },
+  {
+    id: 'household-collaboration',
+    title: 'Household Collaboration',
+    icon: '🏠',
+    content: 'Your household is the group of people you live with or share life with. Household members can see Shared Spaces and collaborate on shared calendars. You control what\'s shared at the household level and what stays private. Personal Spaces and Personal Calendars remain private unless you explicitly share them.',
+    connections: [
+      {
+        from: 'Household Members',
+        to: 'Shared Spaces',
+        description: 'All household members can see and collaborate on Shared Spaces',
+      },
+      {
+        from: 'Household Members',
+        to: 'Shared Calendar',
+        description: 'Household members can see and add events to the Shared Calendar',
+      },
+      {
+        from: 'You',
+        to: 'Personal Content',
+        description: 'Your Personal Spaces and Personal Calendar stay private unless you share them',
+      },
+    ],
+  },
+  {
+    id: 'work-collaboration',
+    title: 'Work Collaboration',
+    icon: '💼',
+    content: 'For work projects, you can add team members to Guardrails projects with specific roles. Team members can collaborate on tracks, events, and project planning. Each project has its own permissions, so you can have different teams for different projects. Work projects can sync to shared calendars for team coordination.',
+    connections: [
+      {
+        from: 'Team Members',
+        to: 'Guardrails Projects',
+        description: 'Add team members to projects with roles: owner, editor, or viewer',
+      },
+      {
+        from: 'Project Events',
+        to: 'Shared Calendar',
+        description: 'Work project events can sync to shared calendars for team visibility',
+      },
+      {
+        from: 'Project Permissions',
+        to: 'Independent Control',
+        description: 'Each project has its own permissions, independent of other projects',
+      },
+    ],
+  },
+  {
+    id: 'friends-family-collaboration',
+    title: 'Friends & Family Collaboration',
+    icon: '❤️',
+    content: 'You can invite friends and family to specific projects or spaces. For example, you might share a vacation planning project with family members, or invite friends to collaborate on a shared space. You control exactly what they can see and do. Personal projects stay private unless you explicitly share them.',
+    connections: [
+      {
+        from: 'Friends & Family',
+        to: 'Specific Projects',
+        description: 'Invite friends and family to specific projects with custom permissions',
+      },
+      {
+        from: 'Friends & Family',
+        to: 'Shared Spaces',
+        description: 'Invite friends and family to Shared Spaces for collaborative planning',
+      },
+      {
+        from: 'Personal Calendar',
+        to: 'Selective Sharing',
+        description: 'Share your Personal Calendar with specific people (read or write access)',
+      },
+    ],
+  },
+  {
+    id: 'permission-controls',
+    title: 'How to Control Permissions',
+    icon: '🎛️',
+    content: 'You control permissions in several ways: At the project level (who can access a Guardrails project), at the space level (who can see a Shared Space), at the calendar level (who can see your Personal Calendar), and at the item level (who can see specific events or tasks). Permissions are explicit and revocable at any time.',
+    visualNote: 'Project Level → Space Level → Calendar Level → Item Level',
+  },
+  {
+    id: 'sharing-vs-privacy',
+    title: 'Sharing vs Privacy',
+    icon: '🔄',
+    content: 'Sharing and privacy work together. You can share a project with your work team while keeping your personal projects private. You can share your calendar with your partner while keeping other events private. You control what\'s shared and what stays private at every level. Nothing is shared automatically.',
+  },
+  {
+    id: 'revoking-access',
+    title: 'Revoking Access',
+    icon: '🚫',
+    content: 'You can revoke access at any time. If you remove someone from a project, they immediately lose access. If you stop sharing a space, it becomes private again. If you revoke calendar access, they can no longer see your events. You maintain full control over who has access to your content.',
+  },
+];
+
+/**
+ * Get all people guide sections
+ */
+export function getAllPeopleGuideSections(): PeopleGuideSection[] {
+  return PEOPLE_GUIDE_SECTIONS;
+}

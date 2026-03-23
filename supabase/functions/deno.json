@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "@mindmesh/orchestrator": "../../src/lib/mindmesh-v2/orchestrator.ts",
+    "@mindmesh/execution": "../../src/lib/mindmesh-v2/execution.ts",
+    "@mindmesh/queries": "../../src/lib/mindmesh-v2/queries.ts",
+    "@mindmesh/types": "../../src/lib/mindmesh-v2/types.ts",
+    "@mindmesh/planService": "../../src/lib/mindmesh-v2/planService.ts",
+    "@mindmesh/guardrailsAdapter": "../../src/lib/mindmesh-v2/guardrailsAdapter.ts"
+  }
+}

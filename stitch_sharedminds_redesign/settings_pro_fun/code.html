@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SharedMinds ADHD OS - Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#5b6063",
+                        "on-secondary": "#f7f9ff",
+                        "surface-container-high": "#e6e8ec",
+                        "surface": "#f9f9fb",
+                        "on-background": "#2e3336",
+                        "surface-container": "#eceef1",
+                        "inverse-surface": "#0c0e10",
+                        "surface-container-highest": "#dfe3e7",
+                        "secondary-container": "#d3e4fe",
+                        "on-primary": "#f9f8ff",
+                        "on-secondary-container": "#435368",
+                        "error-dim": "#67040d",
+                        "primary-fixed": "#4388fd",
+                        "surface-container-lowest": "#ffffff",
+                        "background": "#f9f9fb",
+                        "secondary-fixed": "#d3e4fe",
+                        "primary": "#005bc4",
+                        "on-primary-fixed-variant": "#001435",
+                        "secondary-fixed-dim": "#c5d6f0",
+                        "surface-variant": "#dfe3e7",
+                        "on-secondary-fixed": "#314055",
+                        "tertiary": "#006d4a",
+                        "tertiary-fixed": "#69f6b8",
+                        "tertiary-container": "#69f6b8",
+                        "surface-tint": "#005bc4",
+                        "on-primary-container": "#000311",
+                        "outline": "#777b7f",
+                        "on-tertiary-container": "#005a3c",
+                        "secondary-dim": "#44546a",
+                        "on-secondary-fixed-variant": "#4d5d73",
+                        "inverse-primary": "#4d8eff",
+                        "surface-bright": "#f9f9fb",
+                        "secondary": "#506076",
+                        "tertiary-dim": "#005f40",
+                        "on-tertiary-fixed": "#00452d",
+                        "on-error-container": "#6e0a12",
+                        "tertiary-fixed-dim": "#58e7ab",
+                        "primary-dim": "#004fad",
+                        "surface-dim": "#d7dadf",
+                        "surface-container-low": "#f2f4f6",
+                        "primary-container": "#4388fd",
+                        "primary-fixed-dim": "#317bef",
+                        "on-tertiary": "#e6ffee",
+                        "outline-variant": "#aeb2b6",
+                        "on-primary-fixed": "#000000",
+                        "on-tertiary-fixed-variant": "#006544",
+                        "error-container": "#fa746f",
+                        "error": "#a83836",
+                        "on-surface": "#2e3336",
+                        "inverse-on-surface": "#9c9d9f",
+                        "on-error": "#fff7f6"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-background font-body selection:bg-secondary-container antialiased hide-scrollbar">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-50 bg-[#f2f4f6] dark:bg-[#1a1c1e] transition-colors duration-300">
+<div class="flex items-center justify-between px-6 py-4 w-full">
+<div class="flex items-center gap-4">
+<button class="hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-all p-2 active:scale-95 duration-200">
+<span class="material-symbols-outlined text-blue-600 dark:text-blue-400" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-['Manrope'] font-semibold text-lg tracking-tight text-on-surface">Settings</h1>
+</div>
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="User profile photo avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-5LpUOojJalDEhgWF6g2fAmiTzVYQ9O9BiCEi5Ck_gxusyIM0yjVPKw1DXZqbKyh1GFHgjUVsUqBtYa1-SHfQP2ml-2Se8FxpOyN-pIbhslQJnpqQMKAfHu-w1pgjSfeoxaWmH4i_FpllVpiW6ibGDe94max5xQ36dQ1eGm6DU2T-SshvOrc_-IQdzkMfCXPmQJYAa_WKv99KgzQdy1TqRgTuyd8NRcXA2wmBR_34IKKYtJp7tX8QP6rlNZKJDfIL-TkiInRrYg0"/>
+</div>
+</div>
+</header>
+<main class="max-w-2xl mx-auto px-6 pt-4 pb-32 space-y-8">
+<!-- Profile Summary -->
+<section class="flex flex-col items-center text-center space-y-3 py-4">
+<div class="relative">
+<div class="w-24 h-24 rounded-xl overflow-hidden shadow-lg border-4 border-surface-container-lowest">
+<img class="w-full h-full object-cover" data-alt="Large user profile portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClLxM4WKfdieqpe_EcHl-ii_8cRk-btLmo5BhRN5Qm-yf54Ybsuz_lLnp6E9Ovic44kqNq-_14MkdLp_ByjMnPsFomA2aFB6rLmNKs9HD6_ql73EAEIISz4DuTEhtZD-lnMcs-W8np2ifeHFhQ7a9eTOBI4N6WyskTXyofBS6IvhO8DD6lk0mb5wO3gkC818lP4hLHbV14fJPL3YxYZXWOJsOZbz-ds-DtjgsEEfb5LGDoeHrXlM6R7pnaqeOjvNkecTuDulSR3gM"/>
+</div>
+<div class="absolute -bottom-1 -right-1 bg-primary p-1.5 rounded-full text-on-primary shadow-md">
+<span class="material-symbols-outlined text-sm" data-icon="edit">edit</span>
+</div>
+</div>
+<div>
+<h2 class="font-headline font-bold text-2xl text-on-surface tracking-tight">Alex Rivera</h2>
+<p class="text-on-surface-variant font-medium flex items-center justify-center gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+                    San Francisco, CA
+                </p>
+</div>
+</section>
+<!-- Core Settings Card -->
+<section class="bg-surface-container-lowest rounded-xl p-6 space-y-8 shadow-[0_-8px_30px_rgb(0,0,0,0.02)]">
+<div class="space-y-6">
+<h3 class="font-headline font-bold text-lg text-primary">Identity</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant ml-1">Full Name</label>
+<input class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary-container text-on-surface font-medium h-[56px]" type="text" value="Alex Rivera"/>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant ml-1">Location</label>
+<input class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary-container text-on-surface font-medium h-[56px]" type="text" value="San Francisco, CA"/>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<h3 class="font-headline font-bold text-lg text-primary">Preferences &amp; Sync</h3>
+<!-- Toggle Item: Sharing -->
+<div class="flex items-center justify-between p-2">
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface">Share new items by default</span>
+<span class="text-sm text-on-surface-variant">Automatically share with your focus group</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer min-h-[44px]">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[6px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<!-- Toggle Item: AI Voice -->
+<div class="flex items-center justify-between p-2">
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface">Enable voice check-ins</span>
+<span class="text-sm text-on-surface-variant">Interact with the AI using your voice</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer min-h-[44px]">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[6px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<!-- Toggle Item: Calendar -->
+<div class="flex items-center justify-between p-2">
+<div class="flex flex-col">
+<span class="font-semibold text-on-surface">Calendar sync</span>
+<span class="text-sm text-on-surface-variant">Keep Tasks and Google Calendar aligned</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer min-h-[44px]">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[6px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</section>
+<!-- AI Preferences -->
+<section class="space-y-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary" data-icon="smart_toy">smart_toy</span>
+<h3 class="font-headline font-bold text-xl text-on-surface">AI Preferences</h3>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0_-8px_30px_rgb(0,0,0,0.02)]">
+<div class="space-y-4">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Voice Selection</label>
+<div class="relative">
+<select class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 appearance-none focus:ring-2 focus:ring-primary-container text-on-surface font-medium h-[56px] pr-10 cursor-pointer">
+<option value="ash">Ash (Deep &amp; Calm)</option>
+<option selected="" value="sage">Sage (Supportive &amp; Bright)</option>
+<option value="alloy">Alloy (Neutral &amp; Concise)</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Data & Privacy -->
+<section class="space-y-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary" data-icon="security">security</span>
+<h3 class="font-headline font-bold text-xl text-on-surface">Data &amp; Privacy</h3>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-6 space-y-4 shadow-[0_-8px_30px_rgb(0,0,0,0.02)]">
+<button class="w-full h-[56px] flex items-center justify-between px-6 rounded-full bg-secondary-container text-on-secondary-container font-bold transition-all active:scale-95">
+<span>Export all data</span>
+<span class="material-symbols-outlined" data-icon="download">download</span>
+</button>
+<button class="w-full h-[56px] flex items-center justify-center px-6 rounded-full border border-error/20 text-error font-semibold hover:bg-error-container/10 transition-all active:scale-95">
+                    Reset to defaults
+                </button>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-8 pt-4 bg-[#f9f9fb]/80 dark:bg-[#0c0e10]/80 backdrop-blur-xl shadow-[0_-8px_30px_rgb(0,0,0,0.04)] rounded-t-[3rem]">
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-blue-500 transition-colors active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="today">today</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-blue-500 transition-colors active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="checklist">checklist</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Tasks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-blue-500 transition-colors active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Check-Ins</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-blue-500 transition-colors active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Projects</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-blue-500 transition-colors active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide">Calendar</span>
+</a>
+</nav>
+</body></html>

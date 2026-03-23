@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Cognitive Sanctuary - Weekly Calendar</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#005bc4",
+              "on-surface-variant": "#5b6063",
+              "outline-variant": "#aeb2b6",
+              "surface-container-highest": "#dfe3e7",
+              "secondary-fixed-dim": "#c5d6f0",
+              "background": "#f9f9fb",
+              "surface-dim": "#d7dadf",
+              "on-primary": "#f9f8ff",
+              "on-error-container": "#6e0a12",
+              "tertiary-dim": "#005f40",
+              "surface-container-lowest": "#ffffff",
+              "primary-dim": "#004fad",
+              "secondary-fixed": "#d3e4fe",
+              "on-background": "#2e3336",
+              "inverse-primary": "#4d8eff",
+              "on-secondary": "#f7f9ff",
+              "surface-variant": "#dfe3e7",
+              "tertiary-fixed": "#69f6b8",
+              "tertiary-fixed-dim": "#58e7ab",
+              "surface-container-high": "#e6e8ec",
+              "on-primary-container": "#000311",
+              "secondary-dim": "#44546a",
+              "outline": "#777b7f",
+              "surface-bright": "#f9f9fb",
+              "inverse-on-surface": "#9c9d9f",
+              "error-container": "#fa746f",
+              "surface-tint": "#005bc4",
+              "surface-container-low": "#f2f4f6",
+              "on-error": "#fff7f6",
+              "secondary": "#506076",
+              "on-tertiary": "#e6ffee",
+              "surface": "#f9f9fb",
+              "error-dim": "#67040d",
+              "on-tertiary-fixed-variant": "#006544",
+              "on-secondary-fixed": "#314055",
+              "on-primary-fixed": "#000000",
+              "tertiary": "#006d4a",
+              "secondary-container": "#d3e4fe",
+              "tertiary-container": "#69f6b8",
+              "primary-fixed-dim": "#317bef",
+              "on-tertiary-fixed": "#00452d",
+              "surface-container": "#eceef1",
+              "primary-fixed": "#4388fd",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "on-primary-fixed-variant": "#001435",
+              "primary-container": "#4388fd",
+              "error": "#a83836",
+              "inverse-surface": "#0c0e10",
+              "on-secondary-container": "#435368",
+              "on-tertiary-container": "#005a3c",
+              "on-surface": "#2e3336"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-40 bg-[#f9f9fb] dark:bg-[#0c0e10] transition-colors duration-300">
+<div class="flex justify-between items-center w-full max-w-screen-xl mx-auto top-0 px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="User profile photo" class="w-full h-full object-cover" data-alt="Professional headshot of a smiling woman" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA4OiuF7je2hQUKh6UXIxuZUkIjFU8RFvgHmprGmPZyBE29dRiY-r4-5FfYtzGQLdBzbn-HqGamZuWIu6nLcFIZ01aJmV6CjOhGHt-6t8UBWdSEAQ5mFGgk_eLknHdBKvrtYvs0ncyzChzP6lHTuBv6R2DTsWOCKnfgA31CF6bC0LPktoOhRVtkYCv6KsOPiNccqn4e0n8AL24F0bjoEM0rbUlSmRkgqn3eHUmjq2qhkFnSu-qNdBs7GEfo_f9AT_9wDyRoAO12vpA"/>
+</div>
+<h1 class="font-headline font-bold text-2xl tracking-tight text-[#005bc4] dark:text-[#4388fd]">The Cognitive Sanctuary</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 hover:bg-[#eceef1] dark:hover:bg-[#2e3336] rounded-full transition-all active:scale-95">
+<span class="material-symbols-outlined text-[#5b6063] dark:text-[#aeb2b6]" data-icon="search">search</span>
+</button>
+<button class="p-2 hover:bg-[#eceef1] dark:hover:bg-[#2e3336] rounded-full transition-all active:scale-95">
+<span class="material-symbols-outlined text-[#5b6063] dark:text-[#aeb2b6]" data-icon="calendar_view_day">calendar_view_day</span>
+</button>
+</div>
+</div>
+</header>
+<main class="max-w-screen-xl mx-auto px-6 pb-32 pt-4">
+<!-- Horizontal Date Scroller -->
+<section class="mb-8">
+<div class="flex items-center justify-between mb-4">
+<h2 class="font-headline font-bold text-xl text-on-surface">September 2024</h2>
+<div class="flex gap-2">
+<button class="p-2 rounded-full border border-outline-variant/10 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="p-2 rounded-full border border-outline-variant/10 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
+<!-- Date Items -->
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-surface-container-low text-on-surface-variant">
+<span class="text-xs font-bold mb-1">MON</span>
+<span class="text-lg font-headline font-extrabold">09</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-surface-container-low text-on-surface-variant">
+<span class="text-xs font-bold mb-1">TUE</span>
+<span class="text-lg font-headline font-extrabold">10</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-primary text-on-primary shadow-lg shadow-primary/20">
+<span class="text-xs font-bold mb-1">WED</span>
+<span class="text-lg font-headline font-extrabold">11</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-surface-container-low text-on-surface-variant">
+<span class="text-xs font-bold mb-1">THU</span>
+<span class="text-lg font-headline font-extrabold">12</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-surface-container-low text-on-surface-variant">
+<span class="text-xs font-bold mb-1">FRI</span>
+<span class="text-lg font-headline font-extrabold">13</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-surface-container-low text-on-surface-variant opacity-60">
+<span class="text-xs font-bold mb-1">SAT</span>
+<span class="text-lg font-headline font-extrabold">14</span>
+</div>
+<div class="flex flex-col items-center min-w-[64px] py-4 px-2 rounded-xl bg-surface-container-low text-on-surface-variant opacity-60">
+<span class="text-xs font-bold mb-1">SUN</span>
+<span class="text-lg font-headline font-extrabold">15</span>
+</div>
+</div>
+</section>
+<!-- Vertical Timeline Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-7 gap-6">
+<!-- Day Column (Repeated for desktop, single for mobile demo) -->
+<div class="col-span-1 space-y-4">
+<div class="flex items-baseline justify-between px-2">
+<h3 class="font-headline font-bold text-lg">Today</h3>
+<span class="text-xs text-on-surface-variant font-semibold">3 Events</span>
+</div>
+<!-- Event: Hyperfocus -->
+<article class="group relative p-5 rounded-lg bg-surface-container-lowest border-l-4 border-primary shadow-sm hover:shadow-md transition-all duration-300">
+<div class="flex justify-between items-start mb-3">
+<span class="text-[10px] font-bold tracking-widest text-primary uppercase">Deep Work</span>
+<span class="material-symbols-outlined text-primary text-lg" data-icon="bolt" data-weight="fill" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<h4 class="font-headline font-bold text-base leading-tight mb-1">Website Architecture Re-design</h4>
+<p class="text-xs text-on-surface-variant mb-4">Focus on semantic HTML &amp; A11y</p>
+<div class="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+<span class="material-symbols-outlined text-xs" data-icon="schedule">schedule</span>
+<span>09:00 - 11:30 AM</span>
+</div>
+</article>
+<!-- Event: Recharge -->
+<article class="group relative p-5 rounded-lg bg-tertiary-container/20 border-l-4 border-tertiary shadow-sm hover:shadow-md transition-all duration-300">
+<div class="flex justify-between items-start mb-3">
+<span class="text-[10px] font-bold tracking-widest text-tertiary uppercase">Maintenance</span>
+<span class="material-symbols-outlined text-tertiary text-lg" data-icon="battery_charging_full" data-weight="fill" style="font-variation-settings: 'FILL' 1;">battery_charging_full</span>
+</div>
+<h4 class="font-headline font-bold text-base leading-tight mb-1">Meditation &amp; Coffee Break</h4>
+<p class="text-xs text-on-surface-variant mb-4">Unplug from all screens</p>
+<div class="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+<span class="material-symbols-outlined text-xs" data-icon="schedule">schedule</span>
+<span>11:30 - 12:15 PM</span>
+</div>
+</article>
+<!-- Event: Collaboration -->
+<article class="group relative p-5 rounded-lg bg-secondary-container/30 border-l-4 border-secondary shadow-sm hover:shadow-md transition-all duration-300">
+<div class="flex justify-between items-start mb-3">
+<span class="text-[10px] font-bold tracking-widest text-secondary uppercase">Project Alpha</span>
+<span class="material-symbols-outlined text-secondary text-lg" data-icon="groups">groups</span>
+</div>
+<h4 class="font-headline font-bold text-base leading-tight mb-1">Stakeholder Sync</h4>
+<p class="text-xs text-on-surface-variant mb-4">Review Q3 cognitive load stats</p>
+<div class="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+<span class="material-symbols-outlined text-xs" data-icon="schedule">schedule</span>
+<span>02:00 - 03:00 PM</span>
+</div>
+</article>
+</div>
+<!-- Future Day Columns (Hidden on Mobile for focus) -->
+<div class="hidden md:block col-span-1 space-y-4 opacity-60 hover:opacity-100 transition-opacity">
+<div class="px-2"><h3 class="font-headline font-bold text-lg text-on-surface-variant">Thu 12</h3></div>
+<div class="h-32 rounded-lg bg-surface-container-low border border-dashed border-outline-variant/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline-variant" data-icon="add">add</span>
+</div>
+</div>
+<div class="hidden md:block col-span-1 space-y-4 opacity-60 hover:opacity-100 transition-opacity">
+<div class="px-2"><h3 class="font-headline font-bold text-lg text-on-surface-variant">Fri 13</h3></div>
+<article class="p-5 rounded-lg bg-surface-container border-l-4 border-primary-fixed shadow-sm">
+<h4 class="font-headline font-bold text-sm leading-tight mb-4">Client Onboarding</h4>
+<div class="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+<span class="material-symbols-outlined text-xs" data-icon="schedule">schedule</span>
+<span>10:00 AM</span>
+</div>
+</article>
+</div>
+<!-- Bento Card: Weekly Summary -->
+<div class="md:col-span-4 bg-surface-container-low rounded-xl p-8 flex flex-col justify-between overflow-hidden relative group">
+<div class="relative z-10">
+<h3 class="font-headline font-bold text-3xl mb-2 text-primary">Mindful Progress</h3>
+<p class="text-on-surface-variant max-w-xs mb-8">You've hit your hyperfocus goals for 3 days straight. The Sanctuary is flourishing.</p>
+<div class="flex gap-8">
+<div>
+<span class="block text-4xl font-headline font-extrabold text-on-surface">82%</span>
+<span class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Focus Score</span>
+</div>
+<div>
+<span class="block text-4xl font-headline font-extrabold text-on-surface">12h</span>
+<span class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Deep Work</span>
+</div>
+</div>
+</div>
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-20 -mt-20 blur-3xl group-hover:bg-primary/10 transition-colors"></div>
+<div class="mt-12 flex items-center gap-4 relative z-10">
+<div class="flex -space-x-3">
+<img class="w-10 h-10 rounded-full border-4 border-surface-container-low object-cover" data-alt="Team member 1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoAqxwb0mz1XiqvsioyGifiUb_v2VokyMGoI3OiX6IxwQaUO7TizlphqWwpbrKvcNXWsVmf_QvXQ042EzfvpXgDqJOjFAsVJ53aUbdYditxyVFDDE7rBfwz8xjx8qEHbnHtuhc4Jd07BRFh91UqUMmFZEiuGT7FKmHq8qruhOqe5_2X_JfS6gmlxpao5m-Vazy1fVmC0-aM7CN-9rzjCHWpHkHFWz9b9sp3lYaWUe4UWQyKGK9v2ZPpiqT2lgCAr-Wu92-HGLL7fA"/>
+<img class="w-10 h-10 rounded-full border-4 border-surface-container-low object-cover" data-alt="Team member 2" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbsWSFCmLbs0yTdYfRq-aZw6-ls5sHbwC-X2OPpfwaVcpSxPAv8xkh9FTZYj-7ZBK97RL5rUn_LIyDi8lvuI-2OhvUzo8XgFG9Fo5s2G4HA-wZBI7H81jWKUdL6-nxfBc85AVbEaW5tCEQcBCoaKd3d5P_3SpHK-oglFW8QMAPNOr0GUegWVcg3Zv9jZMEGqDqF3SnrU-o46AQK9BqILBFVsCqrqtLw6KuFdaWdPPO6pJvxSsnNBXNeyYS0iWVPJTFAkZ8okj1_n4"/>
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-white border-4 border-surface-container-low">+4</div>
+</div>
+<span class="text-sm font-medium">Collaborators online</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-28 right-6 w-16 h-16 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-2xl flex items-center justify-center active:scale-90 transition-transform z-50">
+<span class="material-symbols-outlined text-3xl" data-icon="add">add</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-2 bg-white/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg rounded-t-[3rem] border-t border-[#aeb2b6]/15 shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="target">target</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-semibold">Focus</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-[#eceef1] dark:bg-[#2e3336] text-[#005bc4] dark:text-[#4388fd] rounded-[1.5rem] px-5 py-2 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="calendar_month" data-weight="fill" style="font-variation-settings: 'FILL' 1;">calendar_month</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-semibold">Calendar</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="tactic">tactic</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-semibold">Projects</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insights">insights</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-semibold">Insights</span>
+</a>
+</nav>
+</body></html>

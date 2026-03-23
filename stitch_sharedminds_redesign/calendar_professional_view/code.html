@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Calendar | SharedMinds</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-container": "#69f6b8",
+              "inverse-surface": "#0c0e10",
+              "error-container": "#fa746f",
+              "surface-bright": "#f9f9fb",
+              "primary-fixed-dim": "#317bef",
+              "tertiary": "#006d4a",
+              "on-secondary": "#f7f9ff",
+              "surface-variant": "#dfe3e7",
+              "on-tertiary-fixed": "#00452d",
+              "tertiary-fixed-dim": "#58e7ab",
+              "on-error": "#fff7f6",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "surface-container-highest": "#dfe3e7",
+              "on-background": "#2e3336",
+              "on-surface": "#2e3336",
+              "surface-container-lowest": "#ffffff",
+              "secondary-dim": "#44546a",
+              "outline-variant": "#aeb2b6",
+              "surface-container-high": "#e6e8ec",
+              "error-dim": "#67040d",
+              "on-primary": "#f9f8ff",
+              "secondary": "#506076",
+              "on-error-container": "#6e0a12",
+              "tertiary-fixed": "#69f6b8",
+              "primary-fixed": "#4388fd",
+              "on-primary-container": "#000311",
+              "secondary-fixed": "#d3e4fe",
+              "on-tertiary": "#e6ffee",
+              "outline": "#777b7f",
+              "secondary-container": "#d3e4fe",
+              "primary-container": "#4388fd",
+              "inverse-primary": "#4d8eff",
+              "inverse-on-surface": "#9c9d9f",
+              "on-primary-fixed": "#000000",
+              "on-primary-fixed-variant": "#001435",
+              "surface": "#f9f9fb",
+              "surface-dim": "#d7dadf",
+              "on-tertiary-fixed-variant": "#006544",
+              "error": "#a83836",
+              "tertiary-dim": "#005f40",
+              "on-surface-variant": "#5b6063",
+              "surface-tint": "#005bc4",
+              "surface-container-low": "#f2f4f6",
+              "background": "#f9f9fb",
+              "primary-dim": "#004fad",
+              "on-secondary-fixed": "#314055",
+              "secondary-fixed-dim": "#c5d6f0",
+              "primary": "#005bc4",
+              "on-secondary-container": "#435368",
+              "surface-container": "#eceef1",
+              "on-tertiary-container": "#005a3c"
+            },
+            fontFamily: {
+              "headline": ["Manrope", "sans-serif"],
+              "body": ["Plus Jakarta Sans", "sans-serif"],
+              "label": ["Plus Jakarta Sans", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f9f9fb;
+            min-height: 100dvh;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+        .tap-target { min-height: 44px; min-width: 44px; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-on-background selection:bg-primary-container selection:text-on-primary-container font-body">
+<!-- TopAppBar from COMPONENTS_28 -->
+<header class="fixed top-0 w-full z-50 bg-[#f9f9fb]/80 backdrop-blur-md no-border tonal-shift-bg">
+<div class="flex items-center justify-between px-6 h-16 w-full max-w-screen-xl mx-auto">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-blue-50/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined text-blue-700 font-extrabold" data-icon="bubble_chart">bubble_chart</span>
+</button>
+<h1 class="text-blue-700 font-extrabold text-xl tracking-tighter font-headline">SharedMinds</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container/30 active:scale-95 duration-150 cursor-pointer">
+<img alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYswUo8vw2lgtqGyApFjygVzhoSspwSRDd53BjZ3RZLLXYY86dsojOlUT3U9a77vkaCF670ebC9nh76B2YoDFM2uecNueIiIgPSH7gh6E0U0L9eYv09Re4dMgbO2M-J3ICXuhABMP-n9QaOsKyJveVYcRW_rZ5sLt33Aa6RIFRv4NkJ0Bpv9oRwpYQ1Xs3yLK6wLYI97SKGkhXp4DLdYLxK8plcLIvjYbK3xWNRDoznvA8cUG8nTHhXoiucNY0WYbzTeTS70nLVhI"/>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-32 px-6 max-w-screen-xl mx-auto">
+<!-- Refined Calendar Header -->
+<section class="mb-8 flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<h2 class="font-headline text-3xl font-extrabold text-on-surface tracking-tight">October 2026</h2>
+<p class="text-on-surface-variant text-sm font-medium">Tuesday, Oct 20</p>
+</div>
+<button class="tap-target px-5 py-2 bg-blue-50 text-blue-700 rounded-full font-bold text-sm hover:bg-blue-100 transition-colors active:scale-95">
+                Today
+            </button>
+</div>
+<div class="flex items-center gap-2 overflow-x-auto hide-scrollbar py-1">
+<div class="flex bg-surface-container-low p-1 rounded-full border border-outline-variant/10">
+<button class="px-5 py-2 rounded-full text-xs font-bold bg-white text-blue-700 shadow-sm tap-target flex items-center justify-center">Month</button>
+<button class="px-5 py-2 rounded-full text-xs font-bold text-on-surface-variant hover:text-on-surface tap-target flex items-center justify-center">Week</button>
+<button class="px-5 py-2 rounded-full text-xs font-bold text-on-surface-variant hover:text-on-surface tap-target flex items-center justify-center">Day</button>
+</div>
+<div class="h-8 w-[1px] bg-outline-variant/30 mx-1"></div>
+<button class="tap-target px-4 bg-surface-container-low rounded-full flex items-center justify-center hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="filter_list">filter_list</span>
+</button>
+</div>
+</section>
+<!-- Interactive Calendar Grid -->
+<section class="mb-10">
+<div class="bg-surface-container-lowest rounded-[2rem] p-6 shadow-sm border border-outline-variant/5">
+<!-- Day Labels -->
+<div class="calendar-grid mb-4">
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Sun</div>
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Mon</div>
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Tue</div>
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Wed</div>
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Thu</div>
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Fri</div>
+<div class="text-[10px] font-bold text-on-surface-variant/60 uppercase tracking-widest text-center">Sat</div>
+</div>
+<!-- Dates -->
+<div class="calendar-grid gap-y-2">
+<!-- Padding for previous month -->
+<div class="aspect-square flex items-center justify-center opacity-20 text-sm font-medium">27</div>
+<div class="aspect-square flex items-center justify-center opacity-20 text-sm font-medium">28</div>
+<div class="aspect-square flex items-center justify-center opacity-20 text-sm font-medium">29</div>
+<div class="aspect-square flex items-center justify-center opacity-20 text-sm font-medium">30</div>
+<!-- Current Month -->
+<script>
+                    const eventDays = [5, 12, 20, 21, 28];
+                    const currentDay = 20;
+                    for(let i=1; i<=31; i++) {
+                        const isToday = i === currentDay;
+                        const hasEvent = eventDays.includes(i);
+                        document.write(`
+                            <div class="aspect-square relative flex flex-col items-center justify-center cursor-pointer tap-target group">
+                                <div class="w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 ${isToday ? 'bg-blue-600 text-white shadow-lg' : 'group-hover:bg-blue-50 text-on-surface'}">
+                                    <span class="text-sm font-bold">${i}</span>
+                                </div>
+                                ${hasEvent && !isToday ? '<div class="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-blue-400"></div>' : ''}
+                                ${hasEvent && isToday ? '<div class="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-white/60"></div>' : ''}
+                            </div>
+                        `);
+                    }
+                </script>
+</div>
+</div>
+</section>
+<!-- Detailed Upcoming Events Section -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-headline text-xl font-extrabold text-on-surface">Upcoming Today</h3>
+<button class="text-blue-600 text-sm font-bold flex items-center gap-1">
+                View All <span class="material-symbols-outlined text-base" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Event Card 1 -->
+<div class="bg-surface-container-low rounded-[1.5rem] p-5 flex gap-4 items-start border border-transparent hover:border-blue-100 transition-all active:scale-[0.98]">
+<div class="flex flex-col items-center justify-center min-w-[64px] py-3 bg-white rounded-2xl shadow-sm">
+<span class="text-blue-600 font-extrabold text-lg">10:00</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">90 min</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-headline font-bold text-on-surface leading-tight">Weekly Deep Work Session</h4>
+<span class="material-symbols-outlined text-blue-600 text-lg" data-icon="psychology">psychology</span>
+</div>
+<div class="flex flex-wrap gap-2 items-center mb-3">
+<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">GrowDo</span>
+<span class="flex items-center gap-1 text-[10px] font-bold text-blue-700/70">
+<span class="material-symbols-outlined text-xs" data-icon="bolt">bolt</span>
+                            Hyperfocus Required
+                        </span>
+</div>
+<p class="text-sm text-on-surface-variant/80">Quiet Focus Mode enabled. Reviewing project milestones.</p>
+</div>
+</div>
+<!-- Event Card 2 -->
+<div class="bg-surface-container-low rounded-[1.5rem] p-5 flex gap-4 items-start border border-transparent hover:border-blue-100 transition-all active:scale-[0.98]">
+<div class="flex flex-col items-center justify-center min-w-[64px] py-3 bg-white rounded-2xl shadow-sm">
+<span class="text-on-surface font-extrabold text-lg">16:30</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">60 min</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-headline font-bold text-on-surface leading-tight">Yoga &amp; Mindfulness</h4>
+<span class="material-symbols-outlined text-emerald-600 text-lg" data-icon="self_improvement">self_improvement</span>
+</div>
+<div class="flex flex-wrap gap-2 items-center mb-3">
+<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">Household</span>
+<span class="flex items-center gap-1 text-[10px] font-bold text-emerald-700/70">
+<span class="material-symbols-outlined text-xs" data-icon="battery_full">battery_full</span>
+                            Energy Recharge
+                        </span>
+</div>
+<p class="text-sm text-on-surface-variant/80">Wellness Center. Bring comfortable clothes.</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-32 right-8 w-14 h-14 rounded-full bg-blue-600 text-white shadow-xl flex items-center justify-center active:scale-90 transition-all z-40 group border-4 border-white">
+<span class="material-symbols-outlined text-2xl group-hover:rotate-90 transition-transform duration-300" data-icon="add">add</span>
+</button>
+<!-- BottomNavBar from COMPONENTS_28 -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#f9f9fb]/90 backdrop-blur-xl rounded-t-[3rem] shadow-[0_-4px_24px_rgba(0,91,196,0.04)] border-t border-white/10">
+<a class="flex flex-col items-center justify-center text-[#5b6063] hover:text-blue-500 transition-all tap-highlight-none active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="today">today</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold tracking-wide">Today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] hover:text-blue-500 transition-all tap-highlight-none active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold tracking-wide">Tasks</span>
+</a>
+<!-- Active Tab: Calendar/Focus context -->
+<a class="flex flex-col items-center justify-center text-blue-700 bg-blue-50 rounded-full px-5 py-2 tap-highlight-none active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold tracking-wide">Calendar</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] hover:text-blue-500 transition-all tap-highlight-none active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold tracking-wide">Projects</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] hover:text-blue-500 transition-all tap-highlight-none active:scale-90 duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-semibold tracking-wide">More</span>
+</a>
+</nav>
+</body></html>

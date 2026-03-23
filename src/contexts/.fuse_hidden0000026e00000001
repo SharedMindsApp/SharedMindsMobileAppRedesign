@@ -1,0 +1,384 @@
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, ReactNode } from 'react';
+import { useAuth as useCoreAuth } from '../core/auth/AuthProvider';
+import { supabase } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
+import { isStandaloneApp } from '../lib/appContext';
+import { startHealthMonitoring, subscribeToHealthState, retryWithBackoff } from '../lib/connectionHealth';
+import { logError, logWarning, logInfo } from '../lib/errorLogger';
+
+let getViewAsProfile: (() => any) | null = null;
+
+export function setViewAsGetter(getter: () => any) {
+  getViewAsProfile = getter;
+}
+
+export type UserRole = 'free' | 'premium' | 'admin';
+
+interface Profile {
+  id: string;
+  user_id: string;
+  email: string | null;
+  full_name: string;
+  role: UserRole;
+  created_at: string;
+  updated_at: string | null;
+  safe_mode_enabled?: boolean;
+}
+
+interface AuthContextType {
+  user: User | null;
+  profile: Profile | null;
+  loading: boolean;
+  role: UserRole | null;
+  isAdmin: boolean;
+  isPremium: boolean;
+  isFree: boolean;
+  actualRole: UserRole | null;
+  isViewingAs: boolean;
+  safeModeEnabled: boolean;
+  signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  toggleSafeMode: (enabled: boolean) => Promise<void>;
+}
+
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const profileRef = useRef<Profile | null>(null);
+  const hasInitializedRef = useRef(false);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+
+  const fetchProfile = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      setProfile(data);
+      // Removed verbose logging - only log errors
+    } catch (error) {
+      logError(
+        'Failed to fetch profile',
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          component: 'AuthContext',
+          action: 'fetchProfile',
+          userId,
+        }
+      );
+      setProfile(null);
+    }
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (user?.id) {
+      await fetchProfile(user.id);
+    }
+  }, [user?.id, fetchProfile]);
+
+  useEffect(() => {
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    // Mark initialization started immediately (before async operations)
+    // This helps suppress SIGNED_IN events that fire during initialization
+    const initStartTime = Date.now();
+    let initCompleted = false;
+
+    const initAuth = async () => {
+      try {
+        // OPTIMIZATION: getSession() already reads from localStorage first (fast, no network)
+        // Only validates/refreshes token if needed - Supabase handles this efficiently
+        // No retry logic needed - getSession() is already optimized
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+          // Session invalid or expired - clear it
+          logWarning('Invalid session found in storage', {
+            component: 'AuthContext',
+            action: 'initAuth',
+            error: error.message,
+          });
+          if (mounted) {
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+            initCompleted = true;
+            hasInitializedRef.current = true;
+          }
+          return;
+        }
+
+        if (mounted) {
+          setUser(session?.user ?? null);
+          initCompleted = true;
+          // Mark as initialized after first session check completes
+          hasInitializedRef.current = true;
+          // Set loading false immediately, fetch profile in background
+          // This allows UI to render while profile loads
+          setLoading(false);
+          if (session?.user) {
+            // Don't await - let profile load in background
+            fetchProfile(session.user.id).catch(err => {
+              logError(
+                'Background profile fetch error',
+                err instanceof Error ? err : new Error(String(err)),
+                {
+                  component: 'AuthContext',
+                  action: 'initAuth',
+                  userId: session.user.id,
+                }
+              );
+            });
+          } else {
+            // Session exists but no user - shouldn't happen, but handle gracefully
+            setProfile(null);
+          }
+        }
+      } catch (error) {
+        logError(
+          'Auth initialization failed',
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            component: 'AuthContext',
+            action: 'initAuth',
+          }
+        );
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          initCompleted = true;
+          hasInitializedRef.current = true;
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+    };
+
+    // Only check auth on initial mount, not on every refresh
+    // The onAuthStateChange subscription will handle session changes
+    initAuth();
+
+    // Safety timeout: If auth is still loading after 5 seconds (should be instant with localStorage check), force stop
+    timeoutId = setTimeout(() => {
+      if (mounted) {
+        setLoading((currentLoading) => {
+          if (currentLoading) {
+            logWarning('Auth loading timeout - forcing loading state to false', {
+              component: 'AuthContext',
+              action: 'initAuth',
+              timeout: 5000,
+            });
+            // If still loading after timeout, user is likely logged out
+            setUser((currentUser) => {
+              if (!currentUser) {
+                setProfile(null);
+              }
+              return currentUser;
+            });
+            return false;
+          }
+          return currentLoading;
+        });
+      }
+    }, 5000); // Reduced from 15s to 5s since localStorage check should be instant
+
+    // onAuthStateChange subscription handles:
+    // - User sign in/out
+    // - Token refresh
+    // - Session expiration
+    // - OAuth callbacks
+    // This is the only place we need to react to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        (async () => {
+          if (mounted) {
+            // Only log important events, not routine session restoration on refresh
+            // INITIAL_SESSION and SIGNED_IN (during initial load within 2 seconds) are expected on refresh
+            // Suppress these events during initialization to avoid confusing logs
+            const timeSinceInit = Date.now() - initStartTime;
+            const isRestoreEvent = event === 'INITIAL_SESSION' ||
+              (event === 'SIGNED_IN' && (!initCompleted || timeSinceInit < 2000));
+
+            if (!isRestoreEvent) {
+              logInfo('Auth state changed', {
+                component: 'AuthContext',
+                action: 'onAuthStateChange',
+                event,
+                hasSession: !!session,
+              });
+            }
+
+            setUser(session?.user ?? null);
+            setLoading(false); // Clear loading when auth state changes
+            if (session?.user) {
+              // Only fetch profile if we don't already have it for this user
+              // This prevents duplicate fetches on INITIAL_SESSION/SIGNED_IN events on refresh
+              if (profileRef.current?.user_id !== session.user.id) {
+                await fetchProfile(session.user.id);
+              }
+            } else {
+              setProfile(null);
+            }
+          }
+        })();
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [fetchProfile]);
+
+  const signOut = useCallback(async () => {
+    try {
+      // FIXED: Use clearAuthStateOnly for comprehensive auth clearing
+      const { clearAuthStateOnly } = await import('../lib/hardReset');
+      // Clear auth state first
+      setUser(null);
+      setProfile(null);
+      // Then use hard reset to clear storage
+      await clearAuthStateOnly();
+    } catch (error) {
+      console.error('[AuthContext] Error signing out:', error);
+      // Fallback: manual sign out and redirect
+      try {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        window.location.replace('/auth/login');
+      } catch (fallbackError) {
+        console.error('[AuthContext] Fallback sign out failed:', fallbackError);
+        // Last resort: force redirect
+        window.location.replace('/auth/login');
+      }
+    }
+  }, []);
+
+  const toggleSafeMode = useCallback(async (enabled: boolean) => {
+    if (!user?.id) return;
+
+    const { pauseAllInterventionsForSafeMode, clearSafeModePauseFlags } = await import(
+      '../lib/interventions/stage3_1-service'
+    );
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ safe_mode_enabled: enabled })
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Failed to toggle Safe Mode:', error);
+      throw error;
+    }
+
+    if (enabled) {
+      await pauseAllInterventionsForSafeMode(user.id);
+    } else {
+      await clearSafeModePauseFlags(user.id);
+    }
+
+    await refreshProfile();
+  }, [user?.id, refreshProfile]);
+
+  const viewAsData = getViewAsProfile ? getViewAsProfile() : { viewAsProfile: null, isViewingAs: false };
+  const effectiveProfile = viewAsData.isViewingAs && viewAsData.viewAsProfile
+    ? viewAsData.viewAsProfile
+    : profile;
+
+  const actualRole = profile?.role ?? null;
+  const role = effectiveProfile?.role ?? null;
+  const isAdmin = actualRole === 'admin';
+  const isPremium = role === 'premium' || role === 'admin';
+  const isFree = role === 'free';
+
+  // Phase 10: Memoize context value to prevent unnecessary re-renders
+  const value = useMemo(
+    () => ({
+      user,
+      profile: effectiveProfile,
+      loading,
+      role,
+      isAdmin,
+      isPremium,
+      isFree,
+      actualRole,
+      isViewingAs: viewAsData.isViewingAs,
+      safeModeEnabled: effectiveProfile?.safe_mode_enabled ?? false,
+      signOut,
+      refreshProfile,
+      toggleSafeMode,
+    }),
+    [
+      user,
+      effectiveProfile,
+      loading,
+      role,
+      isAdmin,
+      isPremium,
+      isFree,
+      actualRole,
+      viewAsData.isViewingAs,
+      signOut,
+      refreshProfile,
+      toggleSafeMode,
+    ]
+  );
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  // Proxy to the V1 Core AuthProvider to prevent crashes across 156+ legacy components
+  // and map the new V1 Profile shape to the expected legacy AuthContextType
+  const { user, profile: v1Profile, loading, signOut, refreshProfile } = useCoreAuth();
+
+  // Safe mapping of the V1 profile to legacy shape
+  const profile = v1Profile ? {
+    id: v1Profile.id,
+    user_id: v1Profile.id,
+    email: user?.email || null,
+    full_name: v1Profile.display_name,
+    role: 'premium' as UserRole,
+    created_at: v1Profile.created_at,
+    updated_at: v1Profile.updated_at,
+    safe_mode_enabled: false,
+  } : null;
+
+  return {
+    user,
+    profile,
+    loading,
+    role: 'premium' as UserRole,
+    isAdmin: false,
+    isPremium: true,
+    isFree: false,
+    actualRole: 'premium' as UserRole,
+    isViewingAs: false,
+    safeModeEnabled: false,
+    signOut,
+    refreshProfile,
+    toggleSafeMode: async () => { },
+  } as unknown as AuthContextType;
+}

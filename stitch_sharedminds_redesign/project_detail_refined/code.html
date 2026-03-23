@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SharedMinds - Project Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary-container": "#4388fd",
+              "surface-bright": "#f9f9fb",
+              "tertiary-dim": "#005f40",
+              "surface-container-lowest": "#ffffff",
+              "on-secondary-fixed": "#314055",
+              "secondary-fixed": "#d3e4fe",
+              "on-secondary-container": "#435368",
+              "on-background": "#2e3336",
+              "tertiary": "#006d4a",
+              "on-error-container": "#6e0a12",
+              "on-tertiary-container": "#005a3c",
+              "tertiary-fixed-dim": "#58e7ab",
+              "on-error": "#fff7f6",
+              "primary-dim": "#004fad",
+              "inverse-primary": "#4d8eff",
+              "on-secondary": "#f7f9ff",
+              "on-primary-fixed": "#000000",
+              "inverse-on-surface": "#9c9d9f",
+              "on-surface": "#2e3336",
+              "surface-container": "#eceef1",
+              "surface": "#f9f9fb",
+              "secondary-container": "#d3e4fe",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "on-primary-container": "#000311",
+              "surface-variant": "#dfe3e7",
+              "on-tertiary-fixed-variant": "#006544",
+              "secondary-fixed-dim": "#c5d6f0",
+              "error": "#a83836",
+              "error-dim": "#67040d",
+              "primary-fixed": "#4388fd",
+              "on-tertiary": "#e6ffee",
+              "surface-dim": "#d7dadf",
+              "surface-container-highest": "#dfe3e7",
+              "on-surface-variant": "#5b6063",
+              "secondary": "#506076",
+              "on-primary-fixed-variant": "#001435",
+              "tertiary-fixed": "#69f6b8",
+              "surface-tint": "#005bc4",
+              "outline-variant": "#aeb2b6",
+              "primary-fixed-dim": "#317bef",
+              "outline": "#777b7f",
+              "surface-container-low": "#f2f4f6",
+              "primary": "#005bc4",
+              "secondary-dim": "#44546a",
+              "error-container": "#fa746f",
+              "inverse-surface": "#0c0e10",
+              "background": "#f9f9fb",
+              "on-tertiary-fixed": "#00452d",
+              "on-primary": "#f9f8ff",
+              "tertiary-container": "#69f6b8",
+              "surface-container-high": "#e6e8ec"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        -webkit-font-smoothing: antialiased;
+        scroll-behavior: smooth;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface font-body text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-40 bg-[#f2f4f6] dark:bg-gray-800/50 backdrop-blur-md">
+<div class="flex items-center justify-between px-6 h-16 w-full">
+<div class="flex items-center gap-4">
+<button class="text-[#5b6063] dark:text-[#aeb2b6] hover:bg-[#eceef1] dark:hover:bg-gray-700 transition-colors p-2 rounded-full scale-95 active:duration-150">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<span class="font-['Manrope'] font-black text-[#005bc4] dark:text-[#4388fd] tracking-tight text-lg">SharedMinds</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border-2 border-surface-container-lowest">
+<img alt="User Profile" data-alt="User profile avatar placeholder" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDMxZyQwhGwwhjk1p6hGINc6KATgdwmaZq13oPWnWdH1C0k9FAqE6aSnoLRnvbtZscNqsU5Bu7zfXPKOmtGZStS9CvwpVptgRuJCsl0t6mP6N2H34C6eFPvAlhuX6Jmc53FyfmCK_9--BJFlCb8vPJBHz0rJrJ6mUBc2xogBLi7c5ryDyykbY_WBg17eS5NB45mYSW024XOIzQ2St7DHjFFLFciKqaJVAwPW1fq_t1fZGtUROiz-0KkzmmNGtZeS3M6uLPSypHRvI"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-screen-xl mx-auto px-6 py-8 md:px-12">
+<!-- Hero Section: Project Identity -->
+<section class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-8">
+<div class="max-w-2xl">
+<div class="inline-flex items-center px-4 py-1.5 rounded-full bg-tertiary/10 text-tertiary mb-6 border border-tertiary/20">
+<span class="w-2 h-2 rounded-full bg-tertiary mr-2"></span>
+<span class="text-xs font-bold font-headline uppercase tracking-wider">Active Initiative</span>
+</div>
+<h1 class="text-4xl md:text-5xl font-headline font-extrabold text-on-surface mb-4 leading-tight">GrowDo UI Architecture</h1>
+<p class="text-lg text-on-surface-variant leading-relaxed">Defining the core semantic layering and component strategy for the next generation of mindful interfaces.</p>
+<div class="mt-8 flex flex-wrap items-center gap-4">
+<div class="flex -space-x-3">
+<img alt="Team Member" class="w-10 h-10 rounded-full border-4 border-surface ring-2 ring-surface-container" data-alt="Portrait of team member Jane Doe" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBcKQr4BghGVGQIf-a0PDACiCYlWS1HMDN1f19bjAZlQwHqV82J9qk88ZLmxkRWrIUceTrrA-4Utp7VF0UGq1rNu0XTG3pn1ascYr7ikzCAO0a6BBGmEaDqQFKvDz5BuSDM1ljy2LZDpYxB7Y4YYrlG9S99Ro53b7rC7sKR4aX1vuXq1B6NXPKWJh94Jq04VyepWxloqJbxJAu5-DCyNEevQm2nsWD3SwH5-IvhAMxDF18oBG0TVc1kVgJTMO7MZRWw1fY5wMceaYE"/>
+<img alt="Team Member" class="w-10 h-10 rounded-full border-4 border-surface ring-2 ring-surface-container" data-alt="Portrait of team member Alex Miller" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6_IsmDxVAKNZ949h9yzqh90HRvxHoQBAk7Mhm-fAoDHxQtN4G_BVp3hXZeIsmJ0xnt-Q_uEPyjTQxQPS31xt2cQSCutkWppqP9Wk969F7mhZ5AHQ7qnPr4B5aPeUV70jDRWENw0eky4rsXb2LY9Y7VkfKobBnWPaAdhUolHAXg-K9mfUAao94l9xPk1iE-jc9nI5rA_eQLj8V3bXjs3vsMc2gfjMLeIg3HYRLLcCgfLSK__Kc4UwbMx1HeJU8QfZbwYcdN4DFuCI"/>
+<img alt="Team Member" class="w-10 h-10 rounded-full border-4 border-surface ring-2 ring-surface-container" data-alt="Portrait of team member Riley Kim" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNoLhs3IJVZn13UAsD8AXgKXfJ2QKx5MAprSN19zjcuEUhCzPeEo6jHcVtCRyLZ61X-qxauqIH5Q0-dBKEjzYq2ASTQRv_GhHTor4kZar26RbzkE-fanv263qIQ5qTZ7IREibmqFotOT-_j-4KO-AX9lRz1hQWRIGEpUcP4S46j2f4ZM37TW6Y7ir_Yi1U1i53rsFlecQqIyTFyPiGHN4t5hV-FGHJt_QRJxHcCzROBECXOVEMmETRUtke-SnYE-NbrX1otAoifbg"/>
+<div class="w-10 h-10 rounded-full border-4 border-surface ring-2 ring-surface-container bg-surface-container flex items-center justify-center text-xs font-bold">+2</div>
+</div>
+<button class="px-6 py-2.5 rounded-full border border-outline-variant/30 text-on-surface font-semibold hover:bg-surface-container transition-all text-sm">
+                        Manage Team
+                    </button>
+</div>
+</div>
+<!-- Project Momentum: Circular Progress -->
+<div class="relative w-48 h-48 flex items-center justify-center shrink-0">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-container" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-width="12"></circle>
+<circle cx="96" cy="96" fill="transparent" r="80" stroke="url(#gradient)" stroke-dasharray="502.65" stroke-dashoffset="175.92" stroke-linecap="round" stroke-width="12"></circle>
+<defs>
+<lineargradient id="gradient" x1="0%" x2="100%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#005bc4"></stop>
+<stop offset="100%" style="stop-color:#4388fd"></stop>
+</lineargradient>
+</defs>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-4xl font-headline font-black text-primary">65%</span>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Momentum</span>
+</div>
+</div>
+</section>
+<!-- Adaptive State Filter -->
+<section class="mb-14 overflow-hidden">
+<h3 class="text-sm font-bold text-on-surface-variant uppercase tracking-widest mb-6 px-1">Current Brain State</h3>
+<div class="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+<!-- High Energy -->
+<button class="flex-none w-44 p-5 rounded-xl bg-primary-container/10 border border-primary-container/20 flex flex-col gap-4 group hover:bg-primary-container/20 transition-all">
+<div class="w-10 h-10 rounded-lg bg-primary-container text-white flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</div>
+<div class="text-left">
+<div class="font-bold text-on-surface">High Energy</div>
+<div class="text-xs text-on-surface-variant">Complex tasks</div>
+</div>
+</button>
+<!-- Calm Flow -->
+<button class="flex-none w-44 p-5 rounded-xl bg-tertiary-container/10 border border-tertiary-container/20 flex flex-col gap-4 hover:bg-tertiary-container/20 transition-all ring-2 ring-tertiary ring-offset-4 ring-offset-surface">
+<div class="w-10 h-10 rounded-lg bg-tertiary text-white flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="water_drop">water_drop</span>
+</div>
+<div class="text-left">
+<div class="font-bold text-on-surface">Calm Flow</div>
+<div class="text-xs text-on-surface-variant">Deep focus</div>
+</div>
+</button>
+<!-- Low Effort -->
+<button class="flex-none w-44 p-5 rounded-xl bg-secondary-container/10 border border-secondary-container/20 flex flex-col gap-4 hover:bg-secondary-container/20 transition-all">
+<div class="w-10 h-10 rounded-lg bg-secondary text-white flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="spa">spa</span>
+</div>
+<div class="text-left">
+<div class="font-bold text-on-surface">Low Effort</div>
+<div class="text-xs text-on-surface-variant">Maintenance</div>
+</div>
+</button>
+<!-- Urgent Focus -->
+<button class="flex-none w-44 p-5 rounded-xl bg-error-container/10 border border-error-container/20 flex flex-col gap-4 hover:bg-error-container/20 transition-all">
+<div class="w-10 h-10 rounded-lg bg-error text-white flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="priority_high">priority_high</span>
+</div>
+<div class="text-left">
+<div class="font-bold text-on-surface">Urgent Focus</div>
+<div class="text-xs text-on-surface-variant">Deadlines</div>
+</div>
+</button>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+<!-- Focused Task Stack -->
+<div class="lg:col-span-7">
+<div class="flex items-center justify-between mb-8">
+<h2 class="text-2xl font-headline font-bold">Focus Tasks</h2>
+<span class="text-xs font-bold text-primary px-3 py-1 rounded-full bg-primary/10">3 Pending</span>
+</div>
+<div class="space-y-4">
+<!-- Task Item 1 -->
+<div class="p-5 rounded-lg bg-surface-container-lowest shadow-sm border border-outline-variant/5 flex items-start gap-5 group hover:shadow-md transition-shadow">
+<div class="mt-1 flex-none flex items-center justify-center w-6 h-6 rounded-md border-2 border-outline-variant group-hover:border-primary transition-colors cursor-pointer"></div>
+<div class="flex-grow">
+<h4 class="font-headline font-bold text-on-surface text-lg mb-1">Finalize Design Tokens</h4>
+<div class="flex flex-wrap gap-2 items-center">
+<span class="text-xs font-medium text-on-surface-variant">Design System</span>
+<span class="text-[10px] text-outline">•</span>
+<span class="inline-flex items-center gap-1 text-[10px] font-bold text-tertiary uppercase tracking-tighter px-2 py-0.5 bg-tertiary/10 rounded">
+<span class="material-symbols-outlined text-[12px]" data-icon="water_drop">water_drop</span> Calm Flow
+                                </span>
+</div>
+</div>
+</div>
+<!-- Task Item 2 -->
+<div class="p-5 rounded-lg bg-surface-container-lowest shadow-sm border border-outline-variant/5 flex items-start gap-5 group hover:shadow-md transition-shadow">
+<div class="mt-1 flex-none flex items-center justify-center w-6 h-6 rounded-md border-2 border-primary bg-primary text-white cursor-pointer">
+<span class="material-symbols-outlined text-sm" data-icon="check">check</span>
+</div>
+<div class="flex-grow">
+<h4 class="font-headline font-bold text-on-surface-variant line-through text-lg mb-1">Audit Component Contrast</h4>
+<div class="flex flex-wrap gap-2 items-center">
+<span class="text-xs font-medium text-on-surface-variant opacity-60">Accessibility</span>
+<span class="text-[10px] text-outline opacity-60">•</span>
+<span class="inline-flex items-center gap-1 text-[10px] font-bold text-on-surface-variant opacity-60 uppercase tracking-tighter px-2 py-0.5 bg-surface-container rounded">
+                                    Completed
+                                </span>
+</div>
+</div>
+</div>
+<!-- Task Item 3 -->
+<div class="p-5 rounded-lg bg-surface-container-lowest shadow-sm border border-outline-variant/5 flex items-start gap-5 group hover:shadow-md transition-shadow">
+<div class="mt-1 flex-none flex items-center justify-center w-6 h-6 rounded-md border-2 border-outline-variant group-hover:border-primary transition-colors cursor-pointer"></div>
+<div class="flex-grow">
+<h4 class="font-headline font-bold text-on-surface text-lg mb-1">Dev Handoff: Motion Specs</h4>
+<div class="flex flex-wrap gap-2 items-center">
+<span class="text-xs font-medium text-on-surface-variant">Dev Handoff</span>
+<span class="text-[10px] text-outline">•</span>
+<span class="inline-flex items-center gap-1 text-[10px] font-bold text-primary-container uppercase tracking-tighter px-2 py-0.5 bg-primary-container/10 rounded">
+<span class="material-symbols-outlined text-[12px]" data-icon="bolt">bolt</span> High Energy
+                                </span>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full mt-6 py-4 rounded-xl border-2 border-dashed border-outline-variant/30 text-on-surface-variant font-bold flex items-center justify-center gap-2 hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+                    Add a Focused Task
+                </button>
+</div>
+<!-- Milestones Timeline -->
+<div class="lg:col-span-5">
+<h2 class="text-2xl font-headline font-bold mb-8">Milestones</h2>
+<div class="relative pl-8">
+<!-- Vertical Line -->
+<div class="absolute left-0 top-2 bottom-0 w-0.5 bg-surface-container"></div>
+<div class="space-y-10">
+<!-- Milestone 1 -->
+<div class="relative">
+<div class="absolute -left-10 w-4 h-4 rounded-full border-4 border-surface bg-tertiary ring-2 ring-tertiary/20"></div>
+<div>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Mar 12, 2024</span>
+<h5 class="font-headline font-bold text-on-surface mt-1">Core System Freeze</h5>
+<div class="mt-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-tertiary/10 text-tertiary uppercase">Completed</div>
+</div>
+</div>
+<!-- Milestone 2 -->
+<div class="relative">
+<div class="absolute -left-10 w-4 h-4 rounded-full border-4 border-surface bg-primary ring-2 ring-primary/20"></div>
+<div>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Apr 05, 2024</span>
+<h5 class="font-headline font-bold text-on-surface mt-1">Beta Component Library</h5>
+<div class="mt-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">In Progress</div>
+<p class="mt-2 text-xs text-on-surface-variant leading-relaxed">9/14 components verified in the sandbox environment.</p>
+</div>
+</div>
+<!-- Milestone 3 -->
+<div class="relative">
+<div class="absolute -left-10 w-4 h-4 rounded-full border-4 border-surface bg-surface-container ring-2 ring-surface-container"></div>
+<div>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">May 20, 2024</span>
+<h5 class="font-headline font-bold text-on-surface-variant mt-1">Version 1.0 Release</h5>
+<div class="mt-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container text-on-surface-variant uppercase">Upcoming</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#f9f9fb]/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg rounded-t-[3rem] border-t border-[#aeb2b6]/15 shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-white transition-all tap-highlight-transparent active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="target">target</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-medium">Focus</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-[#eceef1] dark:bg-[#4388fd]/20 text-[#005bc4] dark:text-[#4388fd] rounded-full px-5 py-2 tap-highlight-transparent active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="grid_view" style="font-variation-settings: 'FILL' 1;">grid_view</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-medium">Projects</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-white transition-all tap-highlight-transparent active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insights">insights</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-medium">Insights</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-white transition-all tap-highlight-transparent active:scale-90" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="settings">settings</span>
+<span class="font-['Plus_Jakarta_Sans'] text-xs font-medium">Settings</span>
+</a>
+</nav>
+</body></html>

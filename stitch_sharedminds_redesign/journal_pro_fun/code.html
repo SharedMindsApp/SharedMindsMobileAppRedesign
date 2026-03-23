@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-fixed-dim": "#317bef",
+                        "tertiary-container": "#69f6b8",
+                        "surface-container": "#eceef1",
+                        "primary-fixed": "#4388fd",
+                        "on-tertiary-fixed": "#00452d",
+                        "primary-container": "#4388fd",
+                        "error": "#a83836",
+                        "on-primary-fixed-variant": "#001435",
+                        "on-secondary-fixed-variant": "#4d5d73",
+                        "on-tertiary-container": "#005a3c",
+                        "on-surface": "#2e3336",
+                        "on-secondary-container": "#435368",
+                        "inverse-surface": "#0c0e10",
+                        "error-dim": "#67040d",
+                        "surface": "#f9f9fb",
+                        "secondary": "#506076",
+                        "on-tertiary": "#e6ffee",
+                        "on-error": "#fff7f6",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary-fixed-variant": "#006544",
+                        "on-secondary-fixed": "#314055",
+                        "on-primary-fixed": "#000000",
+                        "secondary-container": "#d3e4fe",
+                        "tertiary": "#006d4a",
+                        "secondary-dim": "#44546a",
+                        "on-primary-container": "#000311",
+                        "tertiary-fixed-dim": "#58e7ab",
+                        "surface-container-high": "#e6e8ec",
+                        "tertiary-fixed": "#69f6b8",
+                        "surface-variant": "#dfe3e7",
+                        "on-secondary": "#f7f9ff",
+                        "inverse-on-surface": "#9c9d9f",
+                        "surface-bright": "#f9f9fb",
+                        "outline": "#777b7f",
+                        "error-container": "#fa746f",
+                        "surface-tint": "#005bc4",
+                        "background": "#f9f9fb",
+                        "surface-container-highest": "#dfe3e7",
+                        "secondary-fixed-dim": "#c5d6f0",
+                        "outline-variant": "#aeb2b6",
+                        "primary": "#005bc4",
+                        "on-surface-variant": "#5b6063",
+                        "surface-dim": "#d7dadf",
+                        "secondary-fixed": "#d3e4fe",
+                        "primary-dim": "#004fad",
+                        "tertiary-dim": "#005f40",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary": "#f9f8ff",
+                        "on-error-container": "#6e0a12",
+                        "inverse-primary": "#4d8eff",
+                        "on-background": "#2e3336"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .tap-target { min-height: 44px; min-width: 44px; }
+        
+        @keyframes sparkle {
+            0%, 100% { opacity: 0; transform: scale(0); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        .animate-sparkle {
+            animation: sparkle 2s infinite ease-in-out;
+        }
+    </style>
+<style>
+        body {
+          min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 w-full z-50 bg-[#f9f9fb]/80 backdrop-blur-md flex items-center justify-between px-6 h-16">
+<div class="flex items-center gap-4">
+<button class="tap-target flex items-center justify-center rounded-full hover:bg-[#eceef1] transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined text-[#005bc4]">menu</span>
+</button>
+<h1 class="font-headline font-extrabold text-[#005bc4] tracking-tighter text-lg">SharedMinds</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container-high border-2 border-primary/10">
+<img alt="User" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuANQs0IXMikGZ8R1G2JZcRHyUniR36-dVV23CFDmTnRvcSQyF2Kw6ZKUSdlk7ZqRC7HEUstkuSpi2ANfZCQ5kc4yniYnrBpXn25jEzqkATW52Q6qQg1sig-oJz7YiYsmS3umjTRidi0MJtFLW5toZkMDF5Co4K5soo6XC8M-mrZ-3bW4p5BGhW-JXaonUqGdVn5QkvEdVeQyeqfwHTZ-GcEMDZ9u3HeQp6jpqfI6nUmo_9PEZea1hoy-p27W-5DKwdNYEKP3Vt5AO0"/>
+</div>
+</header>
+<main class="pt-24 pb-32 px-6 max-w-2xl mx-auto space-y-8">
+<!-- Section 1: Header -->
+<section class="space-y-2">
+<h2 class="text-3xl font-extrabold tracking-tight text-on-surface">Journal</h2>
+<p class="text-on-surface-variant text-lg leading-relaxed max-w-md">
+                Closing the loop on today to clear space for tomorrow's flow.
+            </p>
+</section>
+<!-- Section 2: Daily Reflection Card -->
+<div class="bg-surface-container-lowest rounded-[2rem] p-6 shadow-xl shadow-primary/5 space-y-10 border border-primary/5">
+<!-- Sleep Quality -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<label class="block font-headline font-extrabold text-on-surface">How was your sleep?</label>
+<span class="material-symbols-outlined text-primary-fixed-dim">bedtime</span>
+</div>
+<div class="flex justify-between items-center bg-surface-container-low p-2 rounded-full">
+<button class="tap-target flex items-center justify-center rounded-full hover:bg-white transition-all text-on-surface-variant active:scale-90" title="Terrible">
+<span class="material-symbols-outlined text-2xl">sentiment_extremely_dissatisfied</span>
+</button>
+<button class="tap-target flex items-center justify-center rounded-full hover:bg-white transition-all text-on-surface-variant active:scale-90" title="Poor">
+<span class="material-symbols-outlined text-2xl">sentiment_dissatisfied</span>
+</button>
+<button class="tap-target flex items-center justify-center rounded-full bg-white shadow-md text-primary active:scale-90" title="Neutral">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">sentiment_neutral</span>
+</button>
+<button class="tap-target flex items-center justify-center rounded-full hover:bg-white transition-all text-on-surface-variant active:scale-90" title="Good">
+<span class="material-symbols-outlined text-2xl">sentiment_satisfied</span>
+</button>
+<button class="tap-target flex items-center justify-center rounded-full hover:bg-white transition-all text-on-surface-variant active:scale-90" title="Excellent">
+<span class="material-symbols-outlined text-2xl">sentiment_very_satisfied</span>
+</button>
+</div>
+</div>
+<!-- Movement -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<label class="block font-headline font-extrabold text-on-surface">Movement &amp; Exercise</label>
+<span class="material-symbols-outlined text-tertiary">bolt</span>
+</div>
+<div class="relative group">
+<input class="w-full h-14 bg-surface-container-low border-2 border-transparent focus:border-primary/20 rounded-full px-6 focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 transition-all font-medium" placeholder="What moved you today?" type="text"/>
+<span class="material-symbols-outlined absolute right-5 top-4 text-on-surface-variant/40">fitness_center</span>
+</div>
+</div>
+<!-- Wins & Struggles -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Wins -->
+<div class="space-y-3 relative group">
+<label class="text-sm font-extrabold text-tertiary flex items-center gap-2 px-1">
+<span class="material-symbols-outlined text-lg animate-sparkle">auto_awesome</span> Wins
+                    </label>
+<div class="relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-tertiary/5 to-tertiary/10 p-1">
+<textarea class="w-full bg-transparent border-none rounded-[1.25rem] p-4 focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 resize-none font-medium text-sm leading-relaxed" placeholder="What went well?" rows="3"></textarea>
+</div>
+</div>
+<!-- Struggles -->
+<div class="space-y-3">
+<label class="text-sm font-extrabold text-error flex items-center gap-2 px-1">
+<span class="material-symbols-outlined text-lg">potted_plant</span> Struggles
+                    </label>
+<div class="relative overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-error/5 to-error/10 p-1">
+<textarea class="w-full bg-transparent border-none rounded-[1.25rem] p-4 focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 resize-none font-medium text-sm leading-relaxed" placeholder="What felt heavy?" rows="3"></textarea>
+</div>
+</div>
+</div>
+<!-- Reflection -->
+<div class="space-y-4">
+<label class="block font-headline font-extrabold text-on-surface px-1">Daily Reflection</label>
+<div class="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary/5 to-primary-container/10 p-1">
+<textarea class="w-full bg-transparent border-none rounded-[1.75rem] p-5 focus:ring-0 text-on-surface placeholder:text-on-surface-variant/40 resize-none font-medium leading-relaxed" placeholder="Dump your thoughts here..." rows="5"></textarea>
+</div>
+</div>
+<!-- Tomorrow Intention -->
+<div class="p-6 bg-primary text-white rounded-[2rem] shadow-lg shadow-primary/20 relative overflow-hidden">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+<label class="block font-headline font-extrabold mb-3 relative z-10">Tomorrow's Intention</label>
+<textarea class="w-full bg-white/10 border-none rounded-2xl p-4 text-white placeholder:text-white/60 focus:ring-2 focus:ring-white/30 resize-none font-medium relative z-10" placeholder="One thing to focus on tomorrow..." rows="2"></textarea>
+</div>
+<button class="w-full h-14 bg-primary text-white font-extrabold rounded-full flex items-center justify-center gap-3 active:scale-[0.98] transition-all hover:shadow-xl hover:shadow-primary/30 group">
+<span class="material-symbols-outlined transition-transform group-hover:scale-110">check_circle</span>
+                Complete Entry
+            </button>
+</div>
+<!-- Section 3: Insight Card -->
+<section class="bg-surface-container-low rounded-[2rem] p-6 border border-primary/5 relative overflow-hidden group">
+<div class="flex gap-4 items-start relative z-10">
+<div class="tap-target w-12 h-12 flex-shrink-0 bg-white rounded-full flex items-center justify-center text-primary shadow-sm">
+<span class="material-symbols-outlined">lightbulb</span>
+</div>
+<div class="space-y-2">
+<h4 class="font-headline font-extrabold text-on-surface">The Science of Closing</h4>
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                        Labeling struggles reduces amygdala activity. Externalizing "tomorrow's intention" signals to your brain that the day's tasks are managed, reducing sleep-onset anxiety.
+                    </p>
+</div>
+</div>
+<div class="absolute right-0 bottom-0 opacity-[0.03] pointer-events-none transition-transform group-hover:scale-110 duration-700">
+<span class="material-symbols-outlined text-9xl">neurology</span>
+</div>
+</section>
+<!-- Section 4: Timeline/Activity Log -->
+<section class="space-y-8 pt-4">
+<h3 class="font-headline font-extrabold text-xl text-on-surface flex items-center gap-3">
+<span class="material-symbols-outlined text-primary font-bold">history_toggle_off</span>
+                Activity Log
+            </h3>
+<div class="relative ml-3">
+<!-- Vertical Line -->
+<div class="absolute left-[7px] top-0 bottom-0 w-[2px] bg-gradient-to-b from-primary via-surface-container-highest to-surface-container-highest"></div>
+<div class="space-y-10">
+<!-- Log Item 1 -->
+<div class="relative pl-10">
+<div class="absolute left-0 top-1 w-4 h-4 rounded-full bg-white border-[3px] border-primary z-10 shadow-sm"></div>
+<div class="flex flex-col gap-1 bg-surface-container-lowest p-4 rounded-2xl shadow-sm border border-surface-container">
+<span class="text-[10px] font-extrabold uppercase tracking-widest text-primary">11:38 — 12:41</span>
+<p class="text-on-surface font-bold">Editing Launch Manager</p>
+<span class="text-xs text-on-surface-variant font-medium">Focus: Deep Work session</span>
+</div>
+</div>
+<!-- Log Item 2 -->
+<div class="relative pl-10">
+<div class="absolute left-0 top-1 w-4 h-4 rounded-full bg-white border-[3px] border-tertiary z-10 shadow-sm"></div>
+<div class="flex flex-col gap-1 bg-surface-container-lowest p-4 rounded-2xl shadow-sm border border-surface-container">
+<span class="text-[10px] font-extrabold uppercase tracking-widest text-tertiary">09:15 — 09:45</span>
+<p class="text-on-surface font-bold">Morning Check-In</p>
+<span class="text-xs text-on-surface-variant font-medium">Completed daily prep</span>
+</div>
+</div>
+<!-- Log Item 3 -->
+<div class="relative pl-10">
+<div class="absolute left-0 top-1 w-4 h-4 rounded-full bg-white border-[3px] border-outline-variant z-10 shadow-sm"></div>
+<div class="flex flex-col gap-1 bg-surface-container-lowest p-4 rounded-2xl shadow-sm border border-surface-container">
+<span class="text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant">07:30</span>
+<p class="text-on-surface font-bold">Wake up &amp; Hydration</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Navigation Shell Anchor -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-8 pt-3 bg-white/90 backdrop-blur-xl border-t border-surface-container">
+<a class="tap-target flex flex-col items-center justify-center text-[#5b6063] hover:opacity-80 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">wb_sunny</span>
+<span class="font-label font-bold text-[10px] uppercase tracking-wider mt-1">Today</span>
+</a>
+<a class="tap-target flex flex-col items-center justify-center text-[#5b6063] hover:opacity-80 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">task_alt</span>
+<span class="font-label font-bold text-[10px] uppercase tracking-wider mt-1">Tasks</span>
+</a>
+<a class="tap-target flex flex-col items-center justify-center text-[#5b6063] hover:opacity-80 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">face</span>
+<span class="font-label font-bold text-[10px] uppercase tracking-wider mt-1">In</span>
+</a>
+<a class="tap-target flex flex-col items-center justify-center text-primary bg-primary/10 rounded-full px-4 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">menu_book</span>
+<span class="font-label font-bold text-[10px] uppercase tracking-wider mt-1">Journal</span>
+</a>
+<a class="tap-target flex flex-col items-center justify-center text-[#5b6063] hover:opacity-80 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">more_horiz</span>
+<span class="font-label font-bold text-[10px] uppercase tracking-wider mt-1">More</span>
+</a>
+</nav>
+</body></html>

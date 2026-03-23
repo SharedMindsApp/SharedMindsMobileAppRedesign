@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SharedMinds - Storage Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error-container": "#6e0a12",
+              "on-secondary": "#f7f9ff",
+              "secondary-dim": "#44546a",
+              "on-tertiary": "#e6ffee",
+              "tertiary-dim": "#005f40",
+              "on-tertiary-container": "#005a3c",
+              "primary-fixed-dim": "#317bef",
+              "primary-container": "#4388fd",
+              "on-tertiary-fixed": "#00452d",
+              "on-surface": "#2e3336",
+              "tertiary-fixed-dim": "#58e7ab",
+              "surface-container": "#eceef1",
+              "primary-dim": "#004fad",
+              "primary": "#005bc4",
+              "secondary": "#506076",
+              "inverse-on-surface": "#9c9d9f",
+              "error-dim": "#67040d",
+              "tertiary-fixed": "#69f6b8",
+              "inverse-primary": "#4d8eff",
+              "surface-dim": "#d7dadf",
+              "secondary-fixed-dim": "#c5d6f0",
+              "outline": "#777b7f",
+              "on-tertiary-fixed-variant": "#006544",
+              "surface-container-high": "#e6e8ec",
+              "inverse-surface": "#0c0e10",
+              "on-secondary-container": "#435368",
+              "surface-container-lowest": "#ffffff",
+              "primary-fixed": "#4388fd",
+              "on-surface-variant": "#5b6063",
+              "on-error": "#fff7f6",
+              "tertiary": "#006d4a",
+              "error-container": "#fa746f",
+              "background": "#f9f9fb",
+              "on-background": "#2e3336",
+              "on-primary-fixed-variant": "#001435",
+              "on-primary-container": "#000311",
+              "on-primary": "#f9f8ff",
+              "tertiary-container": "#69f6b8",
+              "secondary-fixed": "#d3e4fe",
+              "outline-variant": "#aeb2b6",
+              "surface-container-highest": "#dfe3e7",
+              "secondary-container": "#d3e4fe",
+              "error": "#a83836",
+              "surface-container-low": "#f2f4f6",
+              "surface": "#f9f9fb",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "surface-bright": "#f9f9fb",
+              "on-secondary-fixed": "#314055",
+              "on-primary-fixed": "#000000",
+              "surface-tint": "#005bc4",
+              "surface-variant": "#dfe3e7"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .glass-nav { backdrop-filter: blur(12px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface pb-32">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-40 bg-[#f2f4f6] dark:bg-[#1a1c1e] transition-colors duration-300">
+<div class="flex items-center justify-between px-6 py-4 w-full">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Portrait of a smiling professional user profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDL5E8zLVYn5tSXCQg3iLaEhh9sZ-9QlO2ndukARsyGjryC3WR3d3589mcRe34wLxpyv8h2A2tHm7h5rEleyUeRdVizT_ucnytQcRW2n5rnJy4pRCw8_1BfCzgdyEOA6UNY2JkC1aTd88p6n_YfEDwGGJ-nps4wKAffWR9Mbv4sQqjPdBCXoabaZIGkJ_UXT31NP-XU_5fb99IWpt-wGXMPfL_akRvGxcTysiKZy0EjoUVFVq6ncp7A2lUAL8AuNRcehaDnFjFWuVE"/>
+</div>
+<span class="font-['Manrope'] font-bold text-2xl tracking-tight text-[#005bc4] dark:text-[#4388fd] font-extrabold tracking-tighter">SharedMinds</span>
+</div>
+<button class="material-symbols-outlined text-[#005bc4] dark:text-[#4388fd] hover:bg-[#eceef1] dark:hover:bg-[#2e3336] rounded-full transition-all p-2 active:scale-95 duration-200" data-icon="sync_alt">sync_alt</button>
+</div>
+</header>
+<main class="max-w-5xl mx-auto px-6 pt-8 space-y-10">
+<!-- Inventory Overview & Momentum -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="lg:col-span-2 space-y-6">
+<div class="space-y-2">
+<h1 class="text-4xl font-extrabold tracking-tight text-on-background">Storage Hub</h1>
+<p class="text-on-surface-variant font-medium">Mission control for your homegrown and long-term food security.</p>
+</div>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full bg-surface-container-highest border-none rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-primary-container transition-all" placeholder="Search inventory, batches, or locations..." type="text"/>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-6 flex flex-col justify-between border-l-4 border-primary">
+<div class="flex justify-between items-start">
+<span class="text-xs font-bold uppercase tracking-widest text-primary">Momentum</span>
+<span class="material-symbols-outlined text-primary" data-icon="insights">insights</span>
+</div>
+<div class="space-y-1">
+<p class="text-3xl font-extrabold text-on-surface">1,420</p>
+<p class="text-sm font-semibold text-on-surface-variant">Total Items Tracked</p>
+</div>
+<div class="flex items-center gap-2 mt-4">
+<div class="flex-1 bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="bg-primary w-[75%] h-full rounded-full"></div>
+</div>
+<span class="text-xs font-bold text-primary">212 Days Left</span>
+</div>
+</div>
+</section>
+<!-- Category Switcher -->
+<nav class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+<button class="bg-primary text-on-primary px-6 py-2 rounded-full font-bold text-sm shadow-sm whitespace-nowrap">All</button>
+<button class="bg-surface-container-low text-on-surface-variant hover:bg-surface-container px-6 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-colors">Fresh</button>
+<button class="bg-surface-container-low text-on-surface-variant hover:bg-surface-container px-6 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-colors">Dry Goods</button>
+<button class="bg-surface-container-low text-on-surface-variant hover:bg-surface-container px-6 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-colors">Harvest</button>
+<button class="bg-surface-container-low text-on-surface-variant hover:bg-surface-container px-6 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-colors">Cache</button>
+</nav>
+<!-- Smart Alerts (Focus Area) -->
+<section class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-error" data-icon="priority_high">priority_high</span>
+<h2 class="text-xl font-bold">Focus Needed</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Critical Low Card -->
+<div class="bg-error-container/20 rounded-xl p-5 flex items-center gap-4 border border-error-container/10">
+<div class="w-12 h-12 rounded-full bg-error-container flex items-center justify-center text-on-error-container">
+<span class="material-symbols-outlined" data-icon="warning">warning</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-on-error-container">Flour (Bread)</h4>
+<p class="text-sm text-on-error-container opacity-80">Critical Low: 1.2kg remaining</p>
+</div>
+<button class="bg-on-error-container text-surface-container-lowest px-4 py-2 rounded-lg text-xs font-bold">REPLENISH</button>
+</div>
+<!-- Expiring Soon Card -->
+<div class="bg-tertiary-container/20 rounded-xl p-5 flex items-center gap-4 border border-tertiary-container/10">
+<div class="w-12 h-12 rounded-full bg-tertiary-container flex items-center justify-center text-on-tertiary-container">
+<span class="material-symbols-outlined" data-icon="timer">timer</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-on-tertiary-container">Heirloom Kale</h4>
+<p class="text-sm text-on-tertiary-container opacity-80">Expires in 48 hours</p>
+</div>
+<button class="bg-on-tertiary-container text-surface-container-lowest px-4 py-2 rounded-lg text-xs font-bold">USE NOW</button>
+</div>
+</div>
+</section>
+<!-- Homegrown & Harvest (Asymmetric Bento) -->
+<section class="space-y-6">
+<div class="flex justify-between items-end">
+<div class="space-y-1">
+<h2 class="text-2xl font-extrabold">Homegrown &amp; Harvest</h2>
+<p class="text-on-surface-variant text-sm font-medium">Tracking seasonal output and batch quality.</p>
+</div>
+<button class="text-primary font-bold text-sm flex items-center gap-1">View Archive <span class="material-symbols-outlined text-sm">arrow_forward</span></button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- Large Featured Batch -->
+<div class="md:col-span-7 bg-surface-container-low rounded-xl overflow-hidden flex flex-col">
+<div class="h-48 relative overflow-hidden">
+<img alt="Canned Tomatoes" class="w-full h-full object-cover" data-alt="Row of artisanal glass jars containing preserved tomatoes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAZtuZPrzMhkydyiZijrS8_7V6l4LalR3gtXA06Wck7EbgspJaWagbZ9qHzCDuw0nftNK1aqP4gdsbO4x0V-03fuXdmp4ucVB2B-tfWO-BssIhCB3SghozqdIQApKU869XomlJ_Or6v2mGcPpU3DdGTt5xR6QreIYQYx50EKvI0L8y2FIPxX1Hnylo3ZnhkiCwENjfz6pUco-foNs-E11MnN28U5kH4_4BWskzuS-ATqoCT5gj69Snazbc006UhuBlDAkJ1hUrZ7w"/>
+<div class="absolute top-4 left-4 bg-tertiary text-on-tertiary px-3 py-1 rounded-full text-xs font-bold">PREMIUM BATCH</div>
+</div>
+<div class="p-6 space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="text-xl font-bold">Canned Tomatoes - Batch 22A</h3>
+<p class="text-on-surface-variant text-sm font-medium">Variety: San Marzano Hybrid</p>
+</div>
+<div class="text-right">
+<span class="text-lg font-extrabold text-primary">12 Jars</span>
+<p class="text-xs font-bold text-outline">Remaining</p>
+</div>
+</div>
+<div class="flex items-center gap-6 pt-2 border-t border-outline-variant/10">
+<div>
+<p class="text-[10px] uppercase tracking-widest text-outline font-bold">Harvested</p>
+<p class="text-sm font-bold">Aug 14, 2023</p>
+</div>
+<div>
+<p class="text-[10px] uppercase tracking-widest text-outline font-bold">Shelf Life</p>
+<p class="text-sm font-bold">24 Months</p>
+</div>
+<div class="flex-1 text-right">
+<button class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Small Cards Stack -->
+<div class="md:col-span-5 flex flex-col gap-6">
+<div class="flex-1 bg-surface-container-lowest rounded-xl p-5 border border-surface-container flex gap-4">
+<div class="w-16 h-16 rounded-lg bg-surface-container overflow-hidden">
+<img alt="Dried Sage" class="w-full h-full object-cover" data-alt="Dried bunches of green sage leaves" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAY7dmdM_d8tRp7-Tzd0-083fpcz62yvsVkBHFI5L_wtOQMsDldxVPZmWIKIamRNqnvgYlXOeaRGRS7FXQ_xIwGq1ULcxX0XRS6rp6HYZMCoa1_XffxapeJ7p0X1B0LMrv1WZQbiPlunUnNkIhTzQHdqpdw7gqHfYagMSy6C3XVLDebQSwB2OWoM7IdjYjymkmMe0kFsOZBTiphELF5bfBqel3Ns-aq5r-e425RTuA2WSwcx1xIRz0uEHPfkgyrvjdhR847JjmPiGc"/>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<h4 class="font-bold">Dried Sage</h4>
+<p class="text-xs text-on-surface-variant">Mason Jar #4 • 250g</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-[10px] font-bold text-tertiary uppercase">In Rotation</span>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary-container hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">remove</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary-container hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</button>
+</div>
+</div>
+<div class="flex-1 bg-surface-container-lowest rounded-xl p-5 border border-surface-container flex gap-4">
+<div class="w-16 h-16 rounded-lg bg-surface-container overflow-hidden">
+<img alt="Dried Chickpeas" class="w-full h-full object-cover" data-alt="Heap of dry beige chickpeas" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBLzHCFe2M8kdVC9PBYWiTfR_Q8OTiiU5cnFNR5KZLM5YlbGP5LSOqUFuFjhSxFwCSl_geoVdwJCrbnyedKkEAwB3zBgdl7igA8h0ziKwQcK7SO0ZaWSuywHsJX12ksdzI2mKaYnQLDmu0qs_oZYYJB3EDzDcS_LjfKreCdsnmU00que-4M5pB01WADJuIO6YQ2_XICHNqgganELx8ZTpkDT2ciocgS6K4Wp6dxiEeTCJawZA3AHRo28ZRvUXjj_RyuDp0ezfbobI"/>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<h4 class="font-bold">Honey (Wildflower)</h4>
+<p class="text-xs text-on-surface-variant">Batch 'Spring Buzz' • 4kg</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span class="text-[10px] font-bold text-outline uppercase">Stockpiled</span>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary-container hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">remove</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary-container hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Prepper Inventory (The Cache) -->
+<section class="space-y-6">
+<div class="bg-inverse-surface text-on-primary-fixed rounded-xl p-8 relative overflow-hidden">
+<!-- Abstract Texture Decor -->
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+<div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+<div class="space-y-2">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-fixed" data-icon="lock">lock</span>
+<h2 class="text-2xl font-bold tracking-tight text-white">The Cache (Deep Storage)</h2>
+</div>
+<p class="text-outline-variant max-w-md">Long-term survival logistics. Managed with quarterly rotation protocols.</p>
+</div>
+<div class="flex gap-4">
+<div class="text-center px-6 py-3 bg-white/5 rounded-xl border border-white/10">
+<p class="text-[10px] uppercase font-bold text-outline-variant mb-1">Total Weight</p>
+<p class="text-xl font-extrabold text-white">425kg</p>
+</div>
+<div class="text-center px-6 py-3 bg-white/5 rounded-xl border border-white/10">
+<p class="text-[10px] uppercase font-bold text-outline-variant mb-1">Rotation Score</p>
+<p class="text-xl font-extrabold text-tertiary-fixed">92%</p>
+</div>
+</div>
+</div>
+<div class="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+<!-- Cache Item -->
+<div class="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center group hover:bg-white/10 transition-colors">
+<div>
+<p class="text-white font-bold">Bulk Rice (White)</p>
+<p class="text-xs text-outline-variant">Rotation: Dec 2025</p>
+</div>
+<div class="text-right">
+<p class="text-primary-fixed font-black">150kg</p>
+<p class="text-[10px] text-outline-variant font-bold">540k cal</p>
+</div>
+</div>
+<!-- Cache Item -->
+<div class="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center group hover:bg-white/10 transition-colors">
+<div>
+<p class="text-white font-bold">Mountain House Meals</p>
+<p class="text-xs text-outline-variant">Rotation: June 2032</p>
+</div>
+<div class="text-right">
+<p class="text-primary-fixed font-black">48 Cases</p>
+<p class="text-[10px] text-outline-variant font-bold">650k cal</p>
+</div>
+</div>
+<!-- Cache Item -->
+<div class="bg-white/5 border border-white/10 p-4 rounded-xl flex justify-between items-center group hover:bg-white/10 transition-colors">
+<div>
+<p class="text-white font-bold">Water Purification</p>
+<p class="text-xs text-outline-variant">Filter Replace: Oct 2024</p>
+</div>
+<div class="text-right">
+<p class="text-primary-fixed font-black">8 Units</p>
+<p class="text-[10px] text-outline-variant font-bold">1.2M Ltr</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only via JSON instructions) -->
+<nav class="md:hidden fixed bottom-0 w-full rounded-t-[3rem] z-50 bg-[#f9f9fb]/80 dark:bg-[#0c0e10]/80 backdrop-blur-lg border-t border-[#aeb2b6]/15 shadow-[0_-4px_24px_rgba(0,91,196,0.04)]">
+<div class="flex justify-around items-center w-full px-4 pb-6 pt-3">
+<button class="flex flex-col items-center justify-center text-[#005bc4] dark:text-[#4388fd] bg-[#eceef1] dark:bg-[#2e3336] rounded-[1.5rem] px-5 py-2 active:scale-90 duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[12px] font-semibold tracking-wide">Inventory</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[12px] font-semibold tracking-wide">Shopping</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="psychiatry">psychiatry</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[12px] font-semibold tracking-wide">Harvest</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5b6063] dark:text-[#aeb2b6] px-5 py-2 hover:text-[#005bc4] dark:hover:text-[#4388fd] transition-colors active:scale-90 duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="shelves">shelves</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[12px] font-semibold tracking-wide">Cache</span>
+</button>
+</div>
+</nav>
+<!-- FAB for Mission Control actions (Mobile only, Contextually displayed on Hub) -->
+<button class="md:hidden fixed bottom-28 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center active:scale-95 transition-transform z-40">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+</body></html>

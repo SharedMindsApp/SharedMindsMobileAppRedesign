@@ -1,0 +1,88 @@
+/**
+ * Widget Guide - Web View
+ * 
+ * Phase 9: Web widget guide using grid layout grouped by category.
+ */
+
+import { X, ArrowLeft } from 'lucide-react';
+import { WidgetGuideCard } from './WidgetGuideCard';
+import { getWidgetsByCategory } from './widgetGuideContent';
+
+interface WidgetGuideWebProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onBack?: () => void;
+}
+
+export function WidgetGuideWeb({
+  isOpen,
+  onClose,
+  onBack,
+}: WidgetGuideWebProps) {
+  const widgetsByCategory = getWidgetsByCategory();
+  const categories = Object.keys(widgetsByCategory);
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 z-50 transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div
+          className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+            <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="Back"
+                >
+                  <ArrowLeft size={20} className="text-gray-500" />
+                </button>
+              )}
+              <h2 className="text-2xl font-semibold text-gray-900">
+                Widgets in Spaces
+              </h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Close"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {/* Grid Layout by Category */}
+            <div className="space-y-8">
+              {categories.map(category => (
+                <div key={category}>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    {category}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {widgetsByCategory[category].map(widget => (
+                      <WidgetGuideCard key={widget.id} widget={widget} variant="web" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

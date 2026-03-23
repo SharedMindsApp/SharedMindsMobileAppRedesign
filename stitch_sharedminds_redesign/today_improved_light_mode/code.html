@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SharedMinds Today - Clarity Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#3B82F6",
+                        "primary-hover": "#2563EB",
+                        "background": "#FFFFFF",
+                        "surface": "#F8FAFC",
+                        "surface-container": "#FFFFFF",
+                        "on-surface": "#0F172A",
+                        "on-surface-variant": "#64748B",
+                        "outline": "#E2E8F0",
+                        "success": "#10B981",
+                        "success-container": "#F0FDF4",
+                        "on-success-container": "#166534"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope", "sans-serif"],
+                        "body": ["Plus Jakarta Sans", "sans-serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    boxShadow: {
+                        "soft": "0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                        "premium": "0 10px 25px -5px rgba(59, 130, 246, 0.1), 0 8px 10px -6px rgba(59, 130, 246, 0.1)"
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 22px;
+        }
+        body {
+            background-color: #FFFFFF;
+            color: #0F172A;
+        }
+        .tap-target {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #F1F5F9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="font-body selection:bg-primary/20 min-h-screen pb-32 bg-background">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 flex items-center justify-between px-6 h-16">
+<div class="flex items-center gap-4">
+<button class="tap-target flex items-center justify-center text-slate-600 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-headline font-extrabold text-xl text-slate-900 tracking-tight">SharedMinds</h1>
+</div>
+<div class="flex items-center gap-3">
+<span class="font-headline font-bold text-sm tracking-tight text-primary bg-primary/10 px-3 py-1 rounded-full">Today</span>
+<button class="w-9 h-9 rounded-full overflow-hidden border-2 border-slate-100 shadow-sm transition-transform active:scale-95">
+<img class="w-full h-full object-cover" data-alt="User profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiX0Zb25n0_X-rtrppnH0lPyuGlV0tZkT2ELsBu-ud2GxLVUkFt0_t9h6yzDX8mz_FSypG862-EVZZDgYN9TfBUIuxbtaaxONNl4b8USkPh0I-WawnykkBKlyN2e1_8Vch8RQzKHvk8T-BrVJYpquCiF2Ajfb7gSbCUbEat0FxCNHXpUdkrO8x9Pd3t1tJC2bHJbZbKlxR7C0ESJNpSuPMrFmh9j0yUQHDiogP2-fhpZlkg_d_6zsHSIwiYDGgy1xv3d0BgLSc8so"/>
+</button>
+</div>
+</header>
+<main class="pt-24 px-6 max-w-5xl mx-auto space-y-12">
+<!-- Header Section -->
+<section class="space-y-2">
+<p class="text-primary font-bold tracking-widest uppercase text-[10px]">Tuesday, Oct 24</p>
+<h2 class="font-headline text-3xl font-extrabold tracking-tight text-slate-900">Good morning, Mindful User.</h2>
+<p class="text-slate-500 text-lg font-medium">Your focus is your superpower today.</p>
+</section>
+<!-- Brain State Selector (Tactile Chips) -->
+<section class="space-y-5">
+<h3 class="font-headline text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-400">Current Brain State</h3>
+<div class="flex flex-wrap gap-3">
+<!-- State: Hyperfocus (Active) -->
+<button class="tap-target flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary text-white font-bold shadow-premium transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="text-sm">Hyperfocus</span>
+</button>
+<!-- State: Flow -->
+<button class="tap-target flex items-center gap-2 px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:border-primary/40 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-[20px] text-slate-400" data-icon="waves">waves</span>
+<span class="text-sm">Flow</span>
+</button>
+<!-- State: Calm -->
+<button class="tap-target flex items-center gap-2 px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:border-primary/40 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-[20px] text-slate-400" data-icon="cloud">cloud</span>
+<span class="text-sm">Calm</span>
+</button>
+<!-- State: Busy Mind -->
+<button class="tap-target flex items-center gap-2 px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:border-primary/40 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-[20px] text-slate-400" data-icon="bubble_chart">bubble_chart</span>
+<span class="text-sm">Busy Mind</span>
+</button>
+<!-- State: Overwhelmed -->
+<button class="tap-target flex items-center gap-2 px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold hover:border-red-200 hover:bg-red-50 transition-all">
+<span class="material-symbols-outlined text-[20px] text-red-400" data-icon="warning">warning</span>
+<span class="text-sm">Overwhelmed</span>
+</button>
+</div>
+</section>
+<!-- Main Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+<!-- Energy-Adaptive Task Stack -->
+<section class="md:col-span-7 space-y-6">
+<div class="flex items-center justify-between">
+<h3 class="font-headline text-2xl font-extrabold text-slate-900">Task Stack</h3>
+<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md uppercase tracking-wider">High Energy</span>
+</div>
+<div class="space-y-3">
+<!-- Task Item 1 -->
+<div class="group relative p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-soft hover:border-primary/30 transition-all cursor-pointer">
+<div class="flex items-start justify-between gap-4">
+<div class="flex gap-4">
+<div class="mt-1.5 w-6 h-6 rounded-md border-2 border-slate-200 flex items-center justify-center transition-colors group-hover:border-primary">
+<span class="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 text-[18px]" data-icon="check">check</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-bold text-[17px] text-slate-900 leading-tight">Deep Work: Project "Solaris" Architecture</h4>
+<div class="flex items-center gap-2 text-slate-400 text-xs font-medium">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span> 90 mins</span>
+<span>•</span>
+<span>High Cognitive Load</span>
+</div>
+</div>
+</div>
+<button class="tap-target text-slate-300 hover:text-slate-500">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Task Item 2 -->
+<div class="group relative p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-soft hover:border-primary/30 transition-all cursor-pointer">
+<div class="flex items-start justify-between gap-4">
+<div class="flex gap-4">
+<div class="mt-1.5 w-6 h-6 rounded-md border-2 border-slate-200 flex items-center justify-center transition-colors group-hover:border-primary">
+<span class="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 text-[18px]" data-icon="check">check</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-bold text-[17px] text-slate-900 leading-tight">Record Weekly Progress Loom</h4>
+<div class="flex items-center gap-2 text-slate-400 text-xs font-medium">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span> 15 mins</span>
+<span>•</span>
+<span>Social Battery Required</span>
+</div>
+</div>
+</div>
+<button class="tap-target text-slate-300 hover:text-slate-500">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Task Item 3 (Completed) -->
+<div class="group relative p-5 rounded-2xl bg-slate-50/50 border border-slate-100 opacity-60 transition-all">
+<div class="flex items-start justify-between gap-4">
+<div class="flex gap-4">
+<div class="mt-1.5 w-6 h-6 rounded-md bg-success text-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px] font-bold" data-icon="check">check</span>
+</div>
+<div class="space-y-1">
+<h4 class="font-bold text-[17px] text-slate-400 line-through">Review Morning Check-ins</h4>
+<p class="text-slate-400 text-xs font-medium">Done at 9:15 AM</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Momentum & Check-in Sidebar -->
+<aside class="md:col-span-5 space-y-6">
+<!-- Daily Check-in Glow Card -->
+<div class="p-8 rounded-3xl bg-primary shadow-premium space-y-5 relative overflow-hidden">
+<div class="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+<span class="material-symbols-outlined text-white text-4xl" data-icon="psychology">psychology</span>
+<div class="space-y-2">
+<h4 class="font-headline text-xl font-extrabold text-white leading-tight">How is your focus holding up?</h4>
+<p class="text-blue-100 text-sm font-medium">A quick pause helps prevent the afternoon slump.</p>
+</div>
+<button class="w-full h-12 rounded-xl bg-white text-primary font-bold text-sm tracking-wide shadow-md active:scale-95 transition-transform">
+                    TAKE A BREATH
+                </button>
+</div>
+<!-- Daily Wins (Soft Emerald) -->
+<div class="p-6 rounded-2xl bg-success-container border border-success/10 space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-success" data-icon="workspace_premium" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<h4 class="font-headline font-extrabold text-[11px] uppercase tracking-widest text-on-success-container">Daily Momentum</h4>
+</div>
+<ul class="space-y-3">
+<li class="flex items-center gap-3 text-sm text-on-success-container font-semibold">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+                        Morning Routine Locked
+                    </li>
+<li class="flex items-center gap-3 text-sm text-on-success-container font-semibold">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+                        Inbox Zero Achieved
+                    </li>
+</ul>
+</div>
+<!-- Parked Ideas (Minimal sticky note feel) -->
+<div class="p-6 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 space-y-4">
+<div class="flex items-center justify-between">
+<h4 class="font-headline font-extrabold text-[11px] uppercase tracking-widest text-slate-400">Parking Lot</h4>
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="add_circle">add_circle</span>
+</button>
+</div>
+<p class="text-slate-400 text-[11px] font-medium italic">Capture distractions here to review later tonight.</p>
+<div class="bg-white border border-slate-100 p-3.5 rounded-xl text-xs text-slate-600 shadow-sm font-medium">
+                    "Look up new ergonomic mechanical keyboards"
+                </div>
+</div>
+</aside>
+</div>
+</main>
+<!-- Navigation Drawer (Desktop Sidebar) -->
+<nav class="hidden md:flex fixed left-0 top-0 h-full flex-col w-20 bg-white border-r border-slate-100 items-center py-20 gap-8 z-40">
+<button class="w-12 h-12 flex items-center justify-center bg-primary/10 text-primary rounded-2xl mx-2 transition-all">
+<span class="material-symbols-outlined" data-icon="today">today</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-50 rounded-2xl mx-2 transition-all">
+<span class="material-symbols-outlined" data-icon="task_alt">task_alt</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-50 rounded-2xl mx-2 transition-all">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-50 rounded-2xl mx-2 transition-all">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+</button>
+<button class="mt-auto mb-10 w-12 h-12 flex items-center justify-center text-slate-400 hover:bg-slate-50 rounded-2xl mx-2 transition-all">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</nav>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 w-full bg-white/90 backdrop-blur-xl border-t border-slate-100 flex justify-around items-center h-20 px-4 pb-safe z-50">
+<a class="flex flex-col items-center justify-center text-primary w-14 h-14 rounded-2xl bg-primary/5" href="#">
+<span class="material-symbols-outlined" data-icon="today">today</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 w-14 h-14" href="#">
+<span class="material-symbols-outlined" data-icon="task_alt">task_alt</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 w-14 h-14" href="#">
+<span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 w-14 h-14" href="#">
+<span class="material-symbols-outlined" data-icon="tactic">tactic</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 w-14 h-14" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+</a>
+</nav>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-6 md:bottom-10 md:right-10 w-14 h-14 rounded-2xl bg-primary text-white shadow-premium flex items-center justify-center active:scale-90 transition-all z-40">
+<span class="material-symbols-outlined text-2xl" data-icon="add">add</span>
+</button>
+</body></html>
