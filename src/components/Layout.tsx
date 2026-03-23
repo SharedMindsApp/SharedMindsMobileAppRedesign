@@ -227,7 +227,7 @@ export function Layout({ children }: LayoutProps) {
       !location.pathname.endsWith('/shared'));
 
   return (
-    <div className="min-h-screen-safe bg-surface" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", overflowY: 'visible' }}>
+    <div className="core-app-shell min-h-screen-safe bg-surface" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", overflowY: 'visible' }}>
       {!isSpacesPage && (
         <nav className={`overflow-x-hidden overflow-y-visible fixed top-0 inset-x-0 z-50 backdrop-blur-xl ${config.appTheme === 'dark'
           ? 'bg-gray-900/92 border-b border-gray-700/40'
@@ -562,8 +562,8 @@ export function Layout({ children }: LayoutProps) {
       <main
         className={
           location.pathname.startsWith('/planner')
-            ? 'w-full min-h-screen-safe'
-            : 'w-full max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-24 md:pb-8'
+            ? 'core-main core-main--native w-full min-h-screen-safe'
+            : 'core-main core-main--native w-full max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-24 md:pb-8'
         }
       >
         {children}

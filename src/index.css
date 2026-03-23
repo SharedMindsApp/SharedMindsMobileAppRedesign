@@ -42,6 +42,17 @@ body {
   overscroll-behavior-y: contain;
 }
 
+.standalone-mode,
+.standalone-mode body,
+.standalone-mode #root {
+  height: 100dvh;
+}
+
+.standalone-mode body,
+.standalone-mode #root {
+  overflow: hidden;
+}
+
 /* Prevent any child from creating horizontal overflow */
 #root {
   overflow-x: hidden;
@@ -58,6 +69,12 @@ body {
 
 .standalone-mode .core-mobile-tabs {
   padding-bottom: calc(4px + env(safe-area-inset-bottom));
+}
+
+.standalone-mode .core-app-shell {
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 /* Custom Utilities */
@@ -1078,6 +1095,14 @@ body {
     -webkit-overflow-scrolling: touch;
     overflow-x: hidden;
     word-break: break-word;
+  }
+
+  .standalone-mode .core-main--native {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+    touch-action: pan-y;
   }
 
   @media (min-width: 768px) {
