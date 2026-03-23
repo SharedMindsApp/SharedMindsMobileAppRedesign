@@ -18,6 +18,20 @@ export interface Profile {
     updated_at: string;
 }
 
+function extractDisplayNameFromUser(email: string, metadata: Record<string, any> | undefined): string {
+    const rawName =
+        metadata?.display_name ||
+        metadata?.full_name ||
+        metadata?.name ||
+        [metadata?.given_name, metadata?.family_name].filter(Boolean).join(' ').trim();
+
+    if (rawName && typeof rawName === 'string' && rawName.trim().length > 0) {
+        return rawName.trim();
+    }
+
+    return email.split('@')[0] || 'Explorer';
+}
+
 interface AuthContextType {
     user: User | null;
     profile: Profile | null;
@@ -67,9 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Build a minimal in-memory profile so the app can still render
                 const { data: sessionData } = await supabase.auth.getSession();
                 const email = sessionData.session?.user?.email || '';
+                const displayName = extractDisplayNameFromUser(email, sessionData.session?.user?.user_metadata);
                 const fallbackProfile: Profile = {
                     id: userId,
-                    display_name: email.split('@')[0] || 'Explorer',
+                    display_name: displayName,
                     avatar_url: null,
                     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                     locale: null,
@@ -93,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const { data: sessionData } = await supabase.auth.getSession();
                 const sessionUser = sessionData.session?.user;
                 const userEmail = sessionUser?.email || '';
-                const baseName = userEmail.split('@')[0] || 'Explorer';
+                const baseName = extractDisplayNameFromUser(userEmail, sessionUser?.user_metadata);
 
                 const { data: newProfile, error: insertError } = await supabase
                     .from('profiles')

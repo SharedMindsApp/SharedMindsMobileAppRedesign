@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { Sparkles } from 'lucide-react';
 
 export function AuthPage() {
+    const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -18,9 +19,22 @@ export function AuthPage() {
 
         try {
             if (isSignUp) {
+                const normalizedName = fullName.trim();
+                if (!normalizedName) {
+                    throw new Error('Please enter your name to create an account.');
+                }
+
                 const { error: signUpError } = await supabase.auth.signUp({
                     email,
                     password,
+                    options: {
+                        emailRedirectTo: `${window.location.origin}/auth/login`,
+                        data: {
+                            full_name: normalizedName,
+                            display_name: normalizedName,
+                            name: normalizedName,
+                        },
+                    },
                 });
 
                 if (signUpError) throw signUpError;
@@ -65,6 +79,24 @@ export function AuthPage() {
                     {isSuccess && isSignUp && (
                         <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
                             Account created. Please check your email to verify your account, or log in if auto-confirm is enabled in the database.
+                        </div>
+                    )}
+
+                    {isSignUp && (
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="fullName">
+                                Your name
+                            </label>
+                            <input
+                                id="fullName"
+                                type="text"
+                                required={isSignUp}
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                placeholder="e.g. Matthew Jones"
+                                autoComplete="name"
+                            />
                         </div>
                     )}
 
@@ -114,6 +146,9 @@ export function AuthPage() {
                             setIsSignUp(!isSignUp);
                             setError(null);
                             setIsSuccess(false);
+                            if (isSignUp) {
+                                setFullName('');
+                            }
                         }}
                         className="text-slate-600 hover:text-slate-900 hover:underline"
                     >

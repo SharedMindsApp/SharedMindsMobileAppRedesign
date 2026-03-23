@@ -335,6 +335,27 @@ export function Layout({ children }: LayoutProps) {
                                 </button>
                               );
                             })}
+
+                            <div
+                              className={`my-2 border-t ${config.appTheme === 'dark' || config.appTheme === 'neon-dark'
+                                ? 'border-gray-700'
+                                : 'border-gray-200'
+                                }`}
+                            />
+
+                            <button
+                              onClick={() => {
+                                setShowMoreMenu(false);
+                                handleLogout();
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${config.appTheme === 'dark' || config.appTheme === 'neon-dark'
+                                ? 'text-red-400 hover:bg-red-900/20'
+                                : 'text-red-600 hover:bg-red-50'
+                                }`}
+                            >
+                              <LogOut size={16} />
+                              Log Out
+                            </button>
                           </div>
                         </>,
                         document.body

@@ -23,9 +23,18 @@ export type SignInInput = {
 };
 
 export async function signUp({ email, password, fullName }: SignUpInput) {
+  const normalizedName = fullName.trim();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/auth/login`,
+      data: {
+        full_name: normalizedName,
+        display_name: normalizedName,
+        name: normalizedName,
+      },
+    },
   });
 
   if (error) throw error;
@@ -35,7 +44,8 @@ export async function signUp({ email, password, fullName }: SignUpInput) {
     .from('profiles')
     .insert({
       id: data.user.id,
-      full_name: fullName,
+      full_name: normalizedName,
+      display_name: normalizedName,
     });
 
   if (profileError) throw profileError;

@@ -7,6 +7,66 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+async function sendInviteEmailWithResend(params: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}) {
+  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  const resendFromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
+  const resendFromName = Deno.env.get('RESEND_FROM_NAME') || 'SharedMinds';
+  const resendReplyTo = Deno.env.get('RESEND_REPLY_TO') || resendFromEmail;
+
+  if (!resendApiKey) {
+    return {
+      sent: false,
+      provider: 'none',
+      reason: 'missing_resend_api_key',
+    } as const;
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${resendApiKey}`,
+      'Idempotency-Key': crypto.randomUUID(),
+    },
+    body: JSON.stringify({
+      from: `${resendFromName} <${resendFromEmail}>`,
+      to: [params.to],
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+      reply_to: resendReplyTo,
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      `Resend send failed (${response.status}): ${payload?.message || payload?.error || 'Unknown error'}`
+    );
+  }
+
+  return {
+    sent: true,
+    provider: 'resend',
+    id: payload?.id ?? null,
+  } as const;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -176,30 +236,48 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const origin = req.headers.get('origin') || '';
+    const origin =
+      req.headers.get('origin') ||
+      Deno.env.get('APP_BASE_URL') ||
+      Deno.env.get('SITE_URL') ||
+      '';
     const inviteUrl = `${origin}/invite/accept?token=${inviteToken}&type=${space.context_type}`;
+    let emailDelivery: {
+      sent: boolean;
+      provider: string;
+      id?: string | null;
+      reason?: string;
+    } = {
+      sent: false,
+      provider: 'none',
+      reason: 'not_attempted',
+    };
 
     // Send email invitation
     try {
       // Get inviter's name
       const { data: inviterProfile } = await supabase
         .from('profiles')
-        .select('full_name, email')
+        .select('full_name, display_name, email')
         .eq('id', profile.id)
         .maybeSingle();
 
-      const inviterName = inviterProfile?.full_name || inviterProfile?.email || 'Someone';
+      const inviterName =
+        inviterProfile?.full_name ||
+        inviterProfile?.display_name ||
+        inviterProfile?.email ||
+        'Someone';
       const spaceName = space.name;
       const spaceType = space.context_type === 'household' ? 'household' : 'team';
+      const safeInviterName = escapeHtml(inviterName);
+      const safeSpaceName = escapeHtml(spaceName);
 
-      // Use Supabase's built-in email function if available, or log for manual sending
-      // For now, we'll use a simple email template that can be sent via Supabase email service
       const emailSubject = `You've been invited to join ${spaceName} on SharedMinds`;
       const emailBody = `
         <html>
           <body>
             <h2>You've been invited!</h2>
-            <p>${inviterName} has invited you to join the ${spaceType} "${spaceName}" on SharedMinds.</p>
+            <p>${safeInviterName} has invited you to join the ${spaceType} "${safeSpaceName}" on SharedMinds.</p>
             <p>Click the link below to accept the invitation:</p>
             <p><a href="${inviteUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Accept Invitation</a></p>
             <p>Or copy and paste this link into your browser:</p>
@@ -208,32 +286,20 @@ Deno.serve(async (req: Request) => {
           </body>
         </html>
       `;
+      const emailText = `${inviterName} has invited you to join the ${spaceType} "${spaceName}" on SharedMinds.\n\nAccept the invitation:\n${inviteUrl}\n\nIf you didn't expect this invitation, you can safely ignore this email.`;
 
-      // Send email using Supabase's built-in email functionality
-      // Supabase provides email sending via their email service
-      // We'll use the Supabase client's email capabilities
-      try {
-        // Use Supabase's email sending (requires email service to be configured in Supabase dashboard)
-        // For now, we'll create a database trigger or use a separate email service
-        // The invite token and URL are created, email can be sent via:
-        // 1. Supabase Email service (if configured)
-        // 2. Database trigger that sends email
-        // 3. External email service integration
-        
-        // Log the invite for now - email sending can be added via database trigger or external service
+      emailDelivery = await sendInviteEmailWithResend({
+        to: email.toLowerCase(),
+        subject: emailSubject,
+        html: emailBody,
+        text: emailText,
+      });
+
+      if (!emailDelivery.sent) {
         console.log(`Invite created for ${email} to join ${spaceName}: ${inviteUrl}`);
-        
-        // TODO: Integrate with email service (Resend, SendGrid, etc.) or Supabase email
-        // For production, you would:
-        // 1. Set up Resend/SendGrid API key in Supabase secrets
-        // 2. Create an email sending function
-        // 3. Call it here or via database trigger
-      } catch (emailErr) {
-        console.warn('Error preparing email:', emailErr);
-        // Continue anyway - invite URL is still created
       }
     } catch (emailErr) {
-      console.warn('Error preparing email:', emailErr);
+      console.warn('Error sending invite email:', emailErr);
       // Continue anyway - invite URL is still created
     }
 
@@ -241,6 +307,9 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         inviteUrl,
+        emailSent: emailDelivery.sent,
+        emailProvider: emailDelivery.provider,
+        emailReason: emailDelivery.reason || null,
         message: `Invite sent to ${email}`,
       }),
       {
