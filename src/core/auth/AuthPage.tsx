@@ -1,21 +1,24 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Sparkles } from 'lucide-react';
+import { resendSignupConfirmation } from '../../lib/auth';
+import { Eye, EyeOff } from 'lucide-react';
 
 export function AuthPage() {
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isResending, setIsResending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSignUp, setIsSignUp] = useState(false);
-    const [isSuccess, setIsSuccess] = useState(false);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         setError(null);
-        setIsSuccess(false);
+        setSuccessMessage(null);
 
         try {
             if (isSignUp) {
@@ -24,8 +27,9 @@ export function AuthPage() {
                     throw new Error('Please enter your name to create an account.');
                 }
 
-                const { error: signUpError } = await supabase.auth.signUp({
-                    email,
+                const normalizedEmail = email.trim().toLowerCase();
+                const { data, error: signUpError } = await supabase.auth.signUp({
+                    email: normalizedEmail,
                     password,
                     options: {
                         emailRedirectTo: `${window.location.origin}/auth/login`,
@@ -38,19 +42,44 @@ export function AuthPage() {
                 });
 
                 if (signUpError) throw signUpError;
-                setIsSuccess(true);
+                setSuccessMessage(
+                    data.session
+                        ? 'Account created. You are now signed in.'
+                        : `Account created. We sent a confirmation email to ${normalizedEmail}.`
+                );
             } else {
                 const { error: signInError } = await supabase.auth.signInWithPassword({
-                    email,
+                    email: email.trim().toLowerCase(),
                     password,
                 });
 
                 if (signInError) throw signInError;
             }
         } catch (err: any) {
-            setError(err.message || 'An error occurred during authentication.');
+            const message = err?.message || 'An error occurred during authentication.';
+
+            if (typeof message === 'string' && message.toLowerCase().includes('email not confirmed')) {
+                setError('Your email address has not been confirmed yet. Use the resend link below to get another confirmation email.');
+            } else {
+                setError(message);
+            }
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleResendConfirmation = async () => {
+        setError(null);
+        setSuccessMessage(null);
+
+        try {
+            setIsResending(true);
+            await resendSignupConfirmation(email);
+            setSuccessMessage(`Confirmation email sent to ${email.trim().toLowerCase()}.`);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to resend confirmation email.');
+        } finally {
+            setIsResending(false);
         }
     };
 
@@ -76,9 +105,9 @@ export function AuthPage() {
                         </div>
                     )}
 
-                    {isSuccess && isSignUp && (
+                    {successMessage && (
                         <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
-                            Account created. Please check your email to verify your account, or log in if auto-confirm is enabled in the database.
+                            {successMessage}
                         </div>
                     )}
 
@@ -119,15 +148,25 @@ export function AuthPage() {
                         <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="password">
                             Password
                         </label>
-                        <input
-                            id="password"
-                            type="password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-                            placeholder="••••••••"
-                        />
+                        <div className="relative">
+                            <input
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 px-4 py-2 pr-12 text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                                placeholder="••••••••"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword((current) => !current)}
+                                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-500 transition-colors hover:text-slate-800"
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
                     </div>
 
                     <button
@@ -137,6 +176,17 @@ export function AuthPage() {
                     >
                         {isLoading ? 'Please wait...' : isSignUp ? 'Sign up' : 'Sign in'}
                     </button>
+
+                    {!isSignUp && (
+                        <button
+                            type="button"
+                            onClick={handleResendConfirmation}
+                            disabled={isResending || !email.trim()}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:text-slate-400 disabled:hover:bg-transparent"
+                        >
+                            {isResending ? 'Sending confirmation email...' : 'Resend confirmation email'}
+                        </button>
+                    )}
                 </form>
 
                 <div className="mt-6 text-center text-sm">
@@ -145,7 +195,7 @@ export function AuthPage() {
                         onClick={() => {
                             setIsSignUp(!isSignUp);
                             setError(null);
-                            setIsSuccess(false);
+                            setSuccessMessage(null);
                             if (isSignUp) {
                                 setFullName('');
                             }

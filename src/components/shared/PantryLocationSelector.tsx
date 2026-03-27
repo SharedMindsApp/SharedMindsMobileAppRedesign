@@ -13,6 +13,25 @@ import { PantryLocation, createPantryLocation } from '../../lib/pantryLocations'
 import { showToast } from '../Toast';
 import { BottomSheet } from './BottomSheet';
 
+const CONTAINER_COUNT_UNITS = new Set([
+  'item', 'items',
+  'can', 'cans',
+  'tin', 'tins',
+  'jar', 'jars',
+  'bottle', 'bottles',
+  'carton', 'cartons',
+  'pack', 'packs',
+  'bag', 'bags',
+  'box', 'boxes',
+  'pouch', 'pouches',
+  'sachet', 'sachets',
+  'tube', 'tubes',
+  'loaf', 'loaves',
+  'piece', 'pieces',
+  'roll', 'rolls',
+  'bunch', 'bunches',
+]);
+
 const UNIT_OPTIONS = [
   { value: 'item', label: 'Item' },
   { value: 'can', label: 'Can' },
@@ -38,6 +57,13 @@ const UNIT_OPTIONS = [
   { value: 'L', label: 'Litres (L)' },
 ];
 
+const WEIGHT_UNIT_OPTIONS = [
+  { value: 'g', label: 'Grams (g)' },
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'oz', label: 'Ounces (oz)' },
+  { value: 'lb', label: 'Pounds (lb)' },
+];
+
 interface PantryLocationSelectorProps {
   isOpen: boolean;
   onClose: () => void;
@@ -53,6 +79,8 @@ interface PantryLocationSelectorProps {
   submitLabel?: string;
   quantityValue?: string;
   quantityUnit?: string;
+  weightValue?: string;
+  weightUnit?: string;
   estimatedCost?: string;
   expiresOn?: string;
   itemType?: PantryItemType | null;
@@ -62,6 +90,8 @@ interface PantryLocationSelectorProps {
   onNotesChange?: (value: string) => void;
   onQuantityValueChange?: (value: string) => void;
   onQuantityUnitChange?: (value: string) => void;
+  onWeightValueChange?: (value: string) => void;
+  onWeightUnitChange?: (value: string) => void;
   onEstimatedCostChange?: (value: string) => void;
   onExpiresOnChange?: (value: string) => void;
   onItemTypeChange?: (value: PantryItemType | null) => void;
@@ -89,6 +119,8 @@ export function PantryLocationSelector({
   submitLabel = 'Add to pantry',
   quantityValue = '',
   quantityUnit = '',
+  weightValue = '',
+  weightUnit = 'g',
   estimatedCost = '',
   expiresOn = '',
   itemType = null,
@@ -98,6 +130,8 @@ export function PantryLocationSelector({
   onNotesChange,
   onQuantityValueChange,
   onQuantityUnitChange,
+  onWeightValueChange,
+  onWeightUnitChange,
   onEstimatedCostChange,
   onExpiresOnChange,
   onItemTypeChange,
@@ -111,6 +145,7 @@ export function PantryLocationSelector({
 }: PantryLocationSelectorProps) {
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [showUnitPicker, setShowUnitPicker] = useState(false);
+  const [showWeightUnitPicker, setShowWeightUnitPicker] = useState(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(lastUsedLocationId ?? null);
   const [newLocationName, setNewLocationName] = useState('');
@@ -131,6 +166,7 @@ export function PantryLocationSelector({
 
     setShowAddLocation(false);
     setShowUnitPicker(false);
+    setShowWeightUnitPicker(false);
     setSelectedLocationId(initialLocationId ?? lastUsedLocationId ?? null);
     setNewLocationName('');
     setNewLocationIcon('');
@@ -138,7 +174,11 @@ export function PantryLocationSelector({
 
   const selectedUnitLabel =
     UNIT_OPTIONS.find((unit) => unit.value === quantityUnit)?.label || 'Select unit';
+  const selectedWeightUnitLabel =
+    WEIGHT_UNIT_OPTIONS.find((unit) => unit.value === weightUnit)?.label || 'Select weight unit';
   const displayItemName = itemName.trim() || foodItem?.name || 'Selected item';
+  const showWeightFields =
+    CONTAINER_COUNT_UNITS.has(quantityUnit.trim().toLowerCase()) || weightValue.trim().length > 0;
 
   const handleCreateLocation = async () => {
     if (!newLocationName.trim()) {
@@ -319,6 +359,52 @@ export function PantryLocationSelector({
                 </button>
               ))}
             </div>
+
+            {showWeightFields && (
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Pack weight</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={weightValue}
+                    onChange={(e) => onWeightValueChange?.(e.target.value)}
+                    placeholder="e.g., 400, 2.5"
+                    className="w-full px-3 py-2.5 border border-stone-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Weight unit</label>
+                  {isMobile ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowWeightUnitPicker(true)}
+                      className="flex w-full items-center justify-between rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-left text-sm text-stone-900 min-h-[44px]"
+                    >
+                      <span>{selectedWeightUnitLabel}</span>
+                      <ChevronDown size={18} className="text-stone-500" />
+                    </button>
+                  ) : (
+                    <select
+                      value={weightUnit}
+                      onChange={(e) => onWeightUnitChange?.(e.target.value)}
+                      className="w-full appearance-none px-3 py-2.5 border border-stone-300 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                    >
+                      {WEIGHT_UNIT_OPTIONS.map((unit) => (
+                        <option key={unit.value} value={unit.value}>
+                          {unit.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-500">
+                    Useful for packs like `1 bag` at `2.5kg` or `1 box` at `500g`.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="mt-4">
               <label className="block text-xs text-gray-600 mb-1">{estimatedCostLabel}</label>
@@ -544,6 +630,35 @@ export function PantryLocationSelector({
             >
               <div className="font-medium">{unit.label}</div>
               <div className={`mt-1 text-xs ${quantityUnit === unit.value ? 'text-stone-200' : 'text-stone-500'}`}>
+                {unit.value}
+              </div>
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={showWeightUnitPicker}
+        onClose={() => setShowWeightUnitPicker(false)}
+        title="Select weight unit"
+      >
+        <div className="space-y-2">
+          {WEIGHT_UNIT_OPTIONS.map((unit) => (
+            <button
+              key={unit.value}
+              type="button"
+              onClick={() => {
+                onWeightUnitChange?.(unit.value);
+                setShowWeightUnitPicker(false);
+              }}
+              className={`w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
+                weightUnit === unit.value
+                  ? 'border-stone-900 bg-stone-900 text-white'
+                  : 'border-stone-200 bg-white text-stone-900 hover:bg-stone-50'
+              }`}
+            >
+              <div className="font-medium">{unit.label}</div>
+              <div className={`mt-1 text-xs ${weightUnit === unit.value ? 'text-stone-200' : 'text-stone-500'}`}>
                 {unit.value}
               </div>
             </button>

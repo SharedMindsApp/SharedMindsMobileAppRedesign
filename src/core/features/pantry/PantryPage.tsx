@@ -24,6 +24,7 @@ export function PantryPage() {
   const navigate = useNavigate();
 
   const activeSpace = spaces.find((space) => space.id === activeSpaceId) || spaces[0] || null;
+  const contentWrapperClass = 'relative z-0 space-y-5 pt-1 sm:space-y-7 sm:pt-0 animate-in fade-in duration-300';
   const activeTab = useMemo<'inventory' | 'shopping' | 'analytics' | 'budget' | 'scan'>(() => {
     if (location.pathname.startsWith('/pantry/shopping')) return 'shopping';
     if (location.pathname.startsWith('/pantry/analytics')) return 'analytics';
@@ -47,7 +48,7 @@ export function PantryPage() {
       className="space-y-5 sm:space-y-7 overscroll-contain"
       style={{ touchAction: 'pan-y pinch-zoom' }}
     >
-      <div className="sticky top-0 z-30 -mx-3 border-b border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))] px-3 pb-3 pt-1 backdrop-blur-md sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0">
+      <div className="sticky top-0 z-40 -mx-3 border-b border-slate-200/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))] px-3 pb-3 pt-1 backdrop-blur-md sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0">
         <div className="rounded-[1.6rem] border border-slate-200/70 bg-white/88 p-2 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.32)] backdrop-blur-md">
           <div className="hidden sm:flex flex-wrap items-center gap-1">
             {PANTRY_TABS.map((tab) => {
@@ -103,7 +104,7 @@ export function PantryPage() {
       </div>
 
       {activeTab === 'shopping' ? (
-        <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-300">
+        <div className={contentWrapperClass}>
           <div className="rounded-[28px] border border-teal-200/70 bg-[linear-gradient(135deg,rgba(236,253,245,0.96),rgba(240,249,255,0.94))] px-5 py-5 sm:px-6 shadow-[0_20px_60px_-35px_rgba(13,148,136,0.45)]">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
@@ -127,28 +128,28 @@ export function PantryPage() {
           />
         </div>
       ) : activeTab === 'analytics' ? (
-        <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-300">
+        <div className={contentWrapperClass}>
           <PantryAnalyticsPanel
             spaceId={activeSpace.id}
             spaceName={activeSpace.name}
           />
         </div>
       ) : activeTab === 'budget' ? (
-        <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-300">
+        <div className={contentWrapperClass}>
           <PantryBudgetPanel
             spaceId={activeSpace.id}
             spaceName={activeSpace.name}
           />
         </div>
       ) : activeTab === 'scan' ? (
-        <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-300">
+        <div className={contentWrapperClass}>
           <PantryScanPage
             spaceId={activeSpace.id}
             spaceName={activeSpace.name}
           />
         </div>
       ) : (
-        <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-300">
+        <div className={contentWrapperClass}>
           <PantryWidget householdId={activeSpace.id} viewMode="large" key={`widget-${activeSpace.id}`} />
         </div>
       )}

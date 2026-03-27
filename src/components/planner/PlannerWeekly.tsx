@@ -1220,22 +1220,6 @@ export function PlannerWeekly() {
           />
         )}
 
-        {/* Mobile: Quick Add BottomSheet */}
-        {isMobile && quickAddSlot && user && (
-          <QuickAddBottomSheet
-            isOpen={!!quickAddSlot}
-            onClose={() => {
-              setQuickAddSlot(null);
-              setQuickAddTitle('');
-            }}
-            onEventCreated={loadWeeklyData}
-            userId={user.id}
-            date={quickAddSlot.date}
-            hour={quickAddSlot.hour}
-            minute={quickAddSlot.minute}
-          />
-        )}
-
         {/* Reflections Panel - Bottom */}
         {user && (
           <ReflectionsPanel 
@@ -1374,4 +1358,3 @@ function EventBlock({
     </div>
   );
 }
-

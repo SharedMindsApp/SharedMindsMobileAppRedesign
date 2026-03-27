@@ -1167,20 +1167,6 @@ export function PlannerMonthly() {
           />
         )}
 
-        {/* Mobile: Quick Add BottomSheet */}
-        {quickAddDate && user && isMobile && (
-          <QuickAddBottomSheet
-            isOpen={!!quickAddDate}
-            onClose={() => {
-              setQuickAddDate(null);
-              setQuickAddTitle('');
-            }}
-            onEventCreated={loadMonthlyData}
-            userId={user.id}
-            date={quickAddDate}
-          />
-        )}
-
         {/* Event Detail Modal */}
         {selectedEvent && user && (
           <EventDetailModal

@@ -12,6 +12,7 @@ export interface GroceryTemplate {
   keywords: string[];
   purchase_frequency_days: number | null;
   estimated_price: number | null;
+  estimated_weight_grams?: number | null;
   item_type: PantryItemType | null;
   notes: string | null;
   is_weekly: boolean;
@@ -37,6 +38,7 @@ export interface GroceryItem {
   recurrence_days: number | null;
   last_purchased_date: string | null;
   estimated_price: number | null;
+  estimated_weight_grams?: number | null;
   expires_on: string | null;
   location_id: string | null;
   item_type: PantryItemType | null;
@@ -326,6 +328,7 @@ export async function upsertWeeklyGroceryTemplate(params: {
   quantity?: string | null;
   unit?: string | null;
   estimatedPrice?: number | null;
+  estimatedWeightGrams?: number | null;
   itemType?: PantryItemType | null;
   notes?: string | null;
   keywords?: string[];
@@ -367,6 +370,7 @@ export async function upsertWeeklyGroceryTemplate(params: {
     keywords: [normalizedName, ...(params.keywords || [])].filter(Boolean),
     purchase_frequency_days: 7,
     estimated_price: params.estimatedPrice ?? null,
+    estimated_weight_grams: params.estimatedWeightGrams ?? null,
     item_type: params.itemType ?? null,
     notes: params.notes ?? null,
     is_weekly: true,
@@ -464,6 +468,7 @@ export async function populateWeeklyTemplatesToGroceryList(params: {
       unit: quantityParts.unit || undefined,
       category: template.category || resolvedFoodItem.category || undefined,
       estimatedPrice: template.estimated_price ?? undefined,
+      estimatedWeightGrams: template.estimated_weight_grams ?? undefined,
       itemType: template.item_type ?? null,
       notes: template.notes ?? undefined,
       isRecurring: true,
@@ -505,6 +510,7 @@ export async function addGroceryItem(params: {
   isRecurring?: boolean;
   recurrenceDays?: number;
   estimatedPrice?: number;
+  estimatedWeightGrams?: number | null;
   expiresOn?: string;
   locationId?: string | null;
   itemType?: PantryItemType | null;
@@ -558,6 +564,7 @@ export async function addGroceryItem(params: {
       is_recurring: params.isRecurring || false,
       recurrence_days: params.recurrenceDays || null,
       estimated_price: params.estimatedPrice || null,
+      estimated_weight_grams: params.estimatedWeightGrams ?? null,
       expires_on: params.expiresOn || null,
       location_id: params.locationId || null,
       item_type: params.itemType || null,
@@ -1028,6 +1035,7 @@ export async function moveToPantry(groceryItem: GroceryItem, householdId: string
     itemType: groceryItem.item_type || undefined,
     notes: groceryItem.notes || undefined,
     pantryCost: groceryItem.estimated_price ?? undefined,
+    estimatedWeightGrams: groceryItem.estimated_weight_grams ?? undefined,
     totalPortions: groceryItem.total_portions ?? undefined,
     portionUnit: groceryItem.portion_unit || undefined,
     memberId,
@@ -1045,6 +1053,7 @@ export async function moveGroceryItemToPantry(params: {
   itemType?: PantryItemType | null;
   notes?: string;
   pantryCost?: number | null;
+  estimatedWeightGrams?: number | null;
   totalPortions?: number | null;
   portionUnit?: string | null;
   storeName?: string;
@@ -1062,6 +1071,7 @@ export async function moveGroceryItemToPantry(params: {
     p_item_type: params.itemType || null,
     p_notes: params.notes || null,
     p_pantry_cost: params.pantryCost ?? null,
+    p_estimated_weight_grams: params.estimatedWeightGrams ?? null,
     p_total_portions: params.totalPortions ?? null,
     p_portion_unit: params.portionUnit || null,
     p_store_name: params.storeName || null,
@@ -1099,6 +1109,7 @@ export async function moveToPantryLegacy(groceryItem: GroceryItem, householdId: 
     itemType: groceryItem.item_type || undefined,
     notes: groceryItem.notes || undefined,
     pantryCost: groceryItem.estimated_price ?? undefined,
+    estimatedWeightGrams: groceryItem.estimated_weight_grams ?? undefined,
     totalPortions: groceryItem.total_portions ?? undefined,
     portionUnit: groceryItem.portion_unit || undefined,
     memberId,
@@ -1121,6 +1132,7 @@ export async function addFromTemplate(
     foodItemId: foodItem.id,
     quantity: template.typical_quantity || undefined,
     category: template.category,
+    estimatedWeightGrams: template.estimated_weight_grams ?? undefined,
     source: 'template',
     memberId,
     memberName,

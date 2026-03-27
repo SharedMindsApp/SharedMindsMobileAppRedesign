@@ -24,8 +24,9 @@ export type SignInInput = {
 
 export async function signUp({ email, password, fullName }: SignUpInput) {
   const normalizedName = fullName.trim();
+  const normalizedEmail = email.trim().toLowerCase();
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: normalizedEmail,
     password,
     options: {
       emailRedirectTo: `${window.location.origin}/auth/login`,
@@ -51,6 +52,24 @@ export async function signUp({ email, password, fullName }: SignUpInput) {
   if (profileError) throw profileError;
 
   return data;
+}
+
+export async function resendSignupConfirmation(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!normalizedEmail) {
+    throw new Error('Please enter your email address first.');
+  }
+
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: normalizedEmail,
+    options: {
+      emailRedirectTo: `${window.location.origin}/auth/login`,
+    },
+  });
+
+  if (error) throw error;
 }
 
 export async function signIn({ email, password }: SignInInput) {

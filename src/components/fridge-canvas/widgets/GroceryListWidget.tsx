@@ -96,6 +96,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const [pendingListCategory, setPendingListCategory] = useState('other');
   const [pendingListQuantity, setPendingListQuantity] = useState('');
   const [pendingListUnit, setPendingListUnit] = useState('');
+  const [pendingListWeightValue, setPendingListWeightValue] = useState('');
+  const [pendingListWeightUnit, setPendingListWeightUnit] = useState('g');
   const [pendingListLocationId, setPendingListLocationId] = useState<string | null>(null);
   const [pendingListEstimatedCost, setPendingListEstimatedCost] = useState('');
   const [pendingListExpiresOn, setPendingListExpiresOn] = useState('');
@@ -108,6 +110,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const [pendingGroceryItemId, setPendingGroceryItemId] = useState<string | null>(null);
   const [pendingQuantityValue, setPendingQuantityValue] = useState('');
   const [pendingQuantityUnit, setPendingQuantityUnit] = useState('');
+  const [pendingWeightValue, setPendingWeightValue] = useState('');
+  const [pendingWeightUnit, setPendingWeightUnit] = useState('g');
   const [pendingEstimatedCost, setPendingEstimatedCost] = useState('');
   const [pendingExpiresOn, setPendingExpiresOn] = useState('');
   const [pendingDefaultHint, setPendingDefaultHint] = useState<string | null>(null);
@@ -129,6 +133,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const [pendingWeeklyName, setPendingWeeklyName] = useState('');
   const [pendingWeeklyQuantity, setPendingWeeklyQuantity] = useState('');
   const [pendingWeeklyUnit, setPendingWeeklyUnit] = useState('');
+  const [pendingWeeklyWeightValue, setPendingWeeklyWeightValue] = useState('');
+  const [pendingWeeklyWeightUnit, setPendingWeeklyWeightUnit] = useState('g');
   const [pendingWeeklyEstimatedCost, setPendingWeeklyEstimatedCost] = useState('');
   const [pendingWeeklyItemType, setPendingWeeklyItemType] = useState<PantryItemType | null>(null);
   const [pendingWeeklyNotes, setPendingWeeklyNotes] = useState('');
@@ -283,6 +289,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingWeeklyName('');
     setPendingWeeklyQuantity('');
     setPendingWeeklyUnit('');
+    setPendingWeeklyWeightValue('');
+    setPendingWeeklyWeightUnit('g');
     setPendingWeeklyEstimatedCost('');
     setPendingWeeklyItemType(null);
     setPendingWeeklyNotes('');
@@ -297,6 +305,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingListCategory('other');
     setPendingListQuantity('');
     setPendingListUnit('');
+    setPendingListWeightValue('');
+    setPendingListWeightUnit('g');
     setPendingListLocationId(null);
     setPendingListEstimatedCost('');
     setPendingListExpiresOn('');
@@ -327,6 +337,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       setPendingListCategory(foodItem.category || 'other');
       setPendingListQuantity(defaults.quantityValue || '1');
       setPendingListUnit(defaults.quantityUnit || 'item');
+      setPendingListWeightValue(defaults.weightValue || '');
+      setPendingListWeightUnit(defaults.weightUnit || 'g');
       setPendingListLocationId(lastUsedLocationId);
       setPendingListEstimatedCost(
         defaultEstimatedCost !== null && defaultEstimatedCost !== undefined
@@ -351,6 +363,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     const foodItem = buildTransferFoodItem(item);
     const defaults = getPantryAddDefaults(foodItem);
     const quantityPrefill = getQuantityPrefill(item, defaults);
+    const weightPrefill = getWeightPrefill(item.estimated_weight_grams, defaults);
 
     setPendingListEditingId(item.id);
     setPendingListFoodItem(foodItem);
@@ -358,6 +371,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingListCategory(item.category || foodItem.category || 'other');
     setPendingListQuantity(quantityPrefill.quantityValue);
     setPendingListUnit(quantityPrefill.quantityUnit);
+    setPendingListWeightValue(weightPrefill.weightValue);
+    setPendingListWeightUnit(weightPrefill.weightUnit);
     setPendingListLocationId(item.location_id || lastUsedLocationId);
     setPendingListEstimatedCost(item.estimated_price != null ? String(item.estimated_price) : '');
     setPendingListExpiresOn(item.expires_on || '');
@@ -380,6 +395,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       const estimatedPrice = pendingListEstimatedCost.trim()
         ? Number.parseFloat(pendingListEstimatedCost.trim())
         : null;
+      const estimatedWeightGrams = parseEstimatedWeightGrams(pendingListWeightValue, pendingListWeightUnit);
       const totalPortions = pendingListTotalPortions.trim()
         ? Number.parseInt(pendingListTotalPortions.trim(), 10)
         : null;
@@ -396,6 +412,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           unit: pendingListUnit.trim() || null,
           category: pendingListCategory || null,
           estimated_price: estimatedPrice !== null && !Number.isNaN(estimatedPrice) ? estimatedPrice : null,
+          estimated_weight_grams: estimatedWeightGrams,
           expires_on: pendingListExpiresOn || null,
           location_id: locationId,
           item_type: pendingListItemType || null,
@@ -412,6 +429,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           unit: pendingListUnit.trim() || undefined,
           category: pendingListCategory || undefined,
           estimatedPrice: estimatedPrice !== null && !Number.isNaN(estimatedPrice) ? estimatedPrice : undefined,
+          estimatedWeightGrams,
           expiresOn: pendingListExpiresOn || undefined,
           locationId,
           itemType: pendingListItemType || undefined,
@@ -514,6 +532,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           quantity: item.quantity,
           unit: item.unit,
           estimatedPrice: item.estimated_price,
+          estimatedWeightGrams: item.estimated_weight_grams,
           itemType: inferPantryItemType(item),
           notes: item.notes,
         });
@@ -595,6 +614,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           quantity: item.quantity,
           unit: item.unit,
           estimatedPrice: item.estimated_price,
+          estimatedWeightGrams: item.estimated_weight_grams,
           itemType: inferPantryItemType(item),
           notes: item.notes,
         });
@@ -633,6 +653,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       setPendingWeeklyName(foodItem.name);
       setPendingWeeklyQuantity(defaults.quantityValue || '1');
       setPendingWeeklyUnit(defaults.quantityUnit || 'item');
+      setPendingWeeklyWeightValue(defaults.weightValue || '');
+      setPendingWeeklyWeightUnit(defaults.weightUnit || 'g');
       setPendingWeeklyEstimatedCost(
         defaultEstimatedCost !== null && defaultEstimatedCost !== undefined
           ? String(defaultEstimatedCost)
@@ -652,12 +674,15 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     try {
       const foodItem = await getOrCreateFoodItem(template.item_name, template.category || undefined);
       const defaults = getPantryAddDefaults(foodItem);
+      const weightPrefill = getWeightPrefill(template.estimated_weight_grams, defaults);
 
       setPendingWeeklyTemplateId(template.id);
       setPendingWeeklyFoodItem(foodItem);
       setPendingWeeklyName(template.item_name);
       setPendingWeeklyQuantity(template.quantity || defaults.quantityValue || '1');
       setPendingWeeklyUnit(template.unit || defaults.quantityUnit || 'item');
+      setPendingWeeklyWeightValue(weightPrefill.weightValue);
+      setPendingWeeklyWeightUnit(weightPrefill.weightUnit);
       setPendingWeeklyEstimatedCost(
         template.estimated_price !== null && template.estimated_price !== undefined
           ? String(template.estimated_price)
@@ -683,6 +708,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       const estimatedPrice = pendingWeeklyEstimatedCost.trim()
         ? Number.parseFloat(pendingWeeklyEstimatedCost.trim())
         : null;
+      const estimatedWeightGrams = parseEstimatedWeightGrams(pendingWeeklyWeightValue, pendingWeeklyWeightUnit);
       const foodItem = await getOrCreateFoodItem(
         pendingWeeklyName.trim(),
         pendingWeeklyFoodItem?.category || undefined
@@ -696,6 +722,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         quantity: pendingWeeklyQuantity.trim() || null,
         unit: pendingWeeklyUnit.trim() || null,
         estimatedPrice: estimatedPrice !== null && !Number.isNaN(estimatedPrice) ? estimatedPrice : null,
+        estimatedWeightGrams,
         itemType: pendingWeeklyItemType || null,
         notes: pendingWeeklyNotes.trim() || null,
       });
@@ -885,9 +912,52 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     };
   };
 
+  const getWeightPrefill = (
+    estimatedWeightGrams: number | null | undefined,
+    defaults: { weightValue: string; weightUnit: string }
+  ) => {
+    if (estimatedWeightGrams && estimatedWeightGrams > 0) {
+      if (estimatedWeightGrams >= 1000 && estimatedWeightGrams % 1000 === 0) {
+        return {
+          weightValue: String(estimatedWeightGrams / 1000),
+          weightUnit: 'kg',
+        };
+      }
+
+      return {
+        weightValue: String(estimatedWeightGrams),
+        weightUnit: 'g',
+      };
+    }
+
+    return {
+      weightValue: defaults.weightValue || '',
+      weightUnit: defaults.weightUnit || 'g',
+    };
+  };
+
+  const parseEstimatedWeightGrams = (weightValue: string, weightUnit: string) => {
+    const trimmedValue = weightValue.trim();
+    if (!trimmedValue) return null;
+
+    const numericValue = Number.parseFloat(trimmedValue);
+    if (Number.isNaN(numericValue) || numericValue <= 0) return null;
+
+    const factorByUnit: Record<string, number> = {
+      g: 1,
+      kg: 1000,
+      oz: 28.3495,
+      lb: 453.592,
+    };
+
+    return Math.round(numericValue * (factorByUnit[weightUnit] || 1));
+  };
+
   const resetTransferForm = () => {
     setPendingQuantityValue('');
     setPendingQuantityUnit('');
+    setPendingWeightValue('');
+    setPendingWeightUnit('g');
     setPendingEstimatedCost('');
     setPendingExpiresOn('');
     setPendingDefaultHint(null);
@@ -905,6 +975,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     const foodItem = buildTransferFoodItem(item);
     const defaults = getPantryAddDefaults(foodItem);
     const quantityPrefill = getQuantityPrefill(item, defaults);
+    const weightPrefill = getWeightPrefill(item.estimated_weight_grams, defaults);
 
     setTransferQueue(queue);
     setTransferTotalCount(totalCount);
@@ -912,6 +983,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingGroceryItemId(item.id);
     setPendingQuantityValue(quantityPrefill.quantityValue);
     setPendingQuantityUnit(quantityPrefill.quantityUnit);
+    setPendingWeightValue(weightPrefill.weightValue);
+    setPendingWeightUnit(weightPrefill.weightUnit);
     setPendingEstimatedCost(item.estimated_price != null ? String(item.estimated_price) : '');
     setPendingExpiresOn(item.expires_on || '');
     setPendingDefaultHint(defaults.hint);
@@ -959,6 +1032,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       const estimatedCost = pendingEstimatedCost.trim()
         ? Number.parseFloat(pendingEstimatedCost.trim())
         : null;
+      const estimatedWeightGrams = parseEstimatedWeightGrams(pendingWeightValue, pendingWeightUnit);
 
       const totalPortions = pendingTotalPortions.trim()
         ? Number.parseInt(pendingTotalPortions.trim(), 10)
@@ -975,6 +1049,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         itemType: pendingItemType || undefined,
         notes: sourceItem?.notes || undefined,
         pantryCost: estimatedCost !== null && !Number.isNaN(estimatedCost) ? estimatedCost : null,
+        estimatedWeightGrams,
         totalPortions: totalPortions && totalPortions > 0 ? totalPortions : null,
         portionUnit: pendingPortionUnit.trim() || null,
         storeName: checkoutStoreName.trim() || undefined,
@@ -1357,12 +1432,16 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         submitLabel={pendingListEditingId ? 'Save changes' : 'Add to list'}
         quantityValue={pendingListQuantity}
         quantityUnit={pendingListUnit}
+        weightValue={pendingListWeightValue}
+        weightUnit={pendingListWeightUnit}
         estimatedCost={pendingListEstimatedCost}
         expiresOn={pendingListExpiresOn}
         itemType={pendingListItemType}
         notes={pendingListNotes}
         onQuantityValueChange={setPendingListQuantity}
         onQuantityUnitChange={setPendingListUnit}
+        onWeightValueChange={setPendingListWeightValue}
+        onWeightUnitChange={setPendingListWeightUnit}
         onEstimatedCostChange={setPendingListEstimatedCost}
         onExpiresOnChange={setPendingListExpiresOn}
         onItemTypeChange={setPendingListItemType}
@@ -1560,11 +1639,15 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         smartDefaultHint={pendingDefaultHint}
         quantityValue={pendingQuantityValue}
         quantityUnit={pendingQuantityUnit}
+        weightValue={pendingWeightValue}
+        weightUnit={pendingWeightUnit}
         estimatedCost={pendingEstimatedCost}
         expiresOn={pendingExpiresOn}
         itemType={pendingItemType}
         onQuantityValueChange={setPendingQuantityValue}
         onQuantityUnitChange={setPendingQuantityUnit}
+        onWeightValueChange={setPendingWeightValue}
+        onWeightUnitChange={setPendingWeightUnit}
         onEstimatedCostChange={setPendingEstimatedCost}
         onExpiresOnChange={setPendingExpiresOn}
         onItemTypeChange={setPendingItemType}
@@ -1894,11 +1977,15 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         submitLabel={pendingWeeklyTemplateId ? 'Save weekly item' : 'Add to weekly list'}
         quantityValue={pendingWeeklyQuantity}
         quantityUnit={pendingWeeklyUnit}
+        weightValue={pendingWeeklyWeightValue}
+        weightUnit={pendingWeeklyWeightUnit}
         estimatedCost={pendingWeeklyEstimatedCost}
         itemType={pendingWeeklyItemType}
         notes={pendingWeeklyNotes}
         onQuantityValueChange={setPendingWeeklyQuantity}
         onQuantityUnitChange={setPendingWeeklyUnit}
+        onWeightValueChange={setPendingWeeklyWeightValue}
+        onWeightUnitChange={setPendingWeeklyWeightUnit}
         onEstimatedCostChange={setPendingWeeklyEstimatedCost}
         onItemTypeChange={setPendingWeeklyItemType}
         onNotesChange={setPendingWeeklyNotes}

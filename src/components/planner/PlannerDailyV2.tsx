@@ -1088,22 +1088,6 @@ export function PlannerDailyV2() {
           />
         )}
 
-        {/* Mobile: Quick Add BottomSheet */}
-        {isMobile && quickAddSlot && user && (
-          <QuickAddBottomSheet
-            isOpen={!!quickAddSlot}
-            onClose={() => {
-              setQuickAddSlot(null);
-              setQuickAddTitle('');
-            }}
-            onEventCreated={loadDailyData}
-            userId={user.id}
-            date={selectedDate}
-            hour={quickAddSlot.hour}
-            minute={quickAddSlot.minute}
-          />
-        )}
-
         {/* Reflections Panel - Bottom */}
         {user && (
           <ReflectionsPanel 
@@ -1241,4 +1225,3 @@ function EventBlock({
     </div>
   );
 }
-

@@ -149,8 +149,10 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   ];
   // Units that represent containers/counts (not a direct measurement) — these should allow a secondary weight
   const CONTAINER_COUNT_UNITS = new Set([
-    'tins', 'cans', 'jars', 'bottles', 'cartons', 'packs', 'bags', 'boxes', 'sachets', 'tubes',
-    'pieces', 'slices', 'servings', 'dozen', 'rolls', 'sheets', 'loaves', 'bunch', 'head', 'cloves',
+    'tin', 'tins', 'can', 'cans', 'jar', 'jars', 'bottle', 'bottles', 'carton', 'cartons',
+    'pack', 'packs', 'bag', 'bags', 'box', 'boxes', 'pouch', 'pouches', 'sachet', 'sachets',
+    'tube', 'tubes', 'item', 'items', 'piece', 'pieces', 'slice', 'slices', 'serving', 'servings',
+    'dozen', 'roll', 'rolls', 'sheet', 'sheets', 'loaf', 'loaves', 'bunch', 'head', 'clove', 'cloves',
   ]);
 
   const WEIGHT_UNITS = [
@@ -206,6 +208,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   // Pending item form state (for adding new items)
   const [pendingQuantityValue, setPendingQuantityValue] = useState('');
   const [pendingQuantityUnit, setPendingQuantityUnit] = useState('');
+  const [pendingWeightValue, setPendingWeightValue] = useState('');
+  const [pendingWeightUnit, setPendingWeightUnit] = useState('g');
   const [pendingExpiresOn, setPendingExpiresOn] = useState('');
   const [pendingTotalPortions, setPendingTotalPortions] = useState('');
   const [pendingPortionUnit, setPendingPortionUnit] = useState('');
@@ -431,6 +435,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     setPendingFoodItem(null);
     setPendingQuantityValue('');
     setPendingQuantityUnit('');
+    setPendingWeightValue('');
+    setPendingWeightUnit('g');
     setPendingExpiresOn('');
     setPendingTotalPortions('');
     setPendingPortionUnit('');
@@ -477,6 +483,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     setPendingFoodItem(foodItem);
     setPendingQuantityValue(defaults.quantityValue);
     setPendingQuantityUnit(defaults.quantityUnit);
+    setPendingWeightValue(defaults.weightValue);
+    setPendingWeightUnit(defaults.weightUnit);
     setPendingExpiresOn('');
     setPendingTotalPortions('');
     setPendingPortionUnit('');
@@ -562,6 +570,29 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     const incomingCost = pendingEstimatedCost.trim()
       ? Number.parseFloat(pendingEstimatedCost.trim())
       : null;
+    const incomingWeightValue = pendingWeightValue.trim();
+    const incomingWeightUnit = pendingWeightUnit.trim() || 'g';
+    let incomingEstimatedWeightGrams: number | null = null;
+    if (incomingWeightValue) {
+      const parsedWeight = Number.parseFloat(incomingWeightValue);
+      if (Number.isNaN(parsedWeight) || parsedWeight <= 0) {
+        throw new Error('Pack weight must be a valid number.');
+      }
+      const factor = WEIGHT_UNITS.find((unit) => unit.value === incomingWeightUnit)?.factor || 1;
+      incomingEstimatedWeightGrams = Math.round(parsedWeight * factor);
+    }
+
+    let mergedEstimatedWeightGrams = targetItem.estimated_weight_grams ?? null;
+    if (incomingEstimatedWeightGrams !== null) {
+      if (
+        targetItem.estimated_weight_grams !== null &&
+        targetItem.estimated_weight_grams !== undefined &&
+        targetItem.estimated_weight_grams !== incomingEstimatedWeightGrams
+      ) {
+        throw new Error('Merge only works when pack weights match. Add a new batch instead.');
+      }
+      mergedEstimatedWeightGrams = incomingEstimatedWeightGrams;
+    }
     const mergedEstimatedCost =
       incomingCost !== null && !Number.isNaN(incomingCost)
         ? (targetItem.estimated_cost ?? 0) + incomingCost
@@ -599,6 +630,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
       expires_on: soonestExpiry,
       expiration_date: soonestExpiry,
       estimated_cost: mergedEstimatedCost,
+      estimated_weight_grams: mergedEstimatedWeightGrams,
       item_type: targetItem.item_type || pendingItemType || null,
       status: 'have',
       total_portions: mergedTotalPortions,
@@ -627,6 +659,12 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
       const totalPortions = pendingTotalPortions.trim()
         ? parseInt(pendingTotalPortions.trim(), 10)
         : null;
+      let estimatedWeightGrams: number | null = null;
+      const pendingWeightNumber = Number.parseFloat(pendingWeightValue.trim());
+      if (!Number.isNaN(pendingWeightNumber) && pendingWeightNumber > 0) {
+        const factor = WEIGHT_UNITS.find((unit) => unit.value === pendingWeightUnit)?.factor || 1;
+        estimatedWeightGrams = Math.round(pendingWeightNumber * factor);
+      }
 
       if (pendingAddMode === 'merge') {
         await mergePendingPantryItem();
@@ -641,6 +679,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
           status: 'have',
           itemType: pendingItemType || undefined,
           estimatedCost: estimatedCost !== null && !Number.isNaN(estimatedCost) ? estimatedCost : null,
+          estimatedWeightGrams,
           totalPortions: totalPortions && totalPortions > 0 ? totalPortions : null,
           portionUnit: pendingPortionUnit.trim() || null,
         });
@@ -2111,10 +2150,14 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         }}
         quantityValue={pendingQuantityValue}
         quantityUnit={pendingQuantityUnit}
+        weightValue={pendingWeightValue}
+        weightUnit={pendingWeightUnit}
         estimatedCost={pendingEstimatedCost}
         expiresOn={pendingExpiresOn}
         onQuantityValueChange={setPendingQuantityValue}
         onQuantityUnitChange={setPendingQuantityUnit}
+        onWeightValueChange={setPendingWeightValue}
+        onWeightUnitChange={setPendingWeightUnit}
         onEstimatedCostChange={setPendingEstimatedCost}
         onExpiresOnChange={setPendingExpiresOn}
         itemType={pendingItemType}
