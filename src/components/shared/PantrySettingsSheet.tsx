@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, Download, FileSpreadsheet, MapPinned, Printer, RefreshCcw, UserPlus, Users, Wallet, X } from 'lucide-react';
+import { ChevronDown, Download, FileSpreadsheet, Loader2, MapPinned, Printer, RefreshCcw, Sparkles, UserPlus, Users, Wallet, X } from 'lucide-react';
 import { SharingService, type Profile, type SpaceMemberDetail } from '../../core/services/SharingService';
 import { showToast } from '../Toast';
 import { BottomSheet } from './BottomSheet';
@@ -18,6 +18,11 @@ type PantrySettingsSheetProps = {
   autoReplaceEnabled: boolean;
   autoReplaceLoading?: boolean;
   onAutoReplaceToggle: (enabled: boolean) => Promise<void> | void;
+  missingPriceCount: number;
+  pricingCity: string;
+  pricingCountry: string;
+  priceEstimateLoading?: boolean;
+  onEstimateMissingPrices: (params: { city: string; country: string }) => Promise<void> | void;
 };
 
 function formatCurrency(value: number) {
@@ -42,6 +47,11 @@ export function PantrySettingsSheet({
   autoReplaceEnabled,
   autoReplaceLoading = false,
   onAutoReplaceToggle,
+  missingPriceCount,
+  pricingCity,
+  pricingCountry,
+  priceEstimateLoading = false,
+  onEstimateMissingPrices,
 }: PantrySettingsSheetProps) {
   const [members, setMembers] = useState<SpaceMemberDetail[]>([]);
   const [memberLoading, setMemberLoading] = useState(false);
@@ -50,6 +60,8 @@ export function PantrySettingsSheet({
   const [selectedRole, setSelectedRole] = useState<'collaborator' | 'viewer'>('collaborator');
   const [memberActionId, setMemberActionId] = useState<string | null>(null);
   const [sharingExpanded, setSharingExpanded] = useState(false);
+  const [pricingCityInput, setPricingCityInput] = useState(pricingCity);
+  const [pricingCountryInput, setPricingCountryInput] = useState(pricingCountry);
 
   useEffect(() => {
     if (!isOpen) {
@@ -59,6 +71,9 @@ export function PantrySettingsSheet({
       setSharingExpanded(false);
       return;
     }
+
+    setPricingCityInput(pricingCity);
+    setPricingCountryInput(pricingCountry);
 
     const loadMembers = async () => {
       try {
@@ -189,6 +204,77 @@ export function PantrySettingsSheet({
         </div>
 
         <div className="space-y-3">
+          <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-stone-100 p-3 text-stone-700">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">AI pricing</p>
+                  <h3 className="mt-1 text-lg font-semibold text-stone-900">Estimate missing prices</h3>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    Send every Pantry item without a price to AI, using your town or city plus country so the estimates reflect local retail pricing.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600">
+                {missingPriceCount} missing
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
+                  Town or city
+                </label>
+                <input
+                  type="text"
+                  value={pricingCityInput}
+                  onChange={(event) => setPricingCityInput(event.target.value)}
+                  placeholder="e.g. London"
+                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
+                  Country
+                </label>
+                <input
+                  type="text"
+                  value={pricingCountryInput}
+                  onChange={(event) => setPricingCountryInput(event.target.value)}
+                  placeholder="e.g. United Kingdom"
+                  className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/70 px-3 py-3 text-sm text-stone-600">
+              The AI returns editable price suggestions only. Nothing is saved until you review and confirm each estimate.
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                void onEstimateMissingPrices({
+                  city: pricingCityInput,
+                  country: pricingCountryInput,
+                })
+              }
+              disabled={
+                priceEstimateLoading ||
+                missingPriceCount === 0 ||
+                pricingCityInput.trim().length === 0 ||
+                pricingCountryInput.trim().length === 0
+              }
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {priceEstimateLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {priceEstimateLoading ? 'Estimating prices...' : 'Estimate missing prices'}
+            </button>
+          </div>
+
           <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">

@@ -48,8 +48,10 @@ import {
 import { PantryLocationSelector } from '../../shared/PantryLocationSelector';
 import { PantryLocationManager } from '../../shared/PantryLocationManager';
 import { PantrySettingsSheet } from '../../shared/PantrySettingsSheet';
+import { PantryPriceEstimateSheet } from '../../shared/PantryPriceEstimateSheet';
 import { BottomSheet } from '../../shared/BottomSheet';
 import { getPantrySpaceSettings, updatePantrySpaceSettings } from '../../../lib/pantrySettings';
+import { estimateMissingPantryPrices, getMissingPricePantryItems, type PantryPriceEstimateSuggestion } from '../../../lib/pantryPriceEstimator';
 
 interface PantryWidgetProps {
   householdId: string;
@@ -91,6 +93,15 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
   const [autoReplaceEnabled, setAutoReplaceEnabled] = useState(false);
   const [autoReplaceLoading, setAutoReplaceLoading] = useState(false);
+  const [pricingCity, setPricingCity] = useState('');
+  const [pricingCountry, setPricingCountry] = useState('');
+  const [showPriceEstimateSheet, setShowPriceEstimateSheet] = useState(false);
+  const [priceEstimateLoading, setPriceEstimateLoading] = useState(false);
+  const [priceEstimateSaving, setPriceEstimateSaving] = useState(false);
+  const [priceEstimateSuggestions, setPriceEstimateSuggestions] = useState<PantryPriceEstimateSuggestion[]>([]);
+  const [priceEstimateModel, setPriceEstimateModel] = useState<string | null>(null);
+  const [priceEstimateCurrencyCode, setPriceEstimateCurrencyCode] = useState<string | null>(null);
+  const [priceEstimateItemIds, setPriceEstimateItemIds] = useState<string[]>([]);
   const [locationsExpanded, setLocationsExpanded] = useState(false);
   const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
 
@@ -245,11 +256,15 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         const settings = await getPantrySpaceSettings(currentSpaceId);
         if (!cancelled) {
           setAutoReplaceEnabled(settings.auto_add_replacements_to_shopping_list);
+          setPricingCity(settings.pricing_city || '');
+          setPricingCountry(settings.pricing_country || '');
         }
       } catch (error) {
         console.error('Failed to load pantry settings:', error);
         if (!cancelled) {
           setAutoReplaceEnabled(false);
+          setPricingCity('');
+          setPricingCountry('');
         }
       }
     };
@@ -974,10 +989,17 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   const valuedPantryItems = pantryItems.filter(
     (item) => item.estimated_cost !== null && item.estimated_cost !== undefined
   );
+  const missingPriceItems = pantryItems.filter(
+    (item) => item.estimated_cost === null || item.estimated_cost === undefined
+  );
   const totalEstimatedValue = valuedPantryItems.reduce(
     (sum, item) => sum + (item.estimated_cost || 0),
     0
   );
+
+  const priceEstimateItems = priceEstimateItemIds
+    .map((itemId) => pantryItems.find((item) => item.id === itemId))
+    .filter((item): item is PantryItem => Boolean(item));
   const currentSpaceName = availableSpaces.find((space) => space.id === currentSpaceId)?.name || 'Pantry';
 
   const autoAddReplacementToShoppingList = async (
@@ -1072,6 +1094,86 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
       showToast('error', 'Failed to update Pantry automation');
     } finally {
       setAutoReplaceLoading(false);
+    }
+  };
+
+  const handleEstimateMissingPrices = async (params: { city: string; country: string }) => {
+    const city = params.city.trim();
+    const country = params.country.trim();
+
+    if (!city || !country) {
+      showToast('info', 'Add your town or city and country first.');
+      return;
+    }
+
+    const itemsToEstimate = getMissingPricePantryItems(pantryItems);
+    if (itemsToEstimate.length === 0) {
+      showToast('info', 'Every Pantry item already has a price.');
+      return;
+    }
+
+    try {
+      setPriceEstimateLoading(true);
+      setShowSettingsSheet(false);
+      setShowPriceEstimateSheet(true);
+      setPriceEstimateItemIds(itemsToEstimate.map((item) => item.pantryItemId));
+      setPriceEstimateSuggestions([]);
+      setPriceEstimateModel(null);
+      setPriceEstimateCurrencyCode(null);
+
+      const settings = await updatePantrySpaceSettings(currentSpaceId, {
+        auto_add_replacements_to_shopping_list: autoReplaceEnabled,
+        pricing_city: city,
+        pricing_country: country,
+      });
+
+      setPricingCity(settings.pricing_city || city);
+      setPricingCountry(settings.pricing_country || country);
+
+      const result = await estimateMissingPantryPrices({
+        city,
+        country,
+        items: itemsToEstimate,
+      });
+
+      setPriceEstimateSuggestions(result.suggestions);
+      setPriceEstimateModel(result.model);
+      setPriceEstimateCurrencyCode(result.currencyCode);
+    } catch (error: any) {
+      console.error('Failed to estimate pantry prices:', error);
+      showToast('error', error?.message || 'Failed to estimate missing prices');
+      setShowPriceEstimateSheet(false);
+    } finally {
+      setPriceEstimateLoading(false);
+    }
+  };
+
+  const handleSaveEstimatedPrices = async (updates: Array<{ pantryItemId: string; estimatedCost: number }>) => {
+    if (updates.length === 0) {
+      showToast('info', 'No prices were entered to save.');
+      return;
+    }
+
+    try {
+      setPriceEstimateSaving(true);
+      await Promise.all(
+        updates.map((entry) =>
+          updatePantryItem(entry.pantryItemId, {
+            estimated_cost: entry.estimatedCost,
+          })
+        )
+      );
+
+      await loadPantryItems(getAbortSignal());
+      setShowPriceEstimateSheet(false);
+      setPriceEstimateSuggestions([]);
+      setPriceEstimateItemIds([]);
+      showToast('success', `Saved ${updates.length} Pantry price${updates.length === 1 ? '' : 's'}`);
+    } catch (error: any) {
+      console.error('Failed to save estimated Pantry prices:', error);
+      showToast('error', error?.message || 'Failed to save Pantry prices');
+    } finally {
+      setPriceEstimateSaving(false);
     }
   };
 
@@ -2345,6 +2447,28 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         autoReplaceEnabled={autoReplaceEnabled}
         autoReplaceLoading={autoReplaceLoading}
         onAutoReplaceToggle={handleAutoReplaceToggle}
+        missingPriceCount={missingPriceItems.length}
+        pricingCity={pricingCity}
+        pricingCountry={pricingCountry}
+        priceEstimateLoading={priceEstimateLoading}
+        onEstimateMissingPrices={handleEstimateMissingPrices}
+      />
+
+      <PantryPriceEstimateSheet
+        isOpen={showPriceEstimateSheet}
+        onClose={() => {
+          if (priceEstimateLoading || priceEstimateSaving) return;
+          setShowPriceEstimateSheet(false);
+        }}
+        city={pricingCity}
+        country={pricingCountry}
+        currencyCode={priceEstimateCurrencyCode}
+        model={priceEstimateModel}
+        loading={priceEstimateLoading}
+        items={priceEstimateItems}
+        suggestions={priceEstimateSuggestions}
+        saving={priceEstimateSaving}
+        onSave={handleSaveEstimatedPrices}
       />
 
       {/* Location Manager Modal */}
