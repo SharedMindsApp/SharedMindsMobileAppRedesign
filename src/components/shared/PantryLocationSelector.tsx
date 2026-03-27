@@ -67,7 +67,7 @@ const WEIGHT_UNIT_OPTIONS = [
 interface PantryLocationSelectorProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (locationId: string | null) => void;
+  onSelect: (locationId: string | null) => void | Promise<void>;
   locations: PantryLocation[];
   lastUsedLocationId?: string | null;
   initialLocationId?: string | null;
@@ -155,6 +155,7 @@ export function PantryLocationSelector({
   const [newLocationName, setNewLocationName] = useState('');
   const [newLocationIcon, setNewLocationIcon] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -171,6 +172,7 @@ export function PantryLocationSelector({
     setShowAddLocation(false);
     setShowUnitPicker(false);
     setShowWeightUnitPicker(false);
+    setIsSubmitting(false);
     setSelectedLocationId(initialLocationId ?? lastUsedLocationId ?? null);
     setNewLocationName('');
     setNewLocationIcon('');
@@ -216,6 +218,17 @@ export function PantryLocationSelector({
     }
   };
 
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+      await Promise.resolve(onSelect(selectedLocationId));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <BottomSheet
       isOpen={isOpen}
@@ -225,15 +238,17 @@ export function PantryLocationSelector({
         <div className="flex gap-2">
           <button
             onClick={onClose}
+            disabled={isSubmitting}
             className="flex-1 rounded-xl border border-stone-300 px-4 py-3 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 min-h-[44px]"
           >
             Cancel
           </button>
           <button
-            onClick={() => onSelect(selectedLocationId)}
-            className="flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-stone-800 min-h-[44px]"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="flex-1 rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-stone-800 min-h-[44px] disabled:cursor-not-allowed disabled:bg-stone-400"
           >
-            {submitLabel}
+            {isSubmitting ? 'Saving...' : submitLabel}
           </button>
         </div>
       ) : undefined}
