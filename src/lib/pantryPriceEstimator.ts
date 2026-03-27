@@ -39,6 +39,25 @@ interface PantryPriceEstimatorResponse {
   error?: string;
 }
 
+async function callPantryPriceEstimator(params: {
+  accessToken: string;
+  payload: {
+    city: string;
+    country: string;
+    items: PantryPriceEstimateInput[];
+  };
+}) {
+  return fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pantry-price-estimator`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify(params.payload),
+  });
+}
+
 export function getMissingPricePantryItems(items: PantryItem[]): PantryPriceEstimateInput[] {
   return items
     .filter((item) => item.estimated_cost === null || item.estimated_cost === undefined)
@@ -60,6 +79,12 @@ export async function estimateMissingPantryPrices(params: {
   country: string;
   items: PantryPriceEstimateInput[];
 }): Promise<PantryPriceEstimateResult> {
+  const payload = {
+    city: params.city.trim(),
+    country: params.country.trim(),
+    items: params.items,
+  };
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -68,19 +93,24 @@ export async function estimateMissingPantryPrices(params: {
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pantry-price-estimator`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({
-      city: params.city.trim(),
-      country: params.country.trim(),
-      items: params.items,
-    }),
+  let response = await callPantryPriceEstimator({
+    accessToken: session.access_token,
+    payload,
   });
+
+  if (response.status === 401) {
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    const refreshedToken = refreshed.session?.access_token;
+
+    if (refreshError || !refreshedToken) {
+      throw new Error('Your session expired. Please sign in again and retry the Pantry price estimate.');
+    }
+
+    response = await callPantryPriceEstimator({
+      accessToken: refreshedToken,
+      payload,
+    });
+  }
 
   let data: PantryPriceEstimatorResponse | null = null;
 
@@ -88,6 +118,18 @@ export async function estimateMissingPantryPrices(params: {
     data = await response.json();
   } catch {
     data = null;
+  }
+
+  if (response.status === 404 || response.status === 503) {
+    throw new Error(
+      'Pantry AI pricing is not deployed on Supabase yet. Deploy the `pantry-price-estimator` edge function and try again.'
+    );
+  }
+
+  if (response.status === 401) {
+    throw new Error(
+      'Pantry AI pricing is rejecting auth. Sign in again, then redeploy `pantry-price-estimator` with `--no-verify-jwt` if it still returns 401.'
+    );
   }
 
   if (!response.ok || !data?.success) {

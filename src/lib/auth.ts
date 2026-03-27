@@ -22,6 +22,45 @@ export type SignInInput = {
   password: string;
 };
 
+const AUTH_STORAGE_KEYS = [
+  'sharedminds.core.auth.token',
+  'supabase.auth.token',
+  'sb-auth-token',
+  'sb-auth-token-code-verifier',
+  'supabase.auth.refreshToken',
+];
+
+export function clearStoredAuthSession() {
+  try {
+    AUTH_STORAGE_KEYS.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      } catch {
+        // Ignore per-key storage failures
+      }
+    });
+
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('supabase') || key.startsWith('sb-') || key.includes('auth.token'))) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+  } catch {
+    // Ignore storage access failures
+  }
+}
+
 export async function signUp({ email, password, fullName }: SignUpInput) {
   const normalizedName = fullName.trim();
   const normalizedEmail = email.trim().toLowerCase();
@@ -120,7 +159,8 @@ export async function signIn({ email, password }: SignInInput) {
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  clearStoredAuthSession();
   if (error) throw error;
 }
 

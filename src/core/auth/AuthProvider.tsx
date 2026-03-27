@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useMemo, useCallback, u
 import { supabase } from '../../lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { SpaceService } from '../services/SpaceService';
+import { clearStoredAuthSession } from '../../lib/auth';
 
 export interface Profile {
     id: string;
@@ -176,6 +177,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 if (error) {
                     console.warn('[AuthContext] Invalid session found in storage', error.message);
+                    clearStoredAuthSession();
+                    try {
+                        await supabase.auth.signOut({ scope: 'local' });
+                    } catch {
+                        // Ignore local cleanup failures
+                    }
                     if (mounted) {
                         setUser(null);
                         setProfile(null);

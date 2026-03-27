@@ -14,8 +14,7 @@ const corsHeaders = {
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL =
   Deno.env.get('OPENROUTER_PANTRY_PRICE_MODEL') ||
-  Deno.env.get('OPENROUTER_PANTRY_VISION_MODEL') ||
-  'google/gemini-3.1-flash-lite-preview';
+  'x-ai/grok-4.1-fast';
 
 interface PantryPriceEstimateRequest {
   city: string;
@@ -46,6 +45,47 @@ interface PantryPriceEstimateResponse {
   currency_code?: string | null;
   model?: string;
   error?: string;
+}
+
+function extractMessageText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object') {
+          const record = part as Record<string, unknown>;
+          if (typeof record.text === 'string') return record.text;
+          if (record.type === 'text' && typeof record.content === 'string') return record.content;
+        }
+        return '';
+      })
+      .join('\n')
+      .trim();
+  }
+
+  return '';
+}
+
+function extractJsonPayload(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    return fencedMatch[1].trim();
+  }
+
+  const objectStart = trimmed.indexOf('{');
+  const objectEnd = trimmed.lastIndexOf('}');
+  if (objectStart !== -1 && objectEnd !== -1 && objectEnd > objectStart) {
+    return trimmed.slice(objectStart, objectEnd + 1);
+  }
+
+  return trimmed;
 }
 
 function buildSystemPrompt() {
@@ -296,9 +336,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
+    const rawContent = extractMessageText(data?.choices?.[0]?.message?.content);
 
-    if (typeof content !== 'string' || content.trim().length === 0) {
+    if (rawContent.length === 0) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -313,9 +353,9 @@ Deno.serve(async (req: Request) => {
 
     let parsed: { currency_code?: unknown; suggestions?: unknown };
     try {
-      parsed = JSON.parse(content);
+      parsed = JSON.parse(extractJsonPayload(rawContent));
     } catch (error) {
-      console.error('[pantry-price-estimator] Failed to parse model JSON:', error, content);
+      console.error('[pantry-price-estimator] Failed to parse model JSON:', error, rawContent);
       return new Response(
         JSON.stringify({
           success: false,

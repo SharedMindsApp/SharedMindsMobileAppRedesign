@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef, ReactNode } from 'react';
 import { useAuth as useCoreAuth } from '../core/auth/AuthProvider';
 import { supabase } from '../lib/supabase';
+import { clearStoredAuthSession } from '../lib/auth';
 import type { User } from '@supabase/supabase-js';
 import { isStandaloneApp } from '../lib/appContext';
 import { startHealthMonitoring, subscribeToHealthState, retryWithBackoff } from '../lib/connectionHealth';
@@ -112,6 +113,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             action: 'initAuth',
             error: error.message,
           });
+          clearStoredAuthSession();
+          try {
+            await supabase.auth.signOut({ scope: 'local' });
+          } catch {
+            // Ignore local cleanup failures
+          }
           if (mounted) {
             setUser(null);
             setProfile(null);

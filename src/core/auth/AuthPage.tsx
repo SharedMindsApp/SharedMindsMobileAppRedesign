@@ -141,6 +141,7 @@ export function AuthPage() {
                             onChange={(e) => setEmail(e.target.value)}
                             className="w-full rounded-xl border border-slate-200 px-4 py-2 text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
                             placeholder="you@example.com"
+                            autoComplete="email"
                         />
                     </div>
 
@@ -157,6 +158,7 @@ export function AuthPage() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full rounded-xl border border-slate-200 px-4 py-2 pr-12 text-slate-900 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
                                 placeholder="••••••••"
+                                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                             />
                             <button
                                 type="button"
