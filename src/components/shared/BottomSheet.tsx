@@ -60,9 +60,11 @@ export function BottomSheet({
   const [dragStartY, setDragStartY] = useState(0);
   const [dragCurrentY, setDragCurrentY] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(0);
   const [scrollState, setScrollState] = useState({ isScrolled: false, isScrollable: false, scrollTop: 0 });
   const sheetRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef({ isDragging: false, startY: 0, currentY: 0 });
   const pathnameWhenOpenedRef = useRef<string | null>(null);
   const isClosingRef = useRef(false);
@@ -207,6 +209,29 @@ export function BottomSheet({
     };
   }, [isOpen, children]);
 
+  useEffect(() => {
+    if (!isOpen || !footer) {
+      setFooterHeight(0);
+      return;
+    }
+
+    const footerEl = footerRef.current;
+    if (!footerEl) return;
+
+    const updateFooterHeight = () => {
+      setFooterHeight(footerEl.getBoundingClientRect().height);
+    };
+
+    updateFooterHeight();
+
+    const resizeObserver = new ResizeObserver(updateFooterHeight);
+    resizeObserver.observe(footerEl);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isOpen, footer]);
+
   // Touch handlers for swipe-down to dismiss (using native listeners to allow preventDefault)
   useEffect(() => {
     if (!isMobile || !isOpen || preventClose || !sheetRef.current) return;
@@ -312,7 +337,7 @@ export function BottomSheet({
         {/* Modal */}
         <div
           ref={sheetRef}
-          className="relative bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 max-h-[90vh] flex flex-col"
+          className="relative bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 max-h-[90vh] min-h-0 flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header with scroll shadow */}
@@ -340,6 +365,7 @@ export function BottomSheet({
           <div 
             className="flex-1 overflow-y-auto overflow-x-hidden p-4"
             style={{
+              minHeight: 0,
               overscrollBehavior: 'contain', // Prevent scroll chaining
             }}
           >
@@ -382,7 +408,7 @@ export function BottomSheet({
       {/* Bottom Sheet */}
       <div
         ref={sheetRef}
-        className="absolute top-0 left-0 right-0 bottom-0 bg-white flex flex-col w-full"
+        className="absolute top-0 left-0 right-0 bottom-0 min-h-0 bg-white flex flex-col w-full"
         style={{
           transform: `translateY(${dragOffset}px)`,
           transition: isDragging ? 'none' : 'transform 0.3s ease-out',
@@ -421,9 +447,9 @@ export function BottomSheet({
         {/* Scrollable Content - Single scroll authority for mobile */}
         <div
           ref={contentRef}
-          className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3"
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3"
           style={{
-            paddingBottom: `calc(${footer ? '16px' : '24px'} + env(safe-area-inset-bottom) + ${keyboardHeight}px)`,
+            paddingBottom: `calc(${footer ? `${footerHeight + 16}px` : '24px'} + env(safe-area-inset-bottom) + ${keyboardHeight}px)`,
             overscrollBehavior: 'contain', // Prevent scroll chaining
             WebkitOverflowScrolling: 'touch', // iOS momentum scrolling
             touchAction: 'pan-y', // Allow vertical scrolling only
@@ -435,6 +461,7 @@ export function BottomSheet({
         {/* Footer */}
         {footer && (
           <div
+            ref={footerRef}
             className="border-t border-gray-200 px-4 py-3 flex-shrink-0 safe-bottom bg-white"
             style={{ paddingBottom: `calc(12px + env(safe-area-inset-bottom))` }}
           >
