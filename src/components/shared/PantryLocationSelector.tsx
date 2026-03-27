@@ -85,7 +85,9 @@ interface PantryLocationSelectorProps {
   expiresOn?: string;
   itemType?: PantryItemType | null;
   itemName?: string;
+  itemDescription?: string;
   onItemNameChange?: (value: string) => void;
+  onItemDescriptionChange?: (value: string) => void;
   notes?: string;
   onNotesChange?: (value: string) => void;
   onQuantityValueChange?: (value: string) => void;
@@ -125,7 +127,9 @@ export function PantryLocationSelector({
   expiresOn = '',
   itemType = null,
   itemName = '',
+  itemDescription = '',
   onItemNameChange,
+  onItemDescriptionChange,
   notes = '',
   onNotesChange,
   onQuantityValueChange,
@@ -266,16 +270,35 @@ export function PantryLocationSelector({
               Start with a sensible default, then adjust if this pack is different.
             </p>
 
-            {onItemNameChange && (
-              <div className="mt-4">
-                <label className="mb-1 block text-xs text-gray-600">Item name</label>
-                <input
-                  type="text"
-                  value={itemName}
-                  onChange={(e) => onItemNameChange(e.target.value)}
-                  placeholder="e.g. Chopped Tomatoes"
-                  className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
-                />
+            {(onItemNameChange || onItemDescriptionChange) && (
+              <div className="mt-4 grid gap-3">
+                {onItemNameChange && (
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-600">Item name</label>
+                    <input
+                      type="text"
+                      value={itemName}
+                      onChange={(e) => onItemNameChange(e.target.value)}
+                      placeholder="e.g. Packet Rice"
+                      className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                    />
+                  </div>
+                )}
+                {onItemDescriptionChange && (
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-600">Description / flavour (optional)</label>
+                    <input
+                      type="text"
+                      value={itemDescription}
+                      onChange={(e) => onItemDescriptionChange(e.target.value)}
+                      placeholder="e.g. Pilau Rice"
+                      className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Keep the main item generic, then add the specific type here.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

@@ -177,6 +177,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     location: '',
     quantityValue: '',
     quantityUnit: '',
+    itemDetail: '',
     weightValue: '',
     weightUnit: 'g',
     expiresOn: '',
@@ -208,6 +209,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   // Pending item form state (for adding new items)
   const [pendingQuantityValue, setPendingQuantityValue] = useState('');
   const [pendingQuantityUnit, setPendingQuantityUnit] = useState('');
+  const [pendingItemDetail, setPendingItemDetail] = useState('');
   const [pendingWeightValue, setPendingWeightValue] = useState('');
   const [pendingWeightUnit, setPendingWeightUnit] = useState('g');
   const [pendingExpiresOn, setPendingExpiresOn] = useState('');
@@ -431,10 +433,22 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     return first || second || null;
   }
 
+  function normalizeItemDetail(value: string | null | undefined) {
+    return (value || '').trim().toLowerCase();
+  }
+
+  function getPantryDisplayParts(item: Pick<PantryItem, 'food_item' | 'item_name' | 'item_detail'>) {
+    return {
+      baseName: item.food_item?.name || item.item_name || 'Unknown Item',
+      detail: item.item_detail?.trim() || '',
+    };
+  }
+
   const resetPendingPantryForm = () => {
     setPendingFoodItem(null);
     setPendingQuantityValue('');
     setPendingQuantityUnit('');
+    setPendingItemDetail('');
     setPendingWeightValue('');
     setPendingWeightUnit('g');
     setPendingExpiresOn('');
@@ -451,6 +465,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
 
   const getPantryBatchSummary = (item: PantryItem) => {
     const quantity = [item.quantity_value || item.quantity, item.quantity_unit || item.unit].filter(Boolean).join(' ');
+    const { detail } = getPantryDisplayParts(item);
     const locationName =
       item.pantry_location?.name ||
       pantryLocations.find((location) => location.id === item.location_id)?.name ||
@@ -465,6 +480,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
 
     return {
       quantity: quantity || 'No quantity set',
+      detail,
       locationName,
       expiryLabel,
     };
@@ -483,6 +499,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     setPendingFoodItem(foodItem);
     setPendingQuantityValue(defaults.quantityValue);
     setPendingQuantityUnit(defaults.quantityUnit);
+    setPendingItemDetail('');
     setPendingWeightValue(defaults.weightValue);
     setPendingWeightUnit(defaults.weightUnit);
     setPendingExpiresOn('');
@@ -536,11 +553,17 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
 
     const incomingQuantityValue = pendingQuantityValue.trim();
     const incomingQuantityUnit = pendingQuantityUnit.trim();
+    const incomingItemDetail = pendingItemDetail.trim() || null;
     const existingQuantityValue = (targetItem.quantity_value || targetItem.quantity || '').trim();
     const existingQuantityUnit = (targetItem.quantity_unit || targetItem.unit || '').trim();
+    const existingItemDetail = targetItem.item_detail?.trim() || null;
 
     let mergedQuantityValue = existingQuantityValue || null;
     let mergedQuantityUnit = existingQuantityUnit || incomingQuantityUnit || null;
+
+    if (incomingItemDetail && existingItemDetail && normalizeItemDetail(incomingItemDetail) !== normalizeItemDetail(existingItemDetail)) {
+      throw new Error('Merge only works when the item description matches. Add a new batch instead.');
+    }
 
     if (incomingQuantityValue) {
       if (!existingQuantityValue) {
@@ -627,6 +650,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     await updatePantryItem(targetItem.id, {
       quantity_value: mergedQuantityValue,
       quantity_unit: mergedQuantityUnit,
+      item_detail: existingItemDetail || incomingItemDetail,
       expires_on: soonestExpiry,
       expiration_date: soonestExpiry,
       estimated_cost: mergedEstimatedCost,
@@ -675,6 +699,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
           locationId: locationId || undefined,
           quantityValue: pendingQuantityValue.trim() || undefined,
           quantityUnit: pendingQuantityUnit.trim() || undefined,
+          itemDetail: pendingItemDetail.trim() || undefined,
           expiresOn: pendingExpiresOn || undefined,
           status: 'have',
           itemType: pendingItemType || undefined,
@@ -721,6 +746,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
       location: item.location_id || '',
       quantityValue: item.quantity_value || '',
       quantityUnit: item.quantity_unit || 'g',
+      itemDetail: item.item_detail || '',
       weightValue,
       weightUnit,
       expiresOn: item.expires_on ? item.expires_on.split('T')[0] : '',
@@ -761,6 +787,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         location_id: locationId,
         quantity_value: editForm.quantityValue.trim() || null,
         quantity_unit: editForm.quantityUnit.trim() || null,
+        item_detail: editForm.itemDetail.trim() || null,
         estimated_weight_grams: estimatedWeightGrams,
         expires_on: editForm.expiresOn || null,
         estimated_cost: estimatedCostValue !== null && !Number.isNaN(estimatedCostValue) ? estimatedCostValue : null,
@@ -906,8 +933,9 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
 
   // Filter items by search query, location, and item type
   const filteredItems = pantryItems.filter(item => {
-    const itemName = item.food_item?.name || item.item_name || 'Unknown Item';
-    const matchesSearch = !searchQuery || itemName.toLowerCase().includes(searchQuery.toLowerCase());
+    const { baseName, detail } = getPantryDisplayParts(item);
+    const searchText = [baseName, detail].filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = !searchQuery || searchText.includes(searchQuery.toLowerCase());
 
     // Filter by location_id if selected
     if (selectedLocationFilter) {
@@ -1128,13 +1156,13 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         ) : (
           <div className="space-y-1 overflow-y-auto max-h-[80px]">
             {pantryItems.slice(0, 4).map((item) => {
-              const itemName = item.food_item?.name || item.item_name || 'Unknown Item';
+              const { baseName, detail } = getPantryDisplayParts(item);
               return (
                 <div key={item.id} className="flex items-center gap-1.5 text-xs">
                   {item.food_item?.emoji && (
                     <span className="flex-shrink-0">{item.food_item.emoji}</span>
                   )}
-                  <span className="truncate text-gray-800">{itemName}</span>
+                  <span className="truncate text-gray-800">{baseName}{detail ? ` · ${detail}` : ''}</span>
                 </div>
               );
             })}
@@ -1452,7 +1480,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
                   {!collapsedLocations.has(locationId) && (
                   <div className="px-3 pb-3 space-y-1.5">
                     {items.map((item) => {
-                      const itemName = item.food_item?.name || item.item_name || 'Unknown Item';
+                      const { baseName, detail } = getPantryDisplayParts(item);
                       const isEditingQuantity = editingQuantityId === item.id;
 
                       return (
@@ -1464,7 +1492,10 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
                                 <span className="text-base flex-shrink-0 leading-5">{item.food_item.emoji}</span>
                               )}
                               <div className="min-w-0 flex-1">
-                                <p className="font-medium text-sm text-gray-900 leading-5">{itemName}</p>
+                                <p className="font-medium text-sm text-gray-900 leading-5">{baseName}</p>
+                                {detail && (
+                                  <p className="mt-0.5 text-xs text-stone-500 leading-4">{detail}</p>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
@@ -1658,7 +1689,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-stone-900">Remove from pantry</h3>
                 <p className="truncate text-sm text-stone-600">
-                  {pendingDeleteItem.food_item?.name || pendingDeleteItem.item_name || 'Unknown Item'}
+                  {getPantryDisplayParts(pendingDeleteItem).baseName}
+                  {getPantryDisplayParts(pendingDeleteItem).detail ? ` · ${getPantryDisplayParts(pendingDeleteItem).detail}` : ''}
                 </p>
               </div>
             </div>
@@ -1689,7 +1721,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
               <p className="text-sm text-stone-700">
                 This will remove{' '}
                 <span className="font-semibold text-stone-900">
-                  {pendingDeleteItem.food_item?.name || pendingDeleteItem.item_name || 'this item'}
+                  {getPantryDisplayParts(pendingDeleteItem).baseName}
+                  {getPantryDisplayParts(pendingDeleteItem).detail ? ` · ${getPantryDisplayParts(pendingDeleteItem).detail}` : ''}
                 </span>{' '}
                 from your Pantry inventory.
               </p>
@@ -1723,7 +1756,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-stone-900">Edit pantry item</h3>
                 <p className="truncate text-sm text-stone-600">
-                  {editingItem.food_item?.name || editingItem.item_name || 'Unknown Item'}
+                  {getPantryDisplayParts(editingItem).baseName}
+                  {getPantryDisplayParts(editingItem).detail ? ` · ${getPantryDisplayParts(editingItem).detail}` : ''}
                 </p>
               </div>
             </div>
@@ -1835,6 +1869,16 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
             <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4">
               <h4 className="mb-3 text-sm font-semibold text-stone-900">Stock details</h4>
               <div className="grid gap-3 grid-cols-2">
+                <div className="col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Description / flavour</label>
+                  <input
+                    type="text"
+                    value={editForm.itemDetail}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, itemDetail: e.target.value }))}
+                    placeholder="e.g., Pilau Rice"
+                    className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                  />
+                </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-stone-700">Quantity</label>
                   <input
@@ -1935,7 +1979,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-stone-500">Name</dt>
                   <dd className="text-right font-medium text-stone-900">
-                    {editingItem.food_item?.name || editingItem.item_name || 'Unknown Item'}
+                    {getPantryDisplayParts(editingItem).baseName}
+                    {getPantryDisplayParts(editingItem).detail ? ` · ${getPantryDisplayParts(editingItem).detail}` : ''}
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
@@ -2148,6 +2193,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         onLocationCreated={(location) => {
           setPantryLocations([...pantryLocations, location]);
         }}
+        itemDescription={pendingItemDetail}
+        onItemDescriptionChange={setPendingItemDetail}
         quantityValue={pendingQuantityValue}
         quantityUnit={pendingQuantityUnit}
         weightValue={pendingWeightValue}
@@ -2245,6 +2292,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
               </p>
               {pendingExistingMatches.map((item) => {
                 const summary = getPantryBatchSummary(item);
+                const { baseName } = getPantryDisplayParts(item);
                 return (
                   <button
                     key={item.id}
@@ -2258,9 +2306,14 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold">{summary.locationName}</div>
+                        <div className="text-sm font-semibold">{baseName}</div>
+                        {summary.detail && (
+                          <div className={`mt-1 text-xs ${pendingMergeTargetId === item.id ? 'text-stone-200' : 'text-stone-500'}`}>
+                            {summary.detail}
+                          </div>
+                        )}
                         <div className={`mt-1 text-xs ${pendingMergeTargetId === item.id ? 'text-stone-200' : 'text-stone-500'}`}>
-                          {summary.quantity}
+                          {summary.quantity} • {summary.locationName}
                         </div>
                       </div>
                       <span className={`text-xs ${pendingMergeTargetId === item.id ? 'text-stone-300' : 'text-stone-500'}`}>

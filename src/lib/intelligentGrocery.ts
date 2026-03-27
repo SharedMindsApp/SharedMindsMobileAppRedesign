@@ -5,6 +5,7 @@ export interface GroceryTemplate {
   id: string;
   food_item_id: string | null;
   item_name: string;
+  item_detail?: string | null;
   category: string;
   typical_quantity: string | null;
   quantity: string | null;
@@ -29,6 +30,7 @@ export interface GroceryItem {
   shopping_list_id: string | null;
   food_item_id: string; // References food_items table
   item_name?: string; // Deprecated - kept for backward compatibility, use food_item.name
+  item_detail?: string | null;
   quantity: string | null;
   unit: string | null;
   category: string;
@@ -81,6 +83,7 @@ export interface PantryItem {
   household_id: string;
   food_item_id: string; // References food_items table
   item_name?: string; // Deprecated - kept for backward compatibility, use food_item.name
+  item_detail?: string | null;
   category: string;
   quantity: string | null; // Legacy - kept for backward compatibility
   unit: string | null; // Legacy - kept for backward compatibility
@@ -134,6 +137,12 @@ function normalizeTemplateKey(value: string | null | undefined): string {
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function buildTemplateIdentityKey(name: string | null | undefined, detail: string | null | undefined): string {
+  const normalizedName = normalizeTemplateKey(name);
+  const normalizedDetail = normalizeTemplateKey(detail);
+  return [normalizedName, normalizedDetail].filter(Boolean).join('::');
 }
 
 function parseTemplateQuantityParts(template: GroceryTemplate): { quantity: string | null; unit: string | null } {
@@ -299,7 +308,7 @@ export async function searchTemplates(query: string, limit: number = 10): Promis
   const { data, error } = await supabase
     .from('household_grocery_templates')
     .select('*')
-    .or(`item_name.ilike.%${query}%`)
+    .or(`item_name.ilike.%${query}%,item_detail.ilike.%${query}%`)
     .eq('is_system_template', true)
     .limit(limit);
 
@@ -324,6 +333,7 @@ export async function upsertWeeklyGroceryTemplate(params: {
   householdId: string;
   foodItemId?: string | null;
   itemName: string;
+  itemDetail?: string | null;
   category?: string | null;
   quantity?: string | null;
   unit?: string | null;
@@ -341,8 +351,9 @@ export async function upsertWeeklyGroceryTemplate(params: {
 
   const quantity = params.quantity?.trim() || null;
   const unit = params.unit?.trim() || null;
+  const itemDetail = params.itemDetail?.trim() || null;
   const typicalQuantity = formatTypicalQuantity(quantity, unit);
-  const normalizedName = normalizeTemplateKey(foodItem.name);
+  const normalizedIdentity = buildTemplateIdentityKey(foodItem.name, itemDetail);
 
   const { data: existingTemplates, error: existingError } = await supabase
     .from('household_grocery_templates')
@@ -356,18 +367,19 @@ export async function upsertWeeklyGroceryTemplate(params: {
 
   const existing = (existingTemplates || []).find((template) => {
     if (template.food_item_id && template.food_item_id === foodItem.id) return true;
-    return normalizeTemplateKey(template.item_name) === normalizedName;
+    return buildTemplateIdentityKey(template.item_name, template.item_detail) === normalizedIdentity;
   });
 
   const payload = {
     household_id: params.householdId,
     food_item_id: foodItem.id,
     item_name: foodItem.name,
+    item_detail: itemDetail,
     category: params.category || foodItem.category || 'other',
     typical_quantity: typicalQuantity,
     quantity,
     unit,
-    keywords: [normalizedName, ...(params.keywords || [])].filter(Boolean),
+    keywords: [normalizeTemplateKey(foodItem.name), normalizeTemplateKey(itemDetail), ...(params.keywords || [])].filter(Boolean),
     purchase_frequency_days: 7,
     estimated_price: params.estimatedPrice ?? null,
     estimated_weight_grams: params.estimatedWeightGrams ?? null,
@@ -420,7 +432,7 @@ export async function previewWeeklyTemplatePopulate(
 
   const existingFoodIds = new Set(groceryItems.map((item) => item.food_item_id).filter(Boolean));
   const existingNameKeys = new Set(
-    groceryItems.map((item) => normalizeTemplateKey(item.food_item?.name || item.item_name || ''))
+    groceryItems.map((item) => buildTemplateIdentityKey(item.food_item?.name || item.item_name || '', item.item_detail))
   );
 
   const duplicates: GroceryTemplate[] = [];
@@ -429,7 +441,7 @@ export async function previewWeeklyTemplatePopulate(
   for (const template of templates) {
     const duplicate =
       (template.food_item_id && existingFoodIds.has(template.food_item_id)) ||
-      existingNameKeys.has(normalizeTemplateKey(template.item_name));
+      existingNameKeys.has(buildTemplateIdentityKey(template.item_name, template.item_detail));
 
     if (duplicate) {
       duplicates.push(template);
@@ -511,6 +523,7 @@ export async function addGroceryItem(params: {
   recurrenceDays?: number;
   estimatedPrice?: number;
   estimatedWeightGrams?: number | null;
+  itemDetail?: string | null;
   expiresOn?: string;
   locationId?: string | null;
   itemType?: PantryItemType | null;
@@ -556,6 +569,7 @@ export async function addGroceryItem(params: {
       shopping_list_id: params.listId || null,
       food_item_id: foodItemId,
       item_name: null, // No longer storing item_name directly
+      item_detail: params.itemDetail?.trim() || null,
       quantity: params.quantity || null,
       unit: params.unit || null,
       category: category,
@@ -743,8 +757,9 @@ export async function getPantryItems(householdId: string): Promise<PantryItem[]>
   const items = (data || []).map((item: any) => ({
     ...item,
     food_item: item.food_item || null,
-    item_name: item.food_item?.name || item.item_name || 'Unknown Item',
-    pantry_location: item.pantry_location || null,
+      item_name: item.food_item?.name || item.item_name || 'Unknown Item',
+      item_detail: item.item_detail || null,
+      pantry_location: item.pantry_location || null,
   }));
   
   return items;
@@ -769,6 +784,7 @@ export async function addPantryItem(params: {
   estimatedCost?: number | null;
   memberId?: string;
   estimatedWeightGrams?: number | null;
+  itemDetail?: string | null;
   visionMetadata?: Record<string, unknown> | null;
   // Portion tracking fields
   totalPortions?: number | null; // Total portions available (null = unlimited)
@@ -912,6 +928,7 @@ export async function addPantryItem(params: {
       household_id: resolvedHouseholdId,
       food_item_id: foodItemId,
       item_name: itemName, // Store for backward compatibility (can be NULL after migration)
+      item_detail: params.itemDetail?.trim() || null,
       category: category,
       quantity: params.quantity || null, // Legacy support
       unit: params.unit || null, // Legacy support
@@ -1033,6 +1050,7 @@ export async function moveToPantry(groceryItem: GroceryItem, householdId: string
     quantityUnit: groceryItem.unit || undefined,
     expiresOn: groceryItem.expires_on || undefined,
     itemType: groceryItem.item_type || undefined,
+    itemDetail: groceryItem.item_detail || undefined,
     notes: groceryItem.notes || undefined,
     pantryCost: groceryItem.estimated_price ?? undefined,
     estimatedWeightGrams: groceryItem.estimated_weight_grams ?? undefined,
@@ -1051,6 +1069,7 @@ export async function moveGroceryItemToPantry(params: {
   quantityUnit?: string;
   expiresOn?: string;
   itemType?: PantryItemType | null;
+  itemDetail?: string | null;
   notes?: string;
   pantryCost?: number | null;
   estimatedWeightGrams?: number | null;
@@ -1069,6 +1088,7 @@ export async function moveGroceryItemToPantry(params: {
     p_quantity_unit: params.quantityUnit || null,
     p_expires_on: params.expiresOn || null,
     p_item_type: params.itemType || null,
+    p_item_detail: params.itemDetail?.trim() || null,
     p_notes: params.notes || null,
     p_pantry_cost: params.pantryCost ?? null,
     p_estimated_weight_grams: params.estimatedWeightGrams ?? null,
@@ -1107,6 +1127,7 @@ export async function moveToPantryLegacy(groceryItem: GroceryItem, householdId: 
     quantityValue,
     quantityUnit,
     itemType: groceryItem.item_type || undefined,
+    itemDetail: groceryItem.item_detail || undefined,
     notes: groceryItem.notes || undefined,
     pantryCost: groceryItem.estimated_price ?? undefined,
     estimatedWeightGrams: groceryItem.estimated_weight_grams ?? undefined,
@@ -1132,6 +1153,7 @@ export async function addFromTemplate(
     foodItemId: foodItem.id,
     quantity: template.typical_quantity || undefined,
     category: template.category,
+    itemDetail: template.item_detail || undefined,
     estimatedWeightGrams: template.estimated_weight_grams ?? undefined,
     source: 'template',
     memberId,

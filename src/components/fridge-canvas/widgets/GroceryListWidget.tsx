@@ -93,6 +93,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const [pendingListFoodItem, setPendingListFoodItem] = useState<FoodItem | null>(null);
   const [pendingListEditingId, setPendingListEditingId] = useState<string | null>(null);
   const [pendingListName, setPendingListName] = useState('');
+  const [pendingListItemDetail, setPendingListItemDetail] = useState('');
   const [pendingListCategory, setPendingListCategory] = useState('other');
   const [pendingListQuantity, setPendingListQuantity] = useState('');
   const [pendingListUnit, setPendingListUnit] = useState('');
@@ -110,6 +111,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const [pendingGroceryItemId, setPendingGroceryItemId] = useState<string | null>(null);
   const [pendingQuantityValue, setPendingQuantityValue] = useState('');
   const [pendingQuantityUnit, setPendingQuantityUnit] = useState('');
+  const [pendingItemDetail, setPendingItemDetail] = useState('');
   const [pendingWeightValue, setPendingWeightValue] = useState('');
   const [pendingWeightUnit, setPendingWeightUnit] = useState('g');
   const [pendingEstimatedCost, setPendingEstimatedCost] = useState('');
@@ -131,6 +133,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const [pendingWeeklyTemplateId, setPendingWeeklyTemplateId] = useState<string | null>(null);
   const [pendingWeeklyFoodItem, setPendingWeeklyFoodItem] = useState<FoodItem | null>(null);
   const [pendingWeeklyName, setPendingWeeklyName] = useState('');
+  const [pendingWeeklyItemDetail, setPendingWeeklyItemDetail] = useState('');
   const [pendingWeeklyQuantity, setPendingWeeklyQuantity] = useState('');
   const [pendingWeeklyUnit, setPendingWeeklyUnit] = useState('');
   const [pendingWeeklyWeightValue, setPendingWeeklyWeightValue] = useState('');
@@ -287,6 +290,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingWeeklyTemplateId(null);
     setPendingWeeklyFoodItem(null);
     setPendingWeeklyName('');
+    setPendingWeeklyItemDetail('');
     setPendingWeeklyQuantity('');
     setPendingWeeklyUnit('');
     setPendingWeeklyWeightValue('');
@@ -302,6 +306,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingListFoodItem(null);
     setPendingListEditingId(null);
     setPendingListName('');
+    setPendingListItemDetail('');
     setPendingListCategory('other');
     setPendingListQuantity('');
     setPendingListUnit('');
@@ -334,6 +339,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
 
       setPendingListFoodItem(foodItem);
       setPendingListName(foodItem.name);
+      setPendingListItemDetail('');
       setPendingListCategory(foodItem.category || 'other');
       setPendingListQuantity(defaults.quantityValue || '1');
       setPendingListUnit(defaults.quantityUnit || 'item');
@@ -368,6 +374,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingListEditingId(item.id);
     setPendingListFoodItem(foodItem);
     setPendingListName(foodItem.name);
+    setPendingListItemDetail(item.item_detail || '');
     setPendingListCategory(item.category || foodItem.category || 'other');
     setPendingListQuantity(quantityPrefill.quantityValue);
     setPendingListUnit(quantityPrefill.quantityUnit);
@@ -408,6 +415,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       if (pendingListEditingId) {
         await updateGroceryItem(pendingListEditingId, {
           food_item_id: foodItem.id,
+          item_detail: pendingListItemDetail.trim() || null,
           quantity: pendingListQuantity.trim() || null,
           unit: pendingListUnit.trim() || null,
           category: pendingListCategory || null,
@@ -425,6 +433,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           householdId: currentSpaceId,
           listId: defaultListId || undefined,
           foodItemId: foodItem.id,
+          itemDetail: pendingListItemDetail.trim() || undefined,
           quantity: pendingListQuantity.trim() || undefined,
           unit: pendingListUnit.trim() || undefined,
           category: pendingListCategory || undefined,
@@ -499,10 +508,16 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   };
 
   const isWeeklyTemplateMatch = (template: GroceryTemplate, item: GroceryItem) => {
-    if (template.food_item_id && template.food_item_id === item.food_item_id) return true;
     const templateName = (template.item_name || '').trim().toLowerCase();
     const itemName = (item.food_item?.name || item.item_name || '').trim().toLowerCase();
-    return !!templateName && templateName === itemName;
+    const templateDetail = normalizeItemDetail(template.item_detail);
+    const itemDetail = normalizeItemDetail(item.item_detail);
+
+    if (template.food_item_id && template.food_item_id === item.food_item_id) {
+      return templateDetail === itemDetail;
+    }
+
+    return !!templateName && templateName === itemName && templateDetail === itemDetail;
   };
 
   const getWeeklyTemplateForItem = (item: GroceryItem) =>
@@ -528,6 +543,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           householdId: currentSpaceId,
           foodItemId: item.food_item_id,
           itemName: item.food_item?.name || item.item_name || 'Unknown Item',
+          itemDetail: item.item_detail || undefined,
           category: item.category || item.food_item?.category || undefined,
           quantity: item.quantity,
           unit: item.unit,
@@ -610,6 +626,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           householdId: currentSpaceId,
           foodItemId: item.food_item_id,
           itemName: item.food_item?.name || item.item_name || 'Unknown Item',
+          itemDetail: item.item_detail || undefined,
           category: item.category || item.food_item?.category || undefined,
           quantity: item.quantity,
           unit: item.unit,
@@ -651,6 +668,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       setPendingWeeklyTemplateId(null);
       setPendingWeeklyFoodItem(foodItem);
       setPendingWeeklyName(foodItem.name);
+      setPendingWeeklyItemDetail('');
       setPendingWeeklyQuantity(defaults.quantityValue || '1');
       setPendingWeeklyUnit(defaults.quantityUnit || 'item');
       setPendingWeeklyWeightValue(defaults.weightValue || '');
@@ -679,6 +697,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       setPendingWeeklyTemplateId(template.id);
       setPendingWeeklyFoodItem(foodItem);
       setPendingWeeklyName(template.item_name);
+      setPendingWeeklyItemDetail(template.item_detail || '');
       setPendingWeeklyQuantity(template.quantity || defaults.quantityValue || '1');
       setPendingWeeklyUnit(template.unit || defaults.quantityUnit || 'item');
       setPendingWeeklyWeightValue(weightPrefill.weightValue);
@@ -718,6 +737,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         householdId: currentSpaceId,
         foodItemId: foodItem.id,
         itemName: foodItem.name,
+        itemDetail: pendingWeeklyItemDetail.trim() || null,
         category: foodItem.category || undefined,
         quantity: pendingWeeklyQuantity.trim() || null,
         unit: pendingWeeklyUnit.trim() || null,
@@ -859,6 +879,18 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
       .join(' ');
   };
 
+  const normalizeItemDetail = (value: string | null | undefined) => (value || '').trim().toLowerCase();
+
+  const getGroceryDisplayParts = (item: Pick<GroceryItem, 'food_item' | 'item_name' | 'item_detail'>) => ({
+    baseName: item.food_item?.name || item.item_name || 'Unknown Item',
+    detail: item.item_detail?.trim() || '',
+  });
+
+  const getWeeklyTemplateDisplayParts = (template: Pick<GroceryTemplate, 'item_name' | 'item_detail'>) => ({
+    baseName: template.item_name || 'Unknown Item',
+    detail: template.item_detail?.trim() || '',
+  });
+
   const inferPantryItemTypeFromCategory = (category: string | null | undefined): PantryItemType | null => {
     const normalizedCategory = (category || '').toLowerCase();
 
@@ -956,6 +988,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
   const resetTransferForm = () => {
     setPendingQuantityValue('');
     setPendingQuantityUnit('');
+    setPendingItemDetail('');
     setPendingWeightValue('');
     setPendingWeightUnit('g');
     setPendingEstimatedCost('');
@@ -983,6 +1016,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
     setPendingGroceryItemId(item.id);
     setPendingQuantityValue(quantityPrefill.quantityValue);
     setPendingQuantityUnit(quantityPrefill.quantityUnit);
+    setPendingItemDetail(item.item_detail || '');
     setPendingWeightValue(weightPrefill.weightValue);
     setPendingWeightUnit(weightPrefill.weightUnit);
     setPendingEstimatedCost(item.estimated_price != null ? String(item.estimated_price) : '');
@@ -1045,6 +1079,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         locationId: locationId || undefined,
         quantityValue: pendingQuantityValue.trim() || undefined,
         quantityUnit: pendingQuantityUnit.trim() || undefined,
+        itemDetail: pendingItemDetail.trim() || undefined,
         expiresOn: pendingExpiresOn || undefined,
         itemType: pendingItemType || undefined,
         notes: sourceItem?.notes || undefined,
@@ -1173,7 +1208,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
             ) : (
               <div className="space-y-1 overflow-y-auto max-h-[80px]">
                 {groceryItems.slice(0, 4).map((item) => {
-                  const itemName = item.food_item?.name || item.item_name || 'Unknown Item';
+                  const { baseName, detail } = getGroceryDisplayParts(item);
+                  const itemName = [baseName, detail].filter(Boolean).join(' ');
                   const status = getItemStatus(item.food_item_id, itemName);
                   return (
                     <div key={item.id} className="flex items-center gap-1.5 text-xs">
@@ -1183,7 +1219,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
                         <Check size={10} className="text-green-600 flex-shrink-0" />
                       )}
                       <span className={`truncate ${item.checked ? 'line-through text-gray-500' : 'text-gray-800'}`}>
-                        {itemName}
+                        {baseName}{detail ? ` · ${detail}` : ''}
                       </span>
                     </div>
                   );
@@ -1420,7 +1456,9 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         }}
         foodItem={pendingListFoodItem}
         itemName={pendingListName}
+        itemDescription={pendingListItemDetail}
         onItemNameChange={setPendingListName}
+        onItemDescriptionChange={setPendingListItemDetail}
         smartDefaultHint={
           pendingListAlreadyInPantry
             ? [pendingListDefaultHint, 'Already in pantry, but you can still add it to the shopping list.']
@@ -1479,7 +1517,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
 
                   <div className="space-y-2">
                     {group.items.map((item) => {
-                      const itemName = item.food_item?.name || item.item_name || 'Unknown Item';
+                      const { baseName, detail } = getGroceryDisplayParts(item);
+                      const itemName = [baseName, detail].filter(Boolean).join(' ');
                       const status = getItemStatus(item.food_item_id, itemName);
                       const statusColors = status ? getStatusColor(status.status) : 'bg-white border-gray-200';
 
@@ -1499,9 +1538,16 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
                                   {item.food_item?.emoji && (
                                     <span className="text-base flex-shrink-0">{item.food_item.emoji}</span>
                                   )}
-                                  <p className={`font-semibold text-sm truncate ${item.checked ? 'line-through text-gray-500' : ''}`}>
-                                    {itemName}
-                                  </p>
+                                  <div className="min-w-0 flex-1">
+                                    <p className={`font-semibold text-sm truncate ${item.checked ? 'line-through text-gray-500' : ''}`}>
+                                      {baseName}
+                                    </p>
+                                    {detail && (
+                                      <p className={`mt-0.5 truncate text-xs ${item.checked ? 'text-gray-400 line-through' : 'text-gray-500'}`}>
+                                        {detail}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50/90 px-1.5 py-1 flex-shrink-0">
                                   <button
@@ -1636,6 +1682,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
           );
         }}
         foodItem={pendingFoodItem}
+        itemDescription={pendingItemDetail}
         smartDefaultHint={pendingDefaultHint}
         quantityValue={pendingQuantityValue}
         quantityUnit={pendingQuantityUnit}
@@ -1648,6 +1695,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         onQuantityUnitChange={setPendingQuantityUnit}
         onWeightValueChange={setPendingWeightValue}
         onWeightUnitChange={setPendingWeightUnit}
+        onItemDescriptionChange={setPendingItemDetail}
         onEstimatedCostChange={setPendingEstimatedCost}
         onExpiresOnChange={setPendingExpiresOn}
         onItemTypeChange={setPendingItemType}
@@ -1786,6 +1834,7 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
             <div className="space-y-2">
               {weeklyTemplates.map((template) => {
                 const itemType = template.item_type || inferPantryItemTypeFromCategory(template.category);
+                const { baseName, detail } = getWeeklyTemplateDisplayParts(template);
 
                 return (
                   <div key={template.id} className="rounded-2xl border border-stone-200 bg-white p-3">
@@ -1793,7 +1842,12 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-base">{itemType === 'perishable' ? '🥬' : itemType === 'non_food' ? '🧻' : '🥫'}</span>
-                          <p className="truncate text-sm font-semibold text-stone-900">{template.item_name}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-stone-900">{baseName}</p>
+                            {detail && (
+                              <p className="mt-0.5 truncate text-xs text-stone-500">{detail}</p>
+                            )}
+                          </div>
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
                           {template.typical_quantity && <span>{template.typical_quantity}</span>}
@@ -1811,14 +1865,14 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
                         <button
                           onClick={() => handleEditWeeklyTemplate(template)}
                           className="text-gray-400 hover:text-teal-600"
-                          aria-label={`Edit ${template.item_name}`}
+                          aria-label={`Edit ${baseName}`}
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => handleRequestDeleteWeeklyTemplate(template)}
                           className="text-gray-400 hover:text-gray-600"
-                          aria-label={`Delete ${template.item_name}`}
+                          aria-label={`Delete ${baseName}`}
                         >
                           <X size={16} />
                         </button>
@@ -1894,7 +1948,8 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
 
           <div className="space-y-2">
             {weeklyImportCandidates.map(({ item, existingTemplate }) => {
-              const itemName = item.food_item?.name || item.item_name || 'Unknown Item';
+              const { baseName, detail } = getGroceryDisplayParts(item);
+              const itemName = [baseName, detail].filter(Boolean).join(' ');
               const isSelected = selectedWeeklyImportIds.includes(item.id);
 
               return (
@@ -1918,7 +1973,12 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           {item.food_item?.emoji && <span className="text-base">{item.food_item.emoji}</span>}
-                          <p className="truncate text-sm font-semibold text-stone-900">{itemName}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-stone-900">{baseName}</p>
+                            {detail && (
+                              <p className="mt-0.5 truncate text-xs text-stone-500">{detail}</p>
+                            )}
+                          </div>
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
                           {(item.quantity || item.unit) && <span>{[item.quantity, item.unit].filter(Boolean).join(' ')}</span>}
@@ -1971,7 +2031,9 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
         spaceId={currentSpaceId}
         foodItem={pendingWeeklyFoodItem}
         itemName={pendingWeeklyName}
+        itemDescription={pendingWeeklyItemDetail}
         onItemNameChange={setPendingWeeklyName}
+        onItemDescriptionChange={setPendingWeeklyItemDetail}
         smartDefaultHint={pendingWeeklyDefaultHint}
         sheetTitle={pendingWeeklyTemplateId ? 'Edit weekly item' : 'Add to weekly list'}
         submitLabel={pendingWeeklyTemplateId ? 'Save weekly item' : 'Add to weekly list'}
@@ -2007,7 +2069,10 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-stone-900">Remove weekly item</h3>
                 <p className="truncate text-sm text-stone-600">
-                  {pendingDeleteWeeklyTemplate.item_name}
+                  {getWeeklyTemplateDisplayParts(pendingDeleteWeeklyTemplate).baseName}
+                  {getWeeklyTemplateDisplayParts(pendingDeleteWeeklyTemplate).detail
+                    ? ` · ${getWeeklyTemplateDisplayParts(pendingDeleteWeeklyTemplate).detail}`
+                    : ''}
                 </p>
               </div>
             </div>
@@ -2037,7 +2102,10 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
             <p className="text-sm text-stone-700">
               This will remove{' '}
               <span className="font-semibold text-stone-900">
-                {pendingDeleteWeeklyTemplate.item_name}
+                {getWeeklyTemplateDisplayParts(pendingDeleteWeeklyTemplate).baseName}
+                {getWeeklyTemplateDisplayParts(pendingDeleteWeeklyTemplate).detail
+                  ? ` · ${getWeeklyTemplateDisplayParts(pendingDeleteWeeklyTemplate).detail}`
+                  : ''}
               </span>{' '}
               from your weekly staples list.
             </p>
@@ -2124,7 +2192,10 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
                     className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800"
                   >
                     <Repeat2 size={13} />
-                    {template.item_name}
+                    {getWeeklyTemplateDisplayParts(template).baseName}
+                    {getWeeklyTemplateDisplayParts(template).detail
+                      ? ` · ${getWeeklyTemplateDisplayParts(template).detail}`
+                      : ''}
                   </span>
                 ))}
               </div>
@@ -2148,7 +2219,10 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-stone-900">Remove from shopping list</h3>
                 <p className="truncate text-sm text-stone-600">
-                  {pendingDeleteItem.food_item?.name || pendingDeleteItem.item_name || 'Unknown Item'}
+                  {getGroceryDisplayParts(pendingDeleteItem).baseName}
+                  {getGroceryDisplayParts(pendingDeleteItem).detail
+                    ? ` · ${getGroceryDisplayParts(pendingDeleteItem).detail}`
+                    : ''}
                 </p>
               </div>
             </div>
@@ -2179,7 +2253,10 @@ export function GroceryListWidget({ householdId, viewMode, onContentChange }: Gr
               <p className="text-sm text-stone-700">
                 This will remove{' '}
                 <span className="font-semibold text-stone-900">
-                  {pendingDeleteItem.food_item?.name || pendingDeleteItem.item_name || 'this item'}
+                  {getGroceryDisplayParts(pendingDeleteItem).baseName}
+                  {getGroceryDisplayParts(pendingDeleteItem).detail
+                    ? ` · ${getGroceryDisplayParts(pendingDeleteItem).detail}`
+                    : ''}
                 </span>{' '}
                 from your Shopping list.
               </p>
