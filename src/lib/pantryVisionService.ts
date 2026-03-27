@@ -2,8 +2,10 @@ import { supabase } from './supabase';
 import { addPantryItem } from './intelligentGrocery';
 import { getOrCreateFoodItem } from './foodItems';
 
-const MAX_IMAGE_DIMENSION = 1600;
-const JPEG_QUALITY = 0.82;
+const DESKTOP_MAX_IMAGE_DIMENSION = 1600;
+const MOBILE_MAX_IMAGE_DIMENSION = 1280;
+const DESKTOP_JPEG_QUALITY = 0.82;
+const MOBILE_JPEG_QUALITY = 0.72;
 
 export interface PantryVisionItem {
   id: string;
@@ -44,6 +46,30 @@ export interface PantryVisionAnalysisResult {
   model: string | null;
 }
 
+function isMobileMemoryConstrained() {
+  if (typeof window === 'undefined') return false;
+
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches;
+  const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+  return standalone || touchDevice || mobileUA || window.innerWidth < 768;
+}
+
+function getImageOptimizationSettings() {
+  if (isMobileMemoryConstrained()) {
+    return {
+      maxDimension: MOBILE_MAX_IMAGE_DIMENSION,
+      quality: MOBILE_JPEG_QUALITY,
+    };
+  }
+
+  return {
+    maxDimension: DESKTOP_MAX_IMAGE_DIMENSION,
+    quality: DESKTOP_JPEG_QUALITY,
+  };
+}
+
 async function callPantryVisionEndpoint(params: {
   accessToken: string;
   payload: {
@@ -67,8 +93,9 @@ async function callPantryVisionEndpoint(params: {
 }
 
 export async function fileToOptimizedDataUrl(file: File): Promise<string> {
+  const { maxDimension, quality } = getImageOptimizationSettings();
   const image = await loadImageFromFile(file);
-  const { width, height } = getScaledDimensions(image.width, image.height, MAX_IMAGE_DIMENSION);
+  const { width, height } = getScaledDimensions(image.width, image.height, maxDimension);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -78,23 +105,65 @@ export async function fileToOptimizedDataUrl(file: File): Promise<string> {
     throw new Error('Failed to prepare image for analysis');
   }
 
-  context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+  try {
+    context.drawImage(image as CanvasImageSource, 0, 0, width, height);
+    const optimizedBlob = await canvasToBlob(canvas, 'image/jpeg', quality);
+    return await blobToDataUrl(optimizedBlob);
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
+    if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) {
+      image.close();
+    }
+  }
 }
 
-function loadImageFromFile(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+function loadImageFromFile(file: File): Promise<ImageBitmap | HTMLImageElement> {
+  if (typeof createImageBitmap === 'function') {
+    return createImageBitmap(file).catch(() => loadImageElementFromFile(file));
+  }
 
-    reader.onerror = () => reject(new Error('Failed to read image file'));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error('Failed to decode image'));
-      image.onload = () => resolve(image);
-      image.src = reader.result as string;
+  return loadImageElementFromFile(file);
+}
+
+function loadImageElementFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to decode image'));
     };
 
-    reader.readAsDataURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Failed to compress image for analysis'));
+        return;
+      }
+
+      resolve(blob);
+    }, type, quality);
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to encode optimized image'));
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
   });
 }
 
