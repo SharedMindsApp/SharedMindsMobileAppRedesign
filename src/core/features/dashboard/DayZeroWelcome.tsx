@@ -14,18 +14,21 @@
 
 import { Play, Target, Zap, CheckCircle2, ArrowRight } from 'lucide-react';
 
-export function DayZeroWelcome({ onStart }: { onStart: () => void }) {
+export function DayZeroWelcome({ onStart, hint }: { onStart: () => void; hint?: string }) {
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-primary via-primary to-blue-600 p-5 text-white shadow-lg shadow-primary/20">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1.5">
+    <div className="relative rounded-2xl bg-gradient-to-br from-primary via-primary to-blue-600 p-5 text-white shadow-lg shadow-primary/20 overflow-hidden">
+      {/* Decorative ambient orb */}
+      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-cyan-300/10 blur-3xl pointer-events-none" />
+
+      <p className="text-[10px] font-bold uppercase tracking-widest text-white/70 mb-1.5 relative">
         Welcome
       </p>
-      <h2 className="text-xl font-extrabold leading-tight mb-1.5">
+      <h2 className="text-xl font-extrabold leading-tight mb-1.5 relative">
         Your first focus block is one click away.
       </h2>
-      <p className="text-sm text-white/85 leading-relaxed mb-4">
-        Declare the one thing you're finishing, show up alongside other founders,
-        and report back when it's done.
+      <p className="text-sm text-white/85 leading-relaxed mb-4 relative">
+        {hint ?? 'Declare the one thing you\'re finishing, show up alongside other founders, and report back when it\'s done.'}
       </p>
 
       {/* The loop, compact */}

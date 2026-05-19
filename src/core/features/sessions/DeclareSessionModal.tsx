@@ -44,9 +44,11 @@ interface Props {
   forceSoloMode?: boolean;
   /** Pre-selects a project to pin the session to. */
   initialProjectId?: string;
+  /** Pre-selects duration (25 / 50 / 90). Used by Quick Start templates. */
+  initialDuration?: 25 | 50 | 90;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration }: Props) {
   const navigate = useNavigate();
   const { state: { tasks, projects, activeProjectId } } = useCoreData();
   const { setActiveSession } = useFocusSession();
@@ -56,7 +58,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [tab, setTab] = useState<GoalTab>(initialGoal ? 'type' : 'pick');
   const [selectedTask, setSelectedTask] = useState<CoreTask | null>(null);
   const [goalText, setGoalText] = useState(initialGoal ?? '');
-  const [duration, setDuration] = useState<DurationOption>(50);
+  const [duration, setDuration] = useState<DurationOption>(initialDuration ?? 50);
   const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
     forceSoloMode ? 'solo' : 'group'
   );

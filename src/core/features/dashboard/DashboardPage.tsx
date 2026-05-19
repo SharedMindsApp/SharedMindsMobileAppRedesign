@@ -40,6 +40,12 @@ import { SmartNextCard } from './SmartNextCard';
 import { CommunityPulseCard } from './CommunityPulseCard';
 import { DailyIntentionCard } from './DailyIntentionCard';
 import { DayZeroWelcome } from './DayZeroWelcome';
+import { QuickStartTemplates } from './QuickStartTemplates';
+import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
+import { RecentFinishesCarousel } from './RecentFinishesCarousel';
+import { OnboardingChecklist } from './OnboardingChecklist';
+import { FoundingMemberBadge } from './FoundingMemberBadge';
+import { fetchConnections } from '../../services/ConnectionService';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
 
@@ -50,6 +56,16 @@ function greeting(): string {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+/** Time-of-day flavour line, used to season the welcome hero. */
+function timeOfDayHint(): string {
+  const h = new Date().getHours();
+  if (h < 11)  return 'Mornings are your best window for deep work. Block it out before the inbox does.';
+  if (h < 14)  return 'Midday is perfect for one 25-min focus chunk. Pick the next obvious thing.';
+  if (h < 18)  return 'Afternoon slump? A 25-min focus block beats another coffee.';
+  if (h < 21)  return 'Evenings are quiet — perfect for a wind-down focus block to close the day.';
+  return 'Late session? Pick something small you’ll actually finish.';
 }
 
 function formatTimeAgo(iso: string | null): string {
@@ -314,6 +330,7 @@ export function DashboardPage() {
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
   const [myShips, setMyShips] = useState<ShippedSession[]>([]);
   const [upcomingScheduled, setUpcomingScheduled] = useState<ScheduledSessionWithProfile[]>([]);
+  const [connectionsCount, setConnectionsCount] = useState(0);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -321,6 +338,7 @@ export function DashboardPage() {
     fetchWeekSessions(user.id).then(setWeekSessions).catch(() => {});
     fetchRecentShippedSessions(user.id).then((s) => setMyShips(s.slice(0, 3))).catch(() => {});
     fetchUpcomingScheduledSessions().then(setUpcomingScheduled).catch(() => {});
+    fetchConnections().then((rows) => setConnectionsCount(rows.length)).catch(() => {});
   }, [user?.id]);
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
@@ -330,6 +348,14 @@ export function DashboardPage() {
 
   function openDeclare(initialGoal?: string) {
     setDeclareGoal(initialGoal);
+    setShowDeclare(true);
+  }
+
+  // Quick-start templates pre-fill goal AND duration
+  const [templateDuration, setTemplateDuration] = useState<25 | 50 | 90 | undefined>(undefined);
+  function openDeclareWithTemplate(goal: string, duration: 25 | 50 | 90) {
+    setDeclareGoal(goal);
+    setTemplateDuration(duration);
     setShowDeclare(true);
   }
 
@@ -343,48 +369,66 @@ export function DashboardPage() {
           {firstName} 👋
         </h1>
 
-        {/* Momentum row — only when there's something to show */}
-        {(workTypeLabel || (stats && stats.totalSessions > 0)) && (
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            {workTypeLabel && (
-              <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
-                {workTypeLabel}
-              </span>
-            )}
-            {stats && stats.currentStreak > 0 && (
-              <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                <Flame size={11} /> {stats.currentStreak} day streak
-              </span>
-            )}
-            {stats && stats.totalSessions > 0 && (
-              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-                {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
-              </span>
-            )}
-            {stats && stats.completionRate > 0 && (
-              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-                {stats.completionRate}% finish rate
-              </span>
-            )}
-          </div>
-        )}
+        {/* Identity + momentum row */}
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <FoundingMemberBadge createdAt={(profile as any)?.created_at} />
+          {workTypeLabel && (
+            <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
+              {workTypeLabel}
+            </span>
+          )}
+          {stats && stats.currentStreak > 0 && (
+            <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+              <Flame size={11} /> {stats.currentStreak} day streak
+            </span>
+          )}
+          {stats && stats.totalSessions > 0 && (
+            <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
+              {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
+            </span>
+          )}
+          {stats && stats.completionRate > 0 && (
+            <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
+              {stats.completionRate}% finish rate
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Day-0 vs Returning split ─────────────────────────── */}
       {isDayZero ? (
         <>
-          {/* Community first — the room being alive is the strongest hook */}
+          {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
+          <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
+
+          {/* 2. Quick-start templates — kills blank-page paralysis */}
+          <QuickStartTemplates onPick={openDeclareWithTemplate} />
+
+          {/* 3. Community pulse — the room is alive (or "be the first") */}
           <CommunityPulseCard
             sessions={liveSessions}
             excludeSessionId={activeSession?.id}
             onStart={() => openDeclare()}
           />
-          <DayZeroWelcome onStart={() => openDeclare()} />
+
+          {/* 4. Upcoming sessions on the calendar */}
+          <UpcomingPublicSessionsStrip
+            sessions={upcomingScheduled}
+            myUserId={user?.id}
+          />
+
+          {/* 5. Founders finished today — community proof */}
+          <RecentFinishesCarousel excludeUserId={user?.id} />
+
+          {/* 6. Onboarding checklist */}
+          <OnboardingChecklist stats={stats} connectionsCount={connectionsCount} />
+
+          {/* 7. Daily intention */}
           <DailyIntentionCard />
         </>
       ) : (
         <>
-          {/* Smart next move (handles active session as its own state) */}
+          {/* 1. Smart next move */}
           <SmartNextCard
             liveSessions={liveSessions}
             upcomingScheduled={upcomingScheduled}
@@ -393,17 +437,29 @@ export function DashboardPage() {
             onSchedule={() => setShowSchedule(true)}
           />
 
-          {/* Today's intention */}
+          {/* 2. Quick-start templates — still valuable for returning users */}
+          <QuickStartTemplates onPick={openDeclareWithTemplate} />
+
+          {/* 3. Today's intention */}
           <DailyIntentionCard />
 
-          {/* Community pulse */}
+          {/* 4. Community pulse */}
           <CommunityPulseCard
             sessions={liveSessions}
             excludeSessionId={activeSession?.id}
             onStart={() => openDeclare()}
           />
 
-          {/* Projects */}
+          {/* 5. Upcoming calendar slots */}
+          <UpcomingPublicSessionsStrip
+            sessions={upcomingScheduled}
+            myUserId={user?.id}
+          />
+
+          {/* 6. Founders finished today — fresh social proof every visit */}
+          <RecentFinishesCarousel excludeUserId={user?.id} />
+
+          {/* 7. Projects */}
           <ProjectsMiniGrid
             projects={projects}
             tasks={tasks}
@@ -411,18 +467,21 @@ export function DashboardPage() {
             onPin={setActiveProject}
           />
 
-          {/* Week strip — only when we have data */}
+          {/* 8. Onboarding checklist — auto-hides once complete */}
+          <OnboardingChecklist stats={stats} connectionsCount={connectionsCount} />
+
+          {/* 9. Week strip — only when we have data */}
           {hasWeekData && (
             <SurfaceCard>
               <WeekStrip weekSessions={weekSessions} />
             </SurfaceCard>
           )}
 
-          {/* Recent finishes */}
+          {/* 10. Recent finishes */}
           {myShips.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Recent finishes</p>
+                <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Your recent finishes</p>
                 <button
                   type="button"
                   onClick={() => navigate('/profile')}
@@ -444,8 +503,9 @@ export function DashboardPage() {
       {/* Modals */}
       {showDeclare && (
         <DeclareSessionModal
-          onClose={() => { setShowDeclare(false); setDeclareGoal(undefined); }}
+          onClose={() => { setShowDeclare(false); setDeclareGoal(undefined); setTemplateDuration(undefined); }}
           initialGoal={declareGoal}
+          initialDuration={templateDuration}
         />
       )}
       {showSchedule && <ScheduleSessionModal onClose={() => setShowSchedule(false)} />}
