@@ -45,6 +45,8 @@ import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { FoundingMemberBadge } from './FoundingMemberBadge';
+import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
+import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
 import { fetchConnections } from '../../services/ConnectionService';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
@@ -395,11 +397,17 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* ── Weekly review prompt — only Sun 18:00 → Mon 23:59 ── */}
+      <WeeklyReviewPromptCard />
+
       {/* ── Day-0 vs Returning split ─────────────────────────── */}
       {isDayZero ? (
         <>
           {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
           <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
+
+          {/* 1b. Weekly intentions — set the three things for this week */}
+          <WeeklyIntentionsCard />
 
           {/* 2. Quick-start templates — kills blank-page paralysis */}
           <QuickStartTemplates onPick={openDeclareWithTemplate} />
@@ -439,6 +447,9 @@ export function DashboardPage() {
 
           {/* 2. Quick-start templates — still valuable for returning users */}
           <QuickStartTemplates onPick={openDeclareWithTemplate} />
+
+          {/* 2b. Weekly intentions */}
+          <WeeklyIntentionsCard />
 
           {/* 3. Today's intention */}
           <DailyIntentionCard />

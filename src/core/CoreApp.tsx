@@ -14,6 +14,7 @@ import { TasksPage } from './features/tasks/TasksPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { ProjectDetailPage } from './features/projects/ProjectDetailPage';
 import { AcceptInvitePage } from './features/projects/AcceptInvitePage';
+import { ReflectionPage } from './features/reflection/ReflectionPage';
 // CalendarPage was removed — /sessions is now the calendar surface.
 import { PantryPage } from './features/pantry/PantryPage';
 import { JournalPage } from './features/journal/JournalPage';
@@ -129,6 +130,7 @@ function AppContent() {
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="invite/:token" element={<AcceptInvitePage />} />
+            <Route path="reflection" element={<ReflectionPage />} />
             <Route path="calendar" element={<Navigate to="/sessions" replace />} />
             <Route
               path="pantry/*"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe } from 'lucide-react';
+import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles } from 'lucide-react';
 import { ToastContainer, useToasts } from './Toast';
 import { getUserHousehold, Household } from '../lib/household';
 import { signOut } from '../lib/auth';
@@ -373,7 +373,21 @@ export function Layout({ children }: LayoutProps) {
 
                               <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
 
-                              {/* ── Settings (always present, pinned at top) ── */}
+                              {/* ── Weekly review (pinned, ritual entry point) ── */}
+                              <button
+                                type="button"
+                                onClick={() => { setShowMoreMenu(false); navigate('/reflection'); }}
+                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
+                                  isTabActive('/reflection')
+                                    ? (isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50')
+                                    : (isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50')
+                                }`}
+                              >
+                                <Sparkles size={15} />
+                                Weekly review
+                              </button>
+
+                              {/* ── Settings (pinned) ── */}
                               <button
                                 type="button"
                                 onClick={() => { setShowMoreMenu(false); navigate('/settings'); }}
