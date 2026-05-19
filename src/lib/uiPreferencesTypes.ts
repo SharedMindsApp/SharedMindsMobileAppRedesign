@@ -92,6 +92,7 @@ export type NavigationTabId =
   | 'pantry'
   | 'journal'
   | 'connections'
+  | 'community'
   | 'people'
   | 'messages'
   | 'profile'
@@ -116,6 +117,7 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'pantry', label: 'Pantry', path: '/pantry', icon: 'Package', requiresAdmin: true },
   { id: 'journal', label: 'Journal', path: '/journal', icon: 'BookOpen', requiresAdmin: true },
   { id: 'connections', label: 'Connections', path: '/connections', icon: 'Link2' },
+  { id: 'community', label: 'Community', path: '/community', icon: 'MessageSquare' },
   { id: 'people', label: 'People', path: '/people', icon: 'Users' },
   { id: 'messages', label: 'Messages', path: '/messages', icon: 'MessageCircle' },
   { id: 'profile', label: 'Profile', path: '/profile', icon: 'UserRound' },
@@ -125,6 +127,7 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
 export const DEFAULT_FAVOURITE_NAV_TABS: NavigationTabId[] = [
   'home',
   'sessions',
+  'community',
   'people',
   'messages',
 ];

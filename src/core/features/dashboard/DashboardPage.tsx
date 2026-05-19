@@ -47,6 +47,7 @@ import { OnboardingChecklist } from './OnboardingChecklist';
 import { FoundingMemberBadge } from './FoundingMemberBadge';
 import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
+import { CommunityFeedStrip } from './CommunityFeedStrip';
 import { fetchConnections } from '../../services/ConnectionService';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
@@ -425,6 +426,9 @@ export function DashboardPage() {
             myUserId={user?.id}
           />
 
+          {/* 4b. Community feed teaser */}
+          <CommunityFeedStrip />
+
           {/* 5. Founders finished today — community proof */}
           <RecentFinishesCarousel excludeUserId={user?.id} />
 
@@ -466,6 +470,9 @@ export function DashboardPage() {
             sessions={upcomingScheduled}
             myUserId={user?.id}
           />
+
+          {/* 5b. Community feed teaser */}
+          <CommunityFeedStrip />
 
           {/* 6. Founders finished today — fresh social proof every visit */}
           <RecentFinishesCarousel excludeUserId={user?.id} />
