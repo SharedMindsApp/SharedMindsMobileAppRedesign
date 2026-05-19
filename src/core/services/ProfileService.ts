@@ -47,6 +47,10 @@ export async function listMembers(): Promise<PublicProfile[]> {
     .select('id, display_name, bio, avatar_url, work_type, work_types, skills, location, country_code, city, created_at')
     .neq('id', user.id)
     .not('display_name', 'is', null)
+    // Privacy: anyone who flipped the "hide me" toggle is excluded.
+    // Their profile is still viewable by direct URL — this just keeps
+    // them off browse/discover surfaces.
+    .eq('is_hidden_from_directory', false)
     .order('created_at', { ascending: false })
     .limit(200);
 

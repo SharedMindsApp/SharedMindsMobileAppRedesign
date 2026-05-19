@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserRound, ChevronRight, Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera, AlertCircle } from 'lucide-react';
+import { UserRound, ChevronRight, Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
 import { SurfaceCard } from '../../ui/CorePage';
@@ -391,6 +391,21 @@ export function SettingsPage() {
         )}
       </button>
 
+      {/* ── Privacy ───────────────────────────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Privacy</p>
+        <PrivacyToggle
+          hidden={!!profile?.is_hidden_from_directory}
+          onChange={async (next) => {
+            if (!user) return;
+            await supabase.from('profiles')
+              .update({ is_hidden_from_directory: next, updated_at: new Date().toISOString() })
+              .eq('id', user.id);
+            await refreshProfile();
+          }}
+        />
+      </SurfaceCard>
+
       {/* ── Account ───────────────────────────────────────── */}
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Account</p>
@@ -412,5 +427,71 @@ export function SettingsPage() {
       </SurfaceCard>
 
     </div>
+  );
+}
+
+/* ── PrivacyToggle ──────────────────────────────────────────────
+   Switches the directory-visibility flag with an optimistic update.
+   The backing column is profiles.is_hidden_from_directory. */
+function PrivacyToggle({
+  hidden,
+  onChange,
+}: {
+  hidden: boolean;
+  onChange: (next: boolean) => Promise<void>;
+}) {
+  const [local, setLocal] = useState(hidden);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setLocal(hidden); }, [hidden]);
+
+  async function toggle() {
+    if (saving) return;
+    const next = !local;
+    setLocal(next); // optimistic
+    setSaving(true);
+    try {
+      await onChange(next);
+    } catch {
+      setLocal(!next); // revert
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
+        local
+          ? 'bg-amber-50 ring-1 ring-amber-200/60'
+          : 'bg-surface-container-low hover:bg-surface-container'
+      }`}
+    >
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+        local ? 'bg-amber-500 text-white' : 'bg-white stitch-text-secondary'
+      }`}>
+        {saving ? <Loader2 size={15} className="animate-spin" /> : local ? <EyeOff size={15} /> : <Eye size={15} />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold stitch-text-primary leading-tight">
+          Hide my profile from the directory
+          {local && <span className="ml-2 text-amber-700">· on</span>}
+        </p>
+        <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+          {local
+            ? "You won't show up in /people or Suggested. Your profile is still visible to anyone with a direct link — connections, DM partners, and people who've joined a session with you."
+            : 'You appear in the members directory and suggested-connections lists.'}
+        </p>
+      </div>
+      <div className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
+        local ? 'bg-amber-500' : 'bg-surface-container'
+      }`}>
+        <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
+          local ? 'translate-x-4' : 'translate-x-0'
+        }`} />
+      </div>
+    </button>
   );
 }

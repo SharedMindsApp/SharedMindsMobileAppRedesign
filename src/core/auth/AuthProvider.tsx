@@ -23,6 +23,7 @@ export interface Profile {
     location?: string | null;
     country_code?: string | null;
     city?: string | null;
+    is_hidden_from_directory?: boolean;
     created_at: string;
     updated_at: string;
 }
