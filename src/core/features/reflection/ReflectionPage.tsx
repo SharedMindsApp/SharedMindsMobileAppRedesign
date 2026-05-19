@@ -22,6 +22,7 @@ import {
 } from '../../services/ReflectionService';
 import { useCoreData } from '../../data/CoreDataContext';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
+import { IntentionWizard } from './IntentionWizard';
 import { PageGreeting, SurfaceCard, GradientButton, InputWell } from '../../ui/CorePage';
 
 type Tab = 'this' | 'last' | 'history';
@@ -42,6 +43,7 @@ export function ReflectionPage() {
   const [history, setHistory] = useState<ReflectionWithIntentions[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   const thisMonday = useMemo(() => mondayOf(), []);
   const lastMonday = useMemo(() => mondayPlusWeeks(-1), []);
@@ -85,11 +87,18 @@ export function ReflectionPage() {
         greeting="Weekly Review"
         subtitle="Three intentions. Tick them off, reflect, and pick three more. ADHD-friendly — no more."
         actions={
-          <GradientButton size="sm" variant="secondary" onClick={() => setShowReviewModal(true)}>
-            <span className="inline-flex items-center gap-1.5">
-              <UserPlus size={13} /> Review with someone
-            </span>
-          </GradientButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <GradientButton size="sm" onClick={() => setShowWizard(true)}>
+              <span className="inline-flex items-center gap-1.5">
+                <Sparkles size={13} /> Guided wizard
+              </span>
+            </GradientButton>
+            <GradientButton size="sm" variant="secondary" onClick={() => setShowReviewModal(true)}>
+              <span className="inline-flex items-center gap-1.5">
+                <UserPlus size={13} /> Review with someone
+              </span>
+            </GradientButton>
+          </div>
         }
       />
 
@@ -145,6 +154,14 @@ export function ReflectionPage() {
           onClose={() => setShowReviewModal(false)}
           initialGoal="Weekly review together"
           initialDuration={50}
+        />
+      )}
+
+      {showWizard && (
+        <IntentionWizard
+          weekStart={thisMonday}
+          onClose={() => setShowWizard(false)}
+          onComplete={reloadAll}
         />
       )}
     </div>
