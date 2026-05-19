@@ -83,14 +83,17 @@ export type WidgetTypeId =
 export type WidgetColorPreferences = Record<WidgetTypeId, WidgetColorToken>;
 
 export type NavigationTabId =
-  | 'today'
+  | 'home'
+  | 'sessions'
+  | 'progress'
   | 'tasks'
-  | 'check-ins'
   | 'projects'
   | 'calendar'
   | 'pantry'
   | 'journal'
   | 'reports'
+  | 'connections'
+  | 'profile'
   | 'settings';
 
 export interface NavigationTab {
@@ -103,23 +106,24 @@ export interface NavigationTab {
 }
 
 export const ALL_NAVIGATION_TABS: NavigationTab[] = [
-  { id: 'today', label: 'Today', path: '/today', icon: 'Brain' },
+  { id: 'home', label: 'Home', path: '/home', icon: 'Home' },
+  { id: 'sessions', label: 'Sessions', path: '/sessions', icon: 'Users' },
+  { id: 'progress', label: 'Progress', path: '/progress', icon: 'TrendingUp' },
   { id: 'tasks', label: 'Tasks', path: '/tasks', icon: 'Target' },
-  { id: 'check-ins', label: 'Check-Ins', path: '/check-ins', icon: 'MessageCircle' },
   { id: 'projects', label: 'Projects', path: '/projects', icon: 'Zap' },
   { id: 'calendar', label: 'Calendar', path: '/calendar', icon: 'Calendar' },
-  { id: 'pantry', label: 'Pantry', path: '/pantry', icon: 'Package', requiresPantryAccess: true },
-  { id: 'journal', label: 'Journal', path: '/journal', icon: 'BookOpen' },
-  { id: 'reports', label: 'Reports', path: '/reports', icon: 'FileText' },
+  { id: 'pantry', label: 'Pantry', path: '/pantry', icon: 'Package', requiresAdmin: true },
+  { id: 'journal', label: 'Journal', path: '/journal', icon: 'BookOpen', requiresAdmin: true },
+  { id: 'reports', label: 'Reports', path: '/reports', icon: 'FileText', requiresAdmin: true },
+  { id: 'connections', label: 'Connections', path: '/connections', icon: 'Link2' },
+  { id: 'profile', label: 'Profile', path: '/profile', icon: 'UserRound' },
   { id: 'settings', label: 'Settings', path: '/settings', icon: 'Settings' },
 ];
 
 export const DEFAULT_FAVOURITE_NAV_TABS: NavigationTabId[] = [
-  'today',
-  'tasks',
-  'check-ins',
-  'projects',
-  'calendar',
+  'home',
+  'sessions',
+  'connections',
 ];
 
 export interface UIPreferencesConfig {

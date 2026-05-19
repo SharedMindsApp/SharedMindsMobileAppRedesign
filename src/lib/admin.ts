@@ -82,45 +82,75 @@ export async function getUsers(params?: {
   limit?: number;
   offset?: number;
 }) {
-  const queryParams = new URLSearchParams();
-  if (params?.search) queryParams.append('search', params.search);
-  if (params?.role) queryParams.append('role', params.role);
-  if (params?.limit) queryParams.append('limit', params.limit.toString());
-  if (params?.offset) queryParams.append('offset', params.offset.toString());
+  let query = supabase
+    .from('profiles')
+    .select('id, display_name, role, created_at, updated_at')
+    .order('created_at', { ascending: false })
+    .limit(params?.limit ?? 50)
+    .range(params?.offset ?? 0, (params?.offset ?? 0) + (params?.limit ?? 50) - 1);
 
-  const query = queryParams.toString();
-  return adminFetch(`admin-get-users${query ? `?${query}` : ''}`);
+  if (params?.search) {
+    query = query.ilike('display_name', `%${params.search}%`);
+  }
+  if (params?.role) {
+    query = query.eq('role', params.role);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return { users: data ?? [], total: data?.length ?? 0 };
 }
 
 export async function updateUserRole(
   targetUserId: string,
   newRole: 'free' | 'premium' | 'admin',
-  memberLimit?: number
 ) {
-  return adminFetch('admin-update-user-role', {
-    method: 'POST',
-    body: JSON.stringify({
-      target_user_id: targetUserId,
-      new_role: newRole,
-      member_limit: memberLimit,
-    }),
-  });
+  const { error } = await supabase
+    .from('profiles')
+    .update({ role: newRole, updated_at: new Date().toISOString() })
+    .eq('id', targetUserId);
+  if (error) throw error;
+  return { success: true };
 }
 
-export async function getHouseholds(params?: {
-  limit?: number;
-  offset?: number;
-}) {
-  const queryParams = new URLSearchParams();
-  if (params?.limit) queryParams.append('limit', params.limit.toString());
-  if (params?.offset) queryParams.append('offset', params.offset.toString());
-
-  const query = queryParams.toString();
-  return adminFetch(`admin-get-households${query ? `?${query}` : ''}`);
+export async function getHouseholds() {
+  // Households are not used in SharedMinds — return empty
+  return { households: [], total: 0 };
 }
 
 export async function getAnalytics() {
-  return adminFetch('admin-get-analytics');
+  const [profilesRes, sessionsRes, connectionsRes] = await Promise.all([
+    supabase.from('profiles').select('role'),
+    supabase.from('focus_sessions').select('status, session_outcome, created_at'),
+    supabase.from('connections').select('status'),
+  ]);
+
+  const profiles = profilesRes.data ?? [];
+  const sessions = sessionsRes.data ?? [];
+  const connections = connectionsRes.data ?? [];
+
+  const summary = {
+    totalUsers: profiles.length,
+    freeUsers: profiles.filter((p) => !p.role || p.role === 'free').length,
+    premiumUsers: profiles.filter((p) => p.role === 'premium').length,
+    adminUsers: profiles.filter((p) => p.role === 'admin').length,
+    totalHouseholds: 0,
+    totalReports: 0,
+  };
+
+  // Sessions by outcome as "events"
+  const outcomeCounts: Record<string, number> = {
+    'sessions_total': sessions.length,
+    'sessions_active': sessions.filter((s) => s.status === 'active').length,
+    'sessions_completed': sessions.filter((s) => s.status === 'completed').length,
+    'outcome_finished': sessions.filter((s) => s.session_outcome === 'finished').length,
+    'outcome_partially': sessions.filter((s) => s.session_outcome === 'partially').length,
+    'outcome_something_came_up': sessions.filter((s) => s.session_outcome === 'something_came_up').length,
+    'connections_total': connections.length,
+    'connections_accepted': connections.filter((c) => c.status === 'accepted').length,
+  };
+
+  return { summary, eventsByType: outcomeCounts };
 }
 
 export async function getLogs(params?: {
@@ -128,13 +158,22 @@ export async function getLogs(params?: {
   limit?: number;
   offset?: number;
 }) {
-  const queryParams = new URLSearchParams();
-  if (params?.action_type) queryParams.append('action_type', params.action_type);
-  if (params?.limit) queryParams.append('limit', params.limit.toString());
-  if (params?.offset) queryParams.append('offset', params.offset.toString());
+  // Admin logs table may not exist in SharedMinds — return empty gracefully
+  try {
+    let query = supabase
+      .from('admin_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(params?.limit ?? 50);
 
-  const query = queryParams.toString();
-  return adminFetch(`admin-get-logs${query ? `?${query}` : ''}`);
+    if (params?.action_type) query = query.eq('action_type', params.action_type);
+
+    const { data, error } = await query;
+    if (error) return { logs: [], total: 0 };
+    return { logs: data ?? [], total: data?.length ?? 0 };
+  } catch {
+    return { logs: [], total: 0 };
+  }
 }
 
 export async function updateUserNeurotype(

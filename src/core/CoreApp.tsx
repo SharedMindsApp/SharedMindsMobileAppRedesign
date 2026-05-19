@@ -1,9 +1,16 @@
 import { BrowserRouter, Navigate, Route, Routes, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { CoreDataProvider } from './data/CoreDataContext';
-import { TodayPage } from './features/today/TodayPage';
+import { SessionsPage } from './features/sessions/SessionsPage';
+import { DashboardPage } from './features/dashboard/DashboardPage';
+import { ActiveSessionPage } from './features/sessions/ActiveSessionPage';
+import { JoinSessionPage } from './features/sessions/JoinSessionPage';
+import { SessionSummaryPage } from '../components/guardrails/focus/SessionSummaryPage';
+import { ConnectionsPage } from './features/connections/ConnectionsPage';
+import { ProfilePage } from './features/profile/ProfilePage';
+import { OnboardingModal } from './features/onboarding/OnboardingModal';
+import { ProgressPage } from './features/progress/ProgressPage';
 import { TasksPage } from './features/tasks/TasksPage';
-import { CheckInsPage } from './features/checkins/CheckInsPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { CalendarPage } from './features/calendar/CalendarPage';
 import { PantryPage } from './features/pantry/PantryPage';
@@ -11,14 +18,24 @@ import { JournalPage } from './features/journal/JournalPage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
+import { AuthProvider as LegacyAuthProvider } from '../contexts/AuthContext';
 import { AuthPage } from './auth/AuthPage';
 import { Layout } from '../components/Layout';
+import { AdminDashboard } from '../components/admin/AdminDashboard';
+import { AdminUsers } from '../components/admin/AdminUsers';
+import { AdminAnalytics } from '../components/admin/AdminAnalytics';
+import { AdminLogs } from '../components/admin/AdminLogs';
+import { AdminSettings } from '../components/admin/AdminSettings';
+import { AdminReports } from '../components/admin/AdminReports';
+import { AdminAIProvidersPage } from '../components/admin/AdminAIProvidersPage';
+import { AdminAIRoutingPage } from '../components/admin/AdminAIRoutingPage';
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
 import { ViewAsProvider } from '../contexts/ViewAsContext';
 import { ActiveDataProvider } from '../contexts/ActiveDataContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ActiveProjectProvider } from '../contexts/ActiveProjectContext';
 import { RegulationProvider } from '../contexts/RegulationContext';
+import { FocusSessionProvider } from '../contexts/FocusSessionContext';
 
 const LAST_ROUTE_STORAGE_KEY = 'sharedminds:last-core-route';
 const ROUTE_RESTORE_WINDOW_MS = 3000; // Allow restoration within 3s of mount
@@ -38,8 +55,12 @@ function RoutePersistence() {
     const currentRoute = `${location.pathname}${location.search}${location.hash}`;
     const isGenericEntryRoute =
       location.pathname === '/' ||
+      location.pathname === '/home' ||
       location.pathname === '/dashboard' ||
-      location.pathname === '/today';
+      location.pathname === '/today' ||
+      location.pathname === '/progress' ||
+      location.pathname === '/sessions' ||
+      location.pathname.startsWith('/join/');
 
     // Attempt to restore a stored route if we've landed on a generic page
     // within a short window after mount (handles auth redirects on refresh)
@@ -68,7 +89,7 @@ function RoutePersistence() {
 }
 
 function AppContent() {
-  const { user, loading, profileReady, canAccessPantry } = useAuth();
+  const { user, loading, profileReady, isAdmin, profile, refreshProfile } = useAuth();
 
   if (loading) {
     return (
@@ -82,37 +103,75 @@ function AppContent() {
     return <AuthPage />;
   }
 
+  // Show onboarding for new users once profile is loaded
+  if (profileReady && profile && profile.onboarding_completed === false) {
+    return <OnboardingModal onComplete={refreshProfile} />;
+  }
+
   return (
     <CoreDataProvider>
       <BrowserRouter>
         <RoutePersistence />
         <Routes>
           <Route path="/" element={<Layout><Outlet /></Layout>}>
-            <Route index element={<Navigate to="/today" replace />} />
-            <Route path="dashboard" element={<Navigate to="/today" replace />} />
-            <Route path="today" element={<TodayPage />} />
+            <Route index element={<Navigate to="/home" replace />} />
+            <Route path="dashboard" element={<Navigate to="/home" replace />} />
+            <Route path="home" element={<DashboardPage />} />
+            <Route path="sessions" element={<SessionsPage />} />
+            <Route path="session/:sessionId" element={<ActiveSessionPage />} />
+            <Route path="session/:sessionId/summary" element={<SessionSummaryPage />} />
+            <Route path="join/:joinCode" element={<JoinSessionPage />} />
+            <Route path="connections" element={<ConnectionsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="profile/:userId" element={<ProfilePage />} />
+            <Route path="progress" element={<ProgressPage />} />
+            <Route path="today" element={<Navigate to="/progress" replace />} />
+            <Route path="check-ins" element={<Navigate to="/home" replace />} />
             <Route path="tasks" element={<TasksPage />} />
-            <Route path="check-ins" element={<CheckInsPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route
               path="pantry/*"
               element={
-                // Don't redirect until the profile has actually loaded —
-                // otherwise the background fetchProfile race causes a premature
-                // redirect to /today before canAccessPantry is known.
                 !profileReady
                   ? null
-                  : canAccessPantry
+                  : isAdmin
                   ? <PantryPage />
-                  : <Navigate to="/today" replace />
+                  : <Navigate to="/sessions" replace />
               }
             />
-            <Route path="journal" element={<JournalPage />} />
+            <Route
+              path="journal"
+              element={
+                !profileReady
+                  ? null
+                  : isAdmin
+                  ? <JournalPage />
+                  : <Navigate to="/sessions" replace />
+              }
+            />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/today" replace />} />
+            <Route path="*" element={<Navigate to="/sessions" replace />} />
           </Route>
+
+          {/* Admin section — uses its own AdminLayout, wrapped in legacy auth context */}
+          <Route path="admin/*" element={
+            !profileReady ? null : isAdmin ? (
+              <LegacyAuthProvider>
+                <Routes>
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="analytics" element={<AdminAnalytics />} />
+                  <Route path="logs" element={<AdminLogs />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                  <Route path="reports" element={<AdminReports />} />
+                  <Route path="ai-providers" element={<AdminAIProvidersPage />} />
+                  <Route path="ai-routing" element={<AdminAIRoutingPage />} />
+                </Routes>
+              </LegacyAuthProvider>
+            ) : <Navigate to="/sessions" replace />
+          } />
         </Routes>
       </BrowserRouter>
     </CoreDataProvider>
@@ -128,7 +187,9 @@ export default function CoreApp() {
             <UIPreferencesProvider>
               <ActiveProjectProvider>
                 <RegulationProvider>
-                  <AppContent />
+                  <FocusSessionProvider>
+                    <AppContent />
+                  </FocusSessionProvider>
                 </RegulationProvider>
               </ActiveProjectProvider>
             </UIPreferencesProvider>

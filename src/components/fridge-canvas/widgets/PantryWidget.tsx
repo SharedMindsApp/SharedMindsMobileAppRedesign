@@ -25,7 +25,7 @@ import {
   PANTRY_ITEM_TYPES,
 } from '../../../lib/intelligentGrocery';
 import { FoodPicker } from '../../shared/FoodPicker';
-import { getFoodItemNames, type FoodItem } from '../../../lib/foodItems';
+import { getFoodItemNames, getOrCreateFoodItem, type FoodItem } from '../../../lib/foodItems';
 import { getPantryBasedRecipeSuggestions } from '../../../lib/foodIntelligence';
 import { getMealLibrary, getWeekStartDate } from '../../../lib/mealPlanner';
 import { showToast } from '../../Toast';
@@ -49,9 +49,11 @@ import { PantryLocationSelector } from '../../shared/PantryLocationSelector';
 import { PantryLocationManager } from '../../shared/PantryLocationManager';
 import { PantrySettingsSheet } from '../../shared/PantrySettingsSheet';
 import { PantryPriceEstimateSheet } from '../../shared/PantryPriceEstimateSheet';
+import { PantryQuantityRepairSheet } from '../../shared/PantryQuantityRepairSheet';
 import { BottomSheet } from '../../shared/BottomSheet';
 import { getPantrySpaceSettings, updatePantrySpaceSettings } from '../../../lib/pantrySettings';
 import { estimateMissingPantryPrices, getMissingPricePantryItems, type PantryPriceEstimateSuggestion } from '../../../lib/pantryPriceEstimator';
+import { getPantryQuantityRepairSuggestions } from '../../../lib/pantryQuantityRepair';
 
 interface PantryWidgetProps {
   householdId: string;
@@ -102,6 +104,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   const [priceEstimateModel, setPriceEstimateModel] = useState<string | null>(null);
   const [priceEstimateCurrencyCode, setPriceEstimateCurrencyCode] = useState<string | null>(null);
   const [priceEstimateItemIds, setPriceEstimateItemIds] = useState<string[]>([]);
+  const [showQuantityRepairSheet, setShowQuantityRepairSheet] = useState(false);
+  const [quantityRepairSaving, setQuantityRepairSaving] = useState(false);
   const [locationsExpanded, setLocationsExpanded] = useState(false);
   const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
 
@@ -185,6 +189,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
   // Edit state
   const [editingItem, setEditingItem] = useState<PantryItem | null>(null);
   const [editForm, setEditForm] = useState({
+    itemName: '',
     location: '',
     quantityValue: '',
     quantityUnit: '',
@@ -758,9 +763,10 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
       }
     }
     setEditForm({
+      itemName: item.food_item?.name || item.item_name || '',
       location: item.location_id || '',
       quantityValue: item.quantity_value || '',
-      quantityUnit: item.quantity_unit || 'g',
+      quantityUnit: item.quantity_unit || item.unit || '',
       itemDetail: item.item_detail || '',
       weightValue,
       weightUnit,
@@ -797,8 +803,20 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         editForm.quantityValue.trim(),
         editForm.quantityUnit.trim()
       );
+      const normalizedItemName = editForm.itemName.trim();
+
+      if (!normalizedItemName) {
+        throw new Error('Please enter an item name');
+      }
+
+      const resolvedFoodItem = await getOrCreateFoodItem(
+        normalizedItemName,
+        editingItem.category || editingItem.food_item?.category || undefined
+      );
 
       await updatePantryItem(editingItem.id, {
+        food_item_id: resolvedFoodItem.id,
+        category: resolvedFoodItem.category || editingItem.category || null,
         location_id: locationId,
         quantity_value: editForm.quantityValue.trim() || null,
         quantity_unit: editForm.quantityUnit.trim() || null,
@@ -996,6 +1014,7 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
     (sum, item) => sum + (item.estimated_cost || 0),
     0
   );
+  const quantityRepairSuggestions = getPantryQuantityRepairSuggestions(pantryItems);
 
   const priceEstimateItems = priceEstimateItemIds
     .map((itemId) => pantryItems.find((item) => item.id === itemId))
@@ -1174,6 +1193,54 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
       showToast('error', error?.message || 'Failed to save Pantry prices');
     } finally {
       setPriceEstimateSaving(false);
+    }
+  };
+
+  const handleReviewQuantityRepairs = async () => {
+    if (quantityRepairSuggestions.length === 0) {
+      showToast('info', 'No suspicious Pantry quantities were found.');
+      return;
+    }
+
+    setShowSettingsSheet(false);
+    setShowQuantityRepairSheet(true);
+  };
+
+  const handleSaveQuantityRepairs = async (
+    updates: Array<{
+      pantryItemId: string;
+      quantityValue: string;
+      quantityUnit: string;
+      estimatedWeightGrams: number | null;
+    }>
+  ) => {
+    if (updates.length === 0) {
+      showToast('info', 'No Pantry quantity fixes were selected.');
+      return;
+    }
+
+    try {
+      setQuantityRepairSaving(true);
+      await Promise.all(
+        updates.map((entry) =>
+          updatePantryItem(entry.pantryItemId, {
+            quantity_value: entry.quantityValue,
+            quantity_unit: entry.quantityUnit,
+            quantity: entry.quantityValue,
+            unit: entry.quantityUnit,
+            estimated_weight_grams: entry.estimatedWeightGrams,
+          })
+        )
+      );
+
+      await loadPantryItems(getAbortSignal());
+      setShowQuantityRepairSheet(false);
+      showToast('success', `Saved ${updates.length} Pantry quantity fix${updates.length === 1 ? '' : 'es'}`);
+    } catch (error: any) {
+      console.error('Failed to save Pantry quantity fixes:', error);
+      showToast('error', error?.message || 'Failed to save Pantry quantity fixes');
+    } finally {
+      setQuantityRepairSaving(false);
     }
   };
 
@@ -1972,6 +2039,16 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
               <h4 className="mb-3 text-sm font-semibold text-stone-900">Stock details</h4>
               <div className="grid gap-3 grid-cols-2">
                 <div className="col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-stone-700">Item name</label>
+                  <input
+                    type="text"
+                    value={editForm.itemName}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, itemName: e.target.value }))}
+                    placeholder="e.g., Packet Rice"
+                    className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-stone-500 min-h-[44px]"
+                  />
+                </div>
+                <div className="col-span-2">
                   <label className="mb-2 block text-sm font-medium text-stone-700">Description / flavour</label>
                   <input
                     type="text"
@@ -2452,6 +2529,8 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         pricingCountry={pricingCountry}
         priceEstimateLoading={priceEstimateLoading}
         onEstimateMissingPrices={handleEstimateMissingPrices}
+        suspiciousQuantityCount={quantityRepairSuggestions.length}
+        onReviewQuantityRepairs={handleReviewQuantityRepairs}
       />
 
       <PantryPriceEstimateSheet
@@ -2469,6 +2548,17 @@ export function PantryWidget({ householdId, viewMode }: PantryWidgetProps) {
         suggestions={priceEstimateSuggestions}
         saving={priceEstimateSaving}
         onSave={handleSaveEstimatedPrices}
+      />
+
+      <PantryQuantityRepairSheet
+        isOpen={showQuantityRepairSheet}
+        onClose={() => {
+          if (quantityRepairSaving) return;
+          setShowQuantityRepairSheet(false);
+        }}
+        suggestions={quantityRepairSuggestions}
+        saving={quantityRepairSaving}
+        onSave={handleSaveQuantityRepairs}
       />
 
       {/* Location Manager Modal */}

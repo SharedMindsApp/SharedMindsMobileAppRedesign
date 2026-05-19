@@ -15,6 +15,14 @@ export interface Profile {
     pantry_access_enabled?: boolean;
     internal_role?: 'standard' | 'pantry' | 'internal' | 'developer';
     testing_mode_enabled?: boolean;
+    onboarding_completed?: boolean;
+    bio?: string | null;
+    work_type?: string | null;
+    work_types?: string[] | null;
+    skills?: string[] | null;
+    location?: string | null;
+    country_code?: string | null;
+    city?: string | null;
     created_at: string;
     updated_at: string;
 }

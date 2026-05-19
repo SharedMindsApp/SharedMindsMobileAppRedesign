@@ -1,0 +1,261 @@
+// Curated skill list for the SharedMinds profile system.
+// Used as autocomplete suggestions — users can also free-text add anything.
+// Keep skills concise (1-3 words). Order within category is roughly popularity.
+
+export interface SkillCategory {
+  id: string;
+  label: string;
+  emoji: string;
+  skills: string[];
+}
+
+export const SKILL_CATEGORIES: SkillCategory[] = [
+  {
+    id: 'design',
+    label: 'Design',
+    emoji: '🎨',
+    skills: [
+      'UI Design',
+      'UX Design',
+      'Product Design',
+      'Brand Identity',
+      'Visual Design',
+      'Web Design',
+      'Logo Design',
+      'Typography',
+      'Illustration',
+      'Iconography',
+      'Motion Graphics',
+      '3D Design',
+      'Figma',
+      'Sketch',
+      'Adobe Photoshop',
+      'Adobe Illustrator',
+      'Design Systems',
+      'Prototyping',
+      'User Research',
+      'Information Architecture',
+    ],
+  },
+  {
+    id: 'development',
+    label: 'Development',
+    emoji: '💻',
+    skills: [
+      'TypeScript',
+      'JavaScript',
+      'React',
+      'Next.js',
+      'Node.js',
+      'Python',
+      'Go',
+      'Rust',
+      'Swift',
+      'Kotlin',
+      'Java',
+      'C#',
+      'Ruby',
+      'PHP',
+      'SQL',
+      'PostgreSQL',
+      'GraphQL',
+      'REST APIs',
+      'AWS',
+      'Google Cloud',
+      'Docker',
+      'Kubernetes',
+      'CI/CD',
+      'Git',
+      'Tailwind CSS',
+      'Vue.js',
+      'Svelte',
+      'React Native',
+      'Flutter',
+      'iOS Development',
+      'Android Development',
+      'Machine Learning',
+      'AI Engineering',
+    ],
+  },
+  {
+    id: 'writing',
+    label: 'Writing',
+    emoji: '✍️',
+    skills: [
+      'Copywriting',
+      'Content Writing',
+      'Technical Writing',
+      'Editing',
+      'Proofreading',
+      'Storytelling',
+      'Screenwriting',
+      'Ghostwriting',
+      'Blogging',
+      'Newsletter Writing',
+      'SEO Writing',
+      'UX Writing',
+      'Journalism',
+      'Research',
+      'Email Marketing',
+      'Long-form Articles',
+    ],
+  },
+  {
+    id: 'video',
+    label: 'Video & Film',
+    emoji: '🎬',
+    skills: [
+      'Cinematography',
+      'Video Editing',
+      'Color Grading',
+      'Sound Design',
+      'Producing',
+      'Directing',
+      'DaVinci Resolve',
+      'Premiere Pro',
+      'Final Cut Pro',
+      'After Effects',
+      'Documentary',
+      'Short Film',
+      'Music Video',
+      'Commercial',
+      'Lighting',
+      'Camera Operation',
+      'Animation',
+      '2D Animation',
+      '3D Animation',
+      'VFX',
+    ],
+  },
+  {
+    id: 'audio',
+    label: 'Music & Audio',
+    emoji: '🎵',
+    skills: [
+      'Music Production',
+      'Mixing',
+      'Mastering',
+      'Composition',
+      'Songwriting',
+      'Sound Design',
+      'Logic Pro',
+      'Ableton Live',
+      'Pro Tools',
+      'Recording',
+      'Podcasting',
+      'Voice Acting',
+      'Audio Editing',
+    ],
+  },
+  {
+    id: 'photography',
+    label: 'Photography',
+    emoji: '📷',
+    skills: [
+      'Portrait Photography',
+      'Product Photography',
+      'Street Photography',
+      'Landscape Photography',
+      'Lightroom',
+      'Photo Editing',
+      'Studio Lighting',
+      'Event Photography',
+    ],
+  },
+  {
+    id: 'business',
+    label: 'Business & Strategy',
+    emoji: '📈',
+    skills: [
+      'Strategy',
+      'Operations',
+      'Finance',
+      'Fundraising',
+      'Product Management',
+      'Project Management',
+      'Customer Success',
+      'Business Development',
+      'Sales',
+      'Negotiation',
+      'Pricing',
+      'Hiring',
+      'Team Building',
+      'Leadership',
+      'Bootstrapping',
+    ],
+  },
+  {
+    id: 'marketing',
+    label: 'Marketing & Growth',
+    emoji: '📣',
+    skills: [
+      'Marketing Strategy',
+      'Growth',
+      'SEO',
+      'SEM',
+      'Paid Ads',
+      'Social Media',
+      'Community Building',
+      'Brand Strategy',
+      'Influencer Marketing',
+      'Email Marketing',
+      'Analytics',
+      'A/B Testing',
+      'Content Marketing',
+      'PR',
+      'Partnerships',
+    ],
+  },
+  {
+    id: 'soft',
+    label: 'Soft Skills',
+    emoji: '🤝',
+    skills: [
+      'Public Speaking',
+      'Workshop Facilitation',
+      'Teaching',
+      'Mentoring',
+      'Coaching',
+      'Mediation',
+      'Cross-cultural Communication',
+      'Active Listening',
+      'Conflict Resolution',
+    ],
+  },
+  {
+    id: 'other',
+    label: 'Other Crafts',
+    emoji: '✨',
+    skills: [
+      'Game Design',
+      'Game Development',
+      'Industrial Design',
+      'Architecture',
+      'Interior Design',
+      'Fashion Design',
+      'Textile Design',
+      'Ceramics',
+      'Woodworking',
+      'Printmaking',
+      'Tattooing',
+    ],
+  },
+];
+
+/** Flat list of all curated skills, useful for fast lookups. */
+export const ALL_SKILLS: string[] = SKILL_CATEGORIES.flatMap((c) => c.skills);
+
+/** Category lookup by skill name (case-insensitive). Returns null if not curated. */
+const CATEGORY_BY_SKILL = new Map<string, SkillCategory>();
+for (const cat of SKILL_CATEGORIES) {
+  for (const s of cat.skills) {
+    CATEGORY_BY_SKILL.set(s.toLowerCase(), cat);
+  }
+}
+
+export function findSkillCategory(skill: string): SkillCategory | null {
+  return CATEGORY_BY_SKILL.get(skill.toLowerCase()) ?? null;
+}
+
+/** Max number of skills a single profile can carry. Prevents profile sprawl. */
+export const MAX_SKILLS_PER_PROFILE = 20;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, Brain, Users, Target, User, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package } from 'lucide-react';
+import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp } from 'lucide-react';
 import { ToastContainer, useToasts } from './Toast';
 import { getUserHousehold, Household } from '../lib/household';
 import { signOut } from '../lib/auth';
@@ -31,6 +31,7 @@ type LayoutProps = {
 const ICON_MAP: Record<string, any> = {
   Home,
   Brain,
+  TrendingUp,
   Users,
   Calendar,
   Target,
@@ -42,6 +43,8 @@ const ICON_MAP: Record<string, any> = {
   Settings,
   BookOpen,
   Package,
+  Link2,
+  UserRound,
 };
 
 export function Layout({ children }: LayoutProps) {
@@ -172,7 +175,7 @@ export function Layout({ children }: LayoutProps) {
   );
 
   const moreTabs = availableTabs.filter((tab) =>
-    !favouriteNavTabs.includes(tab.id)
+    !favouriteNavTabs.includes(tab.id) && !tab.requiresAdmin && !tab.requiresPantryAccess
   );
 
   const isTabActive = (tabPath: string) => {
@@ -257,8 +260,11 @@ export function Layout({ children }: LayoutProps) {
                   <Menu size={22} strokeWidth={1.75} />
                 </button>
 
-                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                  {/* Logo Icon */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/sessions')}
+                  className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 text-left"
+                >
                   <img
                     src="/icon-192.png"
                     alt="SharedMinds"
@@ -276,92 +282,183 @@ export function Layout({ children }: LayoutProps) {
                   >
                     SharedMinds
                   </span>
-                </div>
+                </button>
 
                 <div className="hidden md:flex items-center gap-2">
                   {favouriteTabs.map((tab) => renderNavTab(tab))}
 
-                  {moreTabs.length > 0 && (
-                    <div className="relative">
-                      <button
-                        ref={moreMenuButtonRef}
-                        onClick={() => setShowMoreMenu(!showMoreMenu)}
-                        className="flex items-center gap-1.5 lg:gap-2 px-2 lg:px-3 py-2 rounded-lg text-xs lg:text-sm font-medium transition-colors text-gray-600 hover:bg-gray-50"
-                      >
-                        <MoreHorizontal size={16} className="lg:w-[18px] lg:h-[18px]" />
-                        <span className="hidden lg:inline">More</span>
-                        <ChevronDown size={14} className={`transition-transform lg:w-4 lg:h-4 ${showMoreMenu ? 'rotate-180' : ''}`} />
-                      </button>
+                  {/* Avatar dropdown replaces the More button — holds everything personal */}
+                  {(() => {
+                    const isDark = config.appTheme === 'dark' || config.appTheme === 'neon-dark';
+                    const initial = (profile?.display_name ?? user?.email ?? '?').charAt(0).toUpperCase();
+                    const firstWorkType = (profile?.work_types && profile.work_types[0]) || profile?.work_type || null;
+                    const workTypeLabel = firstWorkType
+                      ? ({
+                          designer: 'Designer', developer: 'Developer', writer: 'Writer / Creator',
+                          founder: 'Founder', filmmaker: 'Filmmaker', marketer: 'Marketer',
+                          consultant: 'Consultant', researcher: 'Researcher', other: 'Creative',
+                        } as Record<string, string>)[firstWorkType] ?? null
+                      : null;
 
-                      {showMoreMenu && createPortal(
-                        <>
-                          <div
-                            className="fixed inset-0 z-[90]"
-                            onClick={() => setShowMoreMenu(false)}
-                          ></div>
-                          <div
-                            ref={moreMenuRef}
-                            className={`fixed w-56 rounded-lg shadow-xl border py-2 z-[95] ${config.appTheme === 'dark'
-                              ? 'bg-gray-800 border-gray-700'
-                              : config.appTheme === 'neon-dark'
-                                ? 'bg-gray-900 border-gray-800'
-                                : 'bg-white border-gray-200'
-                              }`}
-                            style={{
-                              top: `${moreMenuPosition.top}px`,
-                              right: `${moreMenuPosition.right}px`,
-                            }}
-                          >
-                            {moreTabs.map((tab) => {
-                              const Icon = ICON_MAP[tab.icon];
-                              return (
-                                <button
-                                  key={tab.id}
-                                  onClick={() => {
-                                    setShowMoreMenu(false);
-                                    navigate(tab.path);
-                                  }}
-                                  className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${isTabActive(tab.path)
-                                    ? config.appTheme === 'dark' || config.appTheme === 'neon-dark'
-                                      ? 'text-blue-400 bg-blue-900/30'
-                                      : 'text-blue-700 bg-blue-50'
-                                    : config.appTheme === 'dark' || config.appTheme === 'neon-dark'
-                                      ? 'text-gray-200 hover:bg-gray-700'
-                                      : 'text-gray-700 hover:bg-gray-50'
-                                    }`}
-                                >
-                                  <Icon size={16} />
-                                  {tab.label}
-                                </button>
-                              );
-                            })}
-
-                            <div
-                              className={`my-2 border-t ${config.appTheme === 'dark' || config.appTheme === 'neon-dark'
-                                ? 'border-gray-700'
-                                : 'border-gray-200'
-                                }`}
+                    return (
+                      <div className="relative">
+                        <button
+                          ref={moreMenuButtonRef}
+                          onClick={() => setShowMoreMenu(!showMoreMenu)}
+                          aria-label="Profile menu"
+                          className={`flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-full transition-all ${
+                            showMoreMenu
+                              ? isDark ? 'bg-gray-800' : 'bg-gray-100'
+                              : isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          {profile?.avatar_url ? (
+                            <img
+                              src={profile.avatar_url}
+                              alt={profile?.display_name ?? 'Profile'}
+                              className="w-8 h-8 rounded-full object-cover"
                             />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full stitch-card--accent flex items-center justify-center text-white font-bold text-sm">
+                              {initial}
+                            </div>
+                          )}
+                          <ChevronDown
+                            size={13}
+                            className={`transition-transform ${showMoreMenu ? 'rotate-180' : ''} ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                          />
+                        </button>
 
-                            <button
-                              onClick={() => {
-                                setShowMoreMenu(false);
-                                handleLogout();
+                        {showMoreMenu && createPortal(
+                          <>
+                            <div
+                              className="fixed inset-0 z-[90]"
+                              onClick={() => setShowMoreMenu(false)}
+                            />
+                            <div
+                              ref={moreMenuRef}
+                              className={`fixed w-64 rounded-2xl shadow-xl border py-1.5 z-[95] overflow-hidden ${
+                                isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
+                              }`}
+                              style={{
+                                top: `${moreMenuPosition.top}px`,
+                                right: `${moreMenuPosition.right}px`,
                               }}
-                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${config.appTheme === 'dark' || config.appTheme === 'neon-dark'
-                                ? 'text-red-400 hover:bg-red-900/20'
-                                : 'text-red-600 hover:bg-red-50'
-                                }`}
                             >
-                              <LogOut size={16} />
-                              Log Out
-                            </button>
-                          </div>
-                        </>,
-                        document.body
-                      )}
-                    </div>
-                  )}
+                              {/* ── Profile header — click to view profile ── */}
+                              <button
+                                type="button"
+                                onClick={() => { setShowMoreMenu(false); navigate('/profile'); }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors ${
+                                  isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                {profile?.avatar_url ? (
+                                  <img
+                                    src={profile.avatar_url}
+                                    alt={profile?.display_name ?? 'Profile'}
+                                    className="w-10 h-10 rounded-full object-cover shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full stitch-card--accent flex items-center justify-center text-white font-bold shrink-0">
+                                    {initial}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0 text-left">
+                                  <p className={`text-sm font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {profile?.display_name ?? 'Your Profile'}
+                                  </p>
+                                  <p className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {workTypeLabel ?? 'View profile'}
+                                  </p>
+                                </div>
+                              </button>
+
+                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+
+                              {/* ── Settings (always present, pinned at top) ── */}
+                              <button
+                                type="button"
+                                onClick={() => { setShowMoreMenu(false); navigate('/settings'); }}
+                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
+                                  isTabActive('/settings')
+                                    ? (isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50')
+                                    : (isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50')
+                                }`}
+                              >
+                                <Settings size={15} />
+                                Settings
+                              </button>
+
+                              {/* ── Secondary tabs (Tasks / Projects / Progress / Calendar / etc) ── */}
+                              {moreTabs.filter((t) => t.id !== 'settings').length > 0 && (
+                                <>
+                                  <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+                                  {moreTabs.filter((t) => t.id !== 'settings').map((tab) => {
+                                    const Icon = ICON_MAP[tab.icon];
+                                    return (
+                                      <button
+                                        key={tab.id}
+                                        onClick={() => { setShowMoreMenu(false); navigate(tab.path); }}
+                                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
+                                          isTabActive(tab.path)
+                                            ? (isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50')
+                                            : (isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50')
+                                        }`}
+                                      >
+                                        {Icon && <Icon size={15} />}
+                                        {tab.label}
+                                      </button>
+                                    );
+                                  })}
+                                </>
+                              )}
+
+                              {/* ── Admin section ── */}
+                              {isAdmin && (
+                                <>
+                                  <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+                                  <p className={`px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    Admin
+                                  </p>
+                                  {[
+                                    { path: '/admin', icon: Shield, label: 'Admin Panel' },
+                                    { path: '/pantry', icon: Package, label: 'Pantry' },
+                                    { path: '/journal', icon: BookOpen, label: 'Journal' },
+                                    { path: '/reports', icon: FileText, label: 'Reports' },
+                                  ].map(({ path, icon: Icon, label }) => (
+                                    <button
+                                      key={path}
+                                      onClick={() => { setShowMoreMenu(false); navigate(path); }}
+                                      className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
+                                        isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      <Icon size={15} />
+                                      {label}
+                                    </button>
+                                  ))}
+                                </>
+                              )}
+
+                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+
+                              <button
+                                onClick={() => { setShowMoreMenu(false); handleLogout(); }}
+                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
+                                  isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'
+                                }`}
+                              >
+                                <LogOut size={15} />
+                                Sign out
+                              </button>
+                            </div>
+                          </>,
+                          document.body
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

@@ -23,6 +23,8 @@ type PantrySettingsSheetProps = {
   pricingCountry: string;
   priceEstimateLoading?: boolean;
   onEstimateMissingPrices: (params: { city: string; country: string }) => Promise<void> | void;
+  suspiciousQuantityCount: number;
+  onReviewQuantityRepairs: () => Promise<void> | void;
 };
 
 function formatCurrency(value: number) {
@@ -52,6 +54,8 @@ export function PantrySettingsSheet({
   pricingCountry,
   priceEstimateLoading = false,
   onEstimateMissingPrices,
+  suspiciousQuantityCount,
+  onReviewQuantityRepairs,
 }: PantrySettingsSheetProps) {
   const [members, setMembers] = useState<SpaceMemberDetail[]>([]);
   const [memberLoading, setMemberLoading] = useState(false);
@@ -311,6 +315,40 @@ export function PantrySettingsSheet({
             <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/70 px-3 py-3 text-sm text-stone-600">
               Example: reduce `4 cans` of tomatoes to `3 cans`, and one tomato item is added to the Shopping list automatically.
             </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-stone-200 bg-white p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-stone-100 p-3 text-stone-700">
+                  <RefreshCcw size={18} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">Data review</p>
+                  <h3 className="mt-1 text-lg font-semibold text-stone-900">Review suspicious quantities</h3>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    Check Pantry lines that look like `0 g`, tiny gram values on count-based items, or quantities saved without a unit before they skew your stock list.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600">
+                {suspiciousQuantityCount} flagged
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/70 px-3 py-3 text-sm text-stone-600">
+              Review each proposed fix in-app, adjust anything you want, then save only the repairs you approve.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void onReviewQuantityRepairs()}
+              disabled={suspiciousQuantityCount === 0}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCcw size={16} />
+              Review quantity issues
+            </button>
           </div>
 
           <button

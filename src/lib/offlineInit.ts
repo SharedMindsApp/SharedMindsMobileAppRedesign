@@ -1,14 +1,13 @@
 /**
- * Phase 4B: Offline System Initialization
- * 
- * Initializes action handlers when the app starts.
- * This must be called before any offline actions are queued.
+ * Offline System Initialization (placeholder).
+ *
+ * The legacy offline action queue (Phase 4B) registered handlers for the
+ * pre-pivot productivity surface (events, todos, meals, goals, nutrition).
+ * Those handlers and their module are archived in the sibling legacy repo.
+ *
+ * SharedMinds today doesn't need offline action queuing — coworking sessions
+ * require network presence by definition. Keep this file as a stable import
+ * target for `main.tsx`; if we ever add new offline handlers, register them
+ * here.
  */
-
-import './offlineActions';
-
-// Action handlers are registered via side effects in offlineActions.ts
-// This file ensures the module is loaded
-
-
-
+export {};

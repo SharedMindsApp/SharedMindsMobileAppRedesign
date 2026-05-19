@@ -11,6 +11,7 @@ import { useIsMounted } from '../hooks/useMountedState';
 
 interface FocusSessionContextType {
   activeSession: FocusSession | null;
+  sessionGoal: string | null;
   isPaused: boolean;
   driftActive: boolean;
   pendingNudge: { type: 'soft' | 'hard' | 'regulation'; message: string } | null;
@@ -32,6 +33,7 @@ const FocusSessionContext = createContext<FocusSessionContextType | null>(null);
 
 export function FocusSessionProvider({ children }: { children: ReactNode }) {
   const [activeSession, setActiveSession] = useState<FocusSession | null>(null);
+  const [sessionGoal, setSessionGoal] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [driftActive, setDriftActive] = useState(false);
   const [pendingNudge, setPendingNudge] = useState<{ type: 'soft' | 'hard' | 'regulation'; message: string } | null>(null);
@@ -74,12 +76,17 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
     [activeSession?.id, activeSession?.target_end_time, activeSession?.ended_at]
   );
 
+  const handleSetActiveSession = useCallback((session: FocusSession | null) => {
+    setActiveSession(session);
+    setSessionGoal(session?.session_goal ?? null);
+  }, []);
+
   // Phase 2: Use safe subscription for session updates
   const handleSessionUpdate = useCallback((payload: any) => {
     if (isMounted()) {
-      setActiveSession(payload.new as FocusSession);
+      handleSetActiveSession(payload.new as FocusSession);
     }
-  }, [isMounted]);
+  }, [isMounted, handleSetActiveSession]);
 
   useSupabaseSubscription({
     channelName: activeSession ? `focus_session:${activeSession.id}` : undefined,
@@ -140,6 +147,7 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
 
   function clearSession() {
     setActiveSession(null);
+    setSessionGoal(null);
     setIsPaused(false);
     setDriftActive(false);
     setPendingNudge(null);
@@ -153,6 +161,7 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
     <FocusSessionContext.Provider
       value={{
         activeSession,
+        sessionGoal,
         isPaused,
         driftActive,
         pendingNudge,
@@ -160,7 +169,7 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
         sessionEvents,
         driftCount,
         distractionCount,
-        setActiveSession,
+        setActiveSession: handleSetActiveSession,
         setIsPaused,
         setDriftActive,
         setPendingNudge,

@@ -13,6 +13,28 @@ export interface NormalizedQuantity {
   quantityUnit: string;
 }
 
+const COUNT_STYLE_UNITS = new Set([
+  '',
+  'item', 'items',
+  'piece', 'pieces',
+  'each', 'whole',
+  'can', 'cans',
+  'tin', 'tins',
+  'jar', 'jars',
+  'bottle', 'bottles',
+  'carton', 'cartons',
+  'pack', 'packs',
+  'packet', 'packets',
+  'bag', 'bags',
+  'box', 'boxes',
+  'pouch', 'pouches',
+  'sachet', 'sachets',
+  'tube', 'tubes',
+  'loaf', 'loaves',
+  'roll', 'rolls',
+  'bunch', 'bunches',
+]);
+
 /**
  * Normalize quantity to logical whole units based on item type
  */
@@ -45,6 +67,15 @@ export async function normalizePantryQuantity(
     return { quantityValue: '1', quantityUnit: quantityUnit || '' };
   }
 
+  // Preserve explicit count/container style entries exactly as the user entered them.
+  // This avoids corrupting values like "2 cans" into meaningless weight defaults such as "0 g".
+  if (COUNT_STYLE_UNITS.has(unit)) {
+    return {
+      quantityValue: Number.isInteger(quantity) ? String(Math.round(quantity)) : String(roundToReasonablePrecision(quantity)),
+      quantityUnit: quantityUnit || '',
+    };
+  }
+
   // Handle different item types
   const result = normalizeByItemType(normalizedName, quantity, unit);
   
@@ -62,6 +93,10 @@ function normalizeByItemType(
   quantity: number,
   unit: string
 ): { quantity: number; unit: string } {
+  if (COUNT_STYLE_UNITS.has(unit)) {
+    return { quantity: Math.round(quantity), unit };
+  }
+
   // Oils and liquids (bottles)
   if (isOilOrLiquid(itemName, unit)) {
     return normalizeLiquid(quantity, unit);
@@ -161,7 +196,7 @@ function isWholeProduce(itemName: string, unit: string): boolean {
     'apple', 'orange', 'lemon', 'lime', 'avocado', 'mango', 'banana'
   ];
   
-  const countUnits = ['piece', 'pieces', 'whole', 'each', 'item', 'items', ''];
+  const countUnits = ['piece', 'pieces', 'whole', 'each', 'item', 'items'];
   
   return wholeProduce.some(keyword => itemName.includes(keyword)) ||
          (countUnits.includes(unit) && !isWeightBasedProduce(itemName, unit));
@@ -342,7 +377,7 @@ function normalizePantryStaple(quantity: number, unit: string, itemName: string)
  * Check if unit suggests counting
  */
 function isCountableUnit(unit: string): boolean {
-  const countableUnits = ['piece', 'pieces', 'whole', 'each', 'item', 'items', 'loaf', 'loaves', 'slice', 'slices', ''];
+  const countableUnits = ['piece', 'pieces', 'whole', 'each', 'item', 'items', 'loaf', 'loaves', 'slice', 'slices'];
   return countableUnits.some(u => unit.includes(u));
 }
 
@@ -365,7 +400,7 @@ function convertToMilliliters(quantity: number, unit: string): number {
     return quantity * 29.5735; // 1 fl oz ≈ 29.5735ml
   }
   
-  // Default: assume ml if no unit or unknown
+  // Default: keep the numeric value stable rather than inventing a liquid unit conversion.
   return quantity;
 }
 
@@ -388,7 +423,7 @@ function convertToGrams(quantity: number, unit: string): number {
     return quantity * 453.592; // 1 lb ≈ 453.592g
   }
   
-  // Default: assume grams if no unit or unknown
+  // Default: keep the numeric value stable rather than inventing a weight conversion.
   return quantity;
 }
 

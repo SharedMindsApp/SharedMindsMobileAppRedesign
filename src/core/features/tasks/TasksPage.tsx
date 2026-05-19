@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Zap, Leaf, Coffee, Sparkles, Plus, Check, Circle } from 'lucide-react';
+import { Zap, Leaf, Coffee, Sparkles, Plus, Check, Circle, Play } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
+import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import {
   PageGreeting,
@@ -8,6 +9,7 @@ import {
   GradientButton,
   InputWell,
 } from '../../ui/CorePage';
+import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 
 type EnergyFilter = 'all' | 'deep' | 'medium' | 'light';
 
@@ -38,6 +40,8 @@ export function TasksPage() {
   const [draftTask, setDraftTask] = useState('');
   const [energyFilter, setEnergyFilter] = useState<EnergyFilter>('all');
   const [showCapture, setShowCapture] = useState(false);
+  const [showDeclare, setShowDeclare] = useState(false);
+  const { activeSession } = useFocusSession();
   const {
     state: { tasks, projects, activeProjectId },
     addTask,
@@ -82,6 +86,22 @@ export function TasksPage() {
           </span>
         </div>
       </section>
+
+      {/* ── Start Session CTA ────────────────────────────── */}
+      {!activeSession && (
+        <SurfaceCard>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold stitch-text-primary">Ready to focus?</p>
+              <p className="text-xs stitch-text-secondary mt-0.5">Declare the one thing for your next session.</p>
+            </div>
+            <GradientButton size="sm" onClick={() => setShowDeclare(true)}>
+              <Play size={13} className="mr-1" />
+              Start
+            </GradientButton>
+          </div>
+        </SurfaceCard>
+      )}
 
       {/* ── Energy Filter Tabs (Bento) ────────────────────── */}
       <section>
@@ -182,6 +202,10 @@ export function TasksPage() {
         >
           <Plus size={26} strokeWidth={2.5} />
         </button>
+      )}
+
+      {showDeclare && (
+        <DeclareSessionModal onClose={() => setShowDeclare(false)} />
       )}
     </div>
   );

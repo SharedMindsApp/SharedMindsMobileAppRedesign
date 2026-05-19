@@ -15,11 +15,15 @@ export type DriftType = 'offshoot' | 'side_project' | 'external_distraction';
 
 export type RegulationAction = 'stretch' | 'hydrate' | 'meal' | 'rest';
 
+export type SessionOutcome = 'finished' | 'partially' | 'something_came_up';
+
+export type SessionMode = 'group' | 'one_on_one' | 'solo';
+
 export interface FocusSession {
   id: string;
   user_id: string;
   project_id: string;
-  domain_id: string;
+  domain_id: string | null;
   start_time: string;
   end_time: string | null;
   status: FocusSessionStatus;
@@ -33,6 +37,24 @@ export interface FocusSession {
   ended_at?: string | null;
   created_at: string;
   updated_at: string;
+  // Community session fields
+  session_goal?: string | null;
+  session_task_id?: string | null;
+  session_outcome?: SessionOutcome | null;
+  // Scheduled session fields
+  session_type?: 'drop_in' | 'scheduled' | null;
+  scheduled_at?: string | null;
+  session_title?: string | null;
+  join_code?: string | null;
+  // Session mode (group vs 1-on-1) + quiet mode
+  session_mode?: SessionMode;
+  quiet_mode?: boolean;
+  partner_user_id?: string | null;
+}
+
+export interface CommunitySession extends FocusSession {
+  display_name: string;
+  avatar_url?: string | null;
 }
 
 export interface FocusEvent {

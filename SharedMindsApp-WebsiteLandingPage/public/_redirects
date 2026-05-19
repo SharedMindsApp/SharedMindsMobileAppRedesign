@@ -1,0 +1,4 @@
+# Netlify redirects
+/privacy /index.html 200
+/terms /index.html 200
+/unsubscribe /index.html 200
