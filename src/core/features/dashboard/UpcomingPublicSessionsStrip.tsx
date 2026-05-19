@@ -10,8 +10,14 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, Users, UserPlus, MicOff, ArrowRight } from 'lucide-react';
+import { Calendar, Clock, Users, UserPlus, MicOff, ArrowRight, Sparkles, Globe2 } from 'lucide-react';
 import type { ScheduledSessionWithProfile } from '../../services/SessionService';
+
+const PURPOSE_META: Record<string, { label: string; cls: string; Icon: typeof Sparkles }> = {
+  weekly_review: { label: 'Weekly review', cls: 'bg-violet-100 text-violet-700', Icon: Sparkles },
+  community:     { label: 'Community',     cls: 'bg-cyan-100 text-cyan-700',     Icon: Globe2 },
+  workshop:      { label: 'Workshop',      cls: 'bg-amber-100 text-amber-700',   Icon: Sparkles },
+};
 
 const AVATAR_GRAD = [
   'from-violet-400 to-fuchsia-500',
@@ -94,9 +100,21 @@ export function UpcomingPublicSessionsStrip({
               }}
               className="snap-start shrink-0 w-[220px] text-left rounded-2xl bg-surface-container-low hover:bg-surface-container transition-all p-3 active:scale-[0.98]"
             >
-              <div className="flex items-center gap-1.5 mb-2.5">
+              <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
                 <Clock size={11} className="text-primary" />
                 <span className="text-[11px] font-bold text-primary">{formatWhen(startIso)}</span>
+                {(() => {
+                  const purpose = (s as any).session_purpose as string | null | undefined;
+                  if (!purpose) return null;
+                  const meta = PURPOSE_META[purpose];
+                  if (!meta) return null;
+                  const Icon = meta.Icon;
+                  return (
+                    <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${meta.cls}`}>
+                      <Icon size={8} /> {meta.label}
+                    </span>
+                  );
+                })()}
               </div>
 
               <div className="flex items-center gap-2 mb-2.5">

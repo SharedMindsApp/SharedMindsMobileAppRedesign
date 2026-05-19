@@ -28,6 +28,7 @@ import { AdminUsers } from '../components/admin/AdminUsers';
 import { AdminAnalytics } from '../components/admin/AdminAnalytics';
 import { AdminLogs } from '../components/admin/AdminLogs';
 import { AdminSettings } from '../components/admin/AdminSettings';
+import { AdminRecurringSessions } from '../components/admin/AdminRecurringSessions';
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
 import { ViewAsProvider } from '../contexts/ViewAsContext';
 import { ActiveDataProvider } from '../contexts/ActiveDataContext';
@@ -163,6 +164,7 @@ function AppContent() {
                 <Routes>
                   <Route index element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
+                  <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
                   <Route path="analytics" element={<AdminAnalytics />} />
                   <Route path="logs" element={<AdminLogs />} />
                   <Route path="settings" element={<AdminSettings />} />

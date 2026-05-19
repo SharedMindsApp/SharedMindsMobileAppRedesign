@@ -15,6 +15,7 @@ import {
   Check,
   Menu,
   X,
+  CalendarRange,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUIPreferences } from '../../contexts/UIPreferencesContext';
@@ -48,11 +49,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   const navItems = [
-    { path: '/admin',             icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/admin/users',       icon: Users,           label: 'Users' },
-    { path: '/admin/analytics',   icon: BarChart3,       label: 'Analytics' },
-    { path: '/admin/logs',        icon: ScrollText,      label: 'Activity Logs' },
-    { path: '/admin/settings',    icon: Settings,        label: 'Settings' },
+    { path: '/admin',                     icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/admin/users',               icon: Users,           label: 'Users' },
+    { path: '/admin/recurring-sessions',  icon: CalendarRange,   label: 'Recurring Sessions' },
+    { path: '/admin/analytics',           icon: BarChart3,       label: 'Analytics' },
+    { path: '/admin/logs',                icon: ScrollText,      label: 'Activity Logs' },
+    { path: '/admin/settings',            icon: Settings,        label: 'Settings' },
   ];
 
   return (

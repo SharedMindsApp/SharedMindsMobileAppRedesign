@@ -52,6 +52,9 @@ export interface FocusSession {
   partner_user_id?: string | null;
   // Project pin — optional macro-goal context (joined via Supabase select)
   project?: { id: string; title: string; color: string | null } | null;
+  // Admin-curated cadence (weekly review / community / workshop)
+  session_purpose?: 'weekly_review' | 'community' | 'workshop' | null;
+  recurring_template_id?: string | null;
 }
 
 export interface CommunitySession extends FocusSession {
