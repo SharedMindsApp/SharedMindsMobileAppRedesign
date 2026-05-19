@@ -1,9 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * DashboardPage — the home page.
+ *
+ * Two distinct layouts:
+ *
+ *   ──── Day-0 (zero sessions ever) ────────────────────────────────
+ *   1. Greeting (warm, no momentum chips when there's nothing to chip)
+ *   2. CommunityPulseCard (the room is alive — strongest activation lever)
+ *   3. DayZeroWelcome (compact hero: loop + Start CTA)
+ *   4. DailyIntentionCard ("what's today about?")
+ *
+ *   ──── Returning (≥1 sessions) ───────────────────────────────────
+ *   1. Greeting + momentum row (streak, sessions, finish rate)
+ *   2. SmartNextCard (engine picks rejoin / scheduled / partner / pinned / declare)
+ *   3. DailyIntentionCard
+ *   4. CommunityPulseCard
+ *   5. ProjectsSection (real grid)
+ *   6. WeekStrip (now meaningful — has data)
+ *   7. Recent finishes
+ *
+ * "This week" with no data is gone. Stacked empty-state cards are gone.
+ * Every section either shows real data or is hidden.
+ */
+
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Play, Calendar, StopCircle, Check, ArrowRight,
-  Flame, Users, CheckCircle2, Pencil, Target, Zap,
-  Plus, Pin,
+  ArrowRight, Check, Flame, CheckCircle2, Plus, Pin, Target, Users,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -14,9 +36,12 @@ import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { fetchProfileStats, fetchWeekSessions } from '../../services/ProfileService';
 import { fetchRecentShippedSessions, fetchUpcomingScheduledSessions } from '../../services/SessionService';
 import { SurfaceCard } from '../../ui/CorePage';
+import { SmartNextCard } from './SmartNextCard';
+import { CommunityPulseCard } from './CommunityPulseCard';
+import { DailyIntentionCard } from './DailyIntentionCard';
+import { DayZeroWelcome } from './DayZeroWelcome';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
-import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 
 // ── Utilities ─────────────────────────────────────────────────────
 
@@ -35,37 +60,6 @@ function formatTimeAgo(iso: string | null): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return hrs === 1 ? '1h ago' : `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function formatRemaining(seconds: number): string {
-  if (seconds <= 0) return 'Time up';
-  const m = Math.ceil(seconds / 60);
-  if (m < 60) return `${m}m left`;
-  return `${Math.floor(m / 60)}h ${m % 60}m left`;
-}
-
-function formatScheduledTime(iso: string): string {
-  const d = new Date(iso);
-  const diffMins = Math.round((d.getTime() - Date.now()) / 60000);
-  if (diffMins < 0) return 'Starting now';
-  if (diffMins < 60) return `In ${diffMins}m`;
-  const diffHrs = Math.floor(diffMins / 60);
-  if (diffHrs < 24) return `In ${diffHrs}h`;
-  return d.toLocaleDateString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
-const AVATAR_COLORS = [
-  'bg-violet-100 text-violet-700',
-  'bg-blue-100 text-blue-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',
-  'bg-rose-100 text-rose-700',
-  'bg-indigo-100 text-indigo-700',
-];
-function avatarClass(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 const WORK_TYPE_LABELS: Record<string, string> = {
@@ -102,11 +96,9 @@ function WeekStrip({ weekSessions }: { weekSessions: { start_time: string }[] })
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">This week</p>
-        {activeDaysCount > 0 && (
-          <span className="text-xs font-bold text-primary">
-            {activeDaysCount} day{activeDaysCount !== 1 ? 's' : ''} active
-          </span>
-        )}
+        <span className="text-xs font-bold text-primary">
+          {activeDaysCount} day{activeDaysCount !== 1 ? 's' : ''} active
+        </span>
       </div>
       <div className="flex items-center justify-between">
         {DAY_LABELS.map((label, i) => {
@@ -142,187 +134,7 @@ function WeekStrip({ weekSessions }: { weekSessions: { start_time: string }[] })
   );
 }
 
-// ── Active session banner ─────────────────────────────────────────
-
-function ActiveSessionBanner() {
-  const { activeSession, sessionGoal, timerSecondsRemaining } = useFocusSession();
-  const navigate = useNavigate();
-
-  const handleRejoin = useCallback(() => {
-    if (!activeSession) return;
-    navigate(`/session/${activeSession.id}`);
-  }, [activeSession, navigate]);
-
-  const handleEnd = useCallback(() => {
-    if (!activeSession) return;
-    navigate(`/session/${activeSession.id}/summary`);
-  }, [activeSession, navigate]);
-
-  if (!activeSession) return null;
-
-  const totalSeconds = (activeSession.intended_duration_minutes ?? 50) * 60;
-  const progress = totalSeconds > 0 ? Math.max(0, 1 - timerSecondsRemaining / totalSeconds) : 0;
-
-  return (
-    <div className="rounded-[1.5rem] overflow-hidden stitch-card--accent p-5">
-      <div className="flex items-start justify-between gap-4">
-        <button type="button" onClick={handleRejoin} className="flex-1 min-w-0 text-left">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-white/70 animate-pulse" />
-            <p className="text-xs font-bold text-white/80 uppercase tracking-widest">
-              In session · tap to rejoin
-            </p>
-          </div>
-          {sessionGoal && (
-            <p className="text-sm font-bold text-white line-clamp-2 leading-snug mb-3">{sessionGoal}</p>
-          )}
-          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mb-1">
-            <div className="h-full bg-white/70 rounded-full transition-all" style={{ width: `${progress * 100}%` }} />
-          </div>
-          <p className="text-xs text-white/60">{formatRemaining(timerSecondsRemaining)}</p>
-        </button>
-        <button
-          type="button"
-          onClick={handleEnd}
-          className="shrink-0 flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-bold px-3 py-2 rounded-full transition-all active:scale-95"
-        >
-          <StopCircle size={13} /> End
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── New user welcome hero ─────────────────────────────────────────
-
-function NewUserHero({ onStart }: { onStart: () => void }) {
-  return (
-    <div className="rounded-[1.5rem] overflow-hidden stitch-card--accent p-6">
-      {/* Top row */}
-      <div className="mb-5">
-        <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-2">Ready when you are</p>
-        <h2 className="text-xl font-extrabold text-white leading-snug">
-          Your first session<br />is waiting.
-        </h2>
-        <p className="text-sm text-white/70 mt-2 leading-relaxed">
-          Name your goal, show up alongside other solopreneurs, and finish it.
-        </p>
-      </div>
-
-      {/* Loop steps */}
-      <div className="flex items-center gap-0 mb-6">
-        {[
-          { icon: Target, label: 'Declare' },
-          { icon: Zap, label: 'Work' },
-          { icon: CheckCircle2, label: 'Finish' },
-        ].map(({ icon: Icon, label }, i) => (
-          <div key={label} className="flex items-center">
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
-                <Icon size={16} className="text-white" />
-              </div>
-              <span className="text-[10px] font-bold text-white/70">{label}</span>
-            </div>
-            {i < 2 && (
-              <div className="flex items-center mx-2 mb-4">
-                <ArrowRight size={12} className="text-white/30" />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* CTA */}
-      <button
-        type="button"
-        onClick={onStart}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white text-primary text-sm font-extrabold shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200"
-      >
-        <Play size={15} />
-        Start your first session
-      </button>
-    </div>
-  );
-}
-
-// ── Returning user focus card ─────────────────────────────────────
-
-function DailyFocusCard({
-  suggestedGoal,
-  onStart,
-  onSchedule,
-}: {
-  suggestedGoal: string;
-  onStart: (goal: string) => void;
-  onSchedule: () => void;
-}) {
-  const [goal, setGoal] = useState(suggestedGoal);
-
-  useEffect(() => {
-    if (suggestedGoal && !goal) setGoal(suggestedGoal);
-  }, [suggestedGoal]);
-
-  return (
-    <SurfaceCard>
-      <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">
-        What are you finishing today?
-      </p>
-      <div className="relative mb-3">
-        <textarea
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
-          placeholder="Name the one thing you'll focus on…"
-          rows={2}
-          maxLength={200}
-          className="w-full px-4 py-3 pr-10 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none leading-relaxed"
-        />
-        <Pencil size={13} className="absolute right-3.5 top-3.5 stitch-text-secondary pointer-events-none" />
-      </div>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onStart(goal)}
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl stitch-btn--primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200"
-        >
-          <Play size={14} /> Start Now
-        </button>
-        <button
-          type="button"
-          onClick={onSchedule}
-          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all duration-200"
-        >
-          <Calendar size={14} /> Schedule
-        </button>
-      </div>
-    </SurfaceCard>
-  );
-}
-
-// ── Live peer row ─────────────────────────────────────────────────
-
-function LivePersonRow({ session }: { session: CommunitySession }) {
-  return (
-    <div className="flex items-center gap-3 py-3 border-b border-surface-container last:border-0">
-      {session.avatar_url ? (
-        <img src={session.avatar_url} alt={session.display_name} className="w-9 h-9 rounded-xl object-cover shrink-0" />
-      ) : (
-        <div className={`w-9 h-9 rounded-xl ${avatarClass(session.display_name)} flex items-center justify-center shrink-0 font-extrabold text-sm`}>
-          {session.display_name.charAt(0).toUpperCase()}
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold stitch-text-primary truncate">{session.display_name}</p>
-        <p className="text-xs stitch-text-secondary truncate">{session.session_goal ?? 'Working on something'}</p>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="text-[10px] font-semibold text-emerald-600">Live</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Projects section ──────────────────────────────────────────────
+// ── Projects mini-grid (returning users only) ─────────────────────
 
 const PROJECT_DOT_HEX: Record<string, string> = {
   cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
@@ -332,61 +144,43 @@ function projectDotHex(token: string | null) {
   return PROJECT_DOT_HEX[token ?? ''] ?? PROJECT_DOT_HEX.blue;
 }
 
-function ProjectsSection({
-  projects,
-  tasks,
-  activeProjectId,
-  onPin,
+function ProjectsMiniGrid({
+  projects, tasks, activeProjectId, onPin,
 }: {
   projects: import('../../data/CoreDataContext').CoreProject[];
   tasks: import('../../data/CoreDataContext').CoreTask[];
   activeProjectId: string | null;
-  onPin: (projectId: string | null) => void;
+  onPin: (id: string | null) => void;
 }) {
   const navigate = useNavigate();
 
-  // Empty state — push toward creating the first project
   if (projects.length === 0) {
     return (
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Your projects</p>
+      <button
+        type="button"
+        onClick={() => navigate('/projects')}
+        className="w-full inline-flex items-center gap-3 rounded-2xl border-2 border-dashed border-surface-container-high hover:border-primary/30 hover:bg-primary/[0.02] transition-all p-4 text-left group"
+      >
+        <div className="w-10 h-10 rounded-2xl bg-primary/8 group-hover:bg-primary/12 flex items-center justify-center shrink-0 transition-colors">
+          <Target size={17} className="text-primary/60 group-hover:text-primary/80 transition-colors" />
         </div>
-        <div
-          className="rounded-[1.25rem] border-2 border-dashed border-surface-container-high flex items-center gap-3 py-4 px-5 cursor-pointer hover:border-primary/30 hover:bg-primary/[0.02] transition-all group"
-          onClick={() => navigate('/projects')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/projects')}
-        >
-          <div className="w-10 h-10 rounded-2xl bg-primary/8 group-hover:bg-primary/12 flex items-center justify-center shrink-0 transition-colors">
-            <Target size={17} className="text-primary/60 group-hover:text-primary/80 transition-colors" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold stitch-text-primary leading-tight mb-0.5">
-              No projects yet
-            </p>
-            <p className="text-xs stitch-text-secondary leading-snug">
-              Capture the macro goal your sessions are chipping at.
-            </p>
-          </div>
-          <span className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/8 px-2.5 py-1.5 rounded-full group-hover:bg-primary/15 transition-colors">
-            <Plus size={11} strokeWidth={3} />
-            New
-          </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold stitch-text-primary leading-tight">No projects yet</p>
+          <p className="text-xs stitch-text-secondary mt-0.5">Capture the macro goal your sessions are chipping at.</p>
         </div>
-      </section>
+        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/8 px-2.5 py-1.5 rounded-full group-hover:bg-primary/15 transition-colors">
+          <Plus size={11} strokeWidth={3} /> New
+        </span>
+      </button>
     );
   }
 
-  // Task counts per project
   const counts = new Map<string, number>();
   for (const t of tasks) {
     if (!t.projectId || t.done) continue;
     counts.set(t.projectId, (counts.get(t.projectId) ?? 0) + 1);
   }
 
-  // Show up to 4 — pinned project always first, then most recently updated.
   const sorted = [...projects].sort((a, b) => {
     if (a.id === activeProjectId) return -1;
     if (b.id === activeProjectId) return 1;
@@ -424,20 +218,16 @@ function ProjectsSection({
               role="button"
               tabIndex={0}
             >
-              {/* Pin toggle in the corner */}
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onPin(isPinned ? null : p.id); }}
                 title={isPinned ? 'Unpin' : 'Pin as active'}
                 className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                  isPinned
-                    ? 'text-primary bg-white shadow-sm'
-                    : 'text-transparent group-hover:text-primary hover:bg-surface-container'
+                  isPinned ? 'text-primary bg-white shadow-sm' : 'text-transparent hover:text-primary hover:bg-surface-container'
                 }`}
               >
                 <Pin size={10} fill={isPinned ? 'currentColor' : 'none'} strokeWidth={2.5} />
               </button>
-
               <div className="flex items-start gap-2 pr-6">
                 <span
                   className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow"
@@ -509,7 +299,10 @@ function ShipRow({ ship }: { ship: ShippedSession }) {
 export function DashboardPage() {
   const { user, profile } = useAuth();
   const { activeSession } = useFocusSession();
-  const { state: { tasks, projects, activeProjectId }, setActiveProject } = useCoreData();
+  const {
+    state: { tasks, projects, activeProjectId },
+    setActiveProject,
+  } = useCoreData();
   const { sessions: liveSessions } = useCommunitySessionsSubscription();
   const navigate = useNavigate();
 
@@ -520,192 +313,132 @@ export function DashboardPage() {
   const [statsLoaded, setStatsLoaded] = useState(false);
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
   const [myShips, setMyShips] = useState<ShippedSession[]>([]);
-  const [nextSession, setNextSession] = useState<ScheduledSessionWithProfile | null>(null);
+  const [upcomingScheduled, setUpcomingScheduled] = useState<ScheduledSessionWithProfile[]>([]);
 
   useEffect(() => {
     if (!user?.id) return;
     fetchProfileStats(user.id).then((s) => { setStats(s); setStatsLoaded(true); }).catch(() => setStatsLoaded(true));
     fetchWeekSessions(user.id).then(setWeekSessions).catch(() => {});
     fetchRecentShippedSessions(user.id).then((s) => setMyShips(s.slice(0, 3))).catch(() => {});
-    fetchUpcomingScheduledSessions().then((sessions) => {
-      const cutoff = Date.now() + 48 * 60 * 60 * 1000;
-      const next = sessions.find((s) => new Date(s.scheduled_at ?? s.start_time).getTime() <= cutoff);
-      setNextSession(next ?? null);
-    }).catch(() => {});
+    fetchUpcomingScheduledSessions().then(setUpcomingScheduled).catch(() => {});
   }, [user?.id]);
 
-  const livePeers = liveSessions.filter((s) => s.id !== activeSession?.id).slice(0, 3);
-  const totalLive = liveSessions.filter((s) => s.id !== activeSession?.id).length + (activeSession ? 1 : 0);
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
   const workTypeLabel = profile?.work_type ? WORK_TYPE_LABELS[profile.work_type] : null;
-  const isNewUser = statsLoaded && (stats?.totalSessions ?? 0) === 0;
-  const suggestedGoal = tasks.filter((t) => !t.done)[0]?.title ?? '';
+  const isDayZero = statsLoaded && (stats?.totalSessions ?? 0) === 0;
+  const hasWeekData = weekSessions.length > 0;
 
-  function handleStartWithGoal(goal: string) {
-    setDeclareGoal(goal || undefined);
+  function openDeclare(initialGoal?: string) {
+    setDeclareGoal(initialGoal);
     setShowDeclare(true);
   }
 
   return (
     <div className="space-y-4">
 
-      {/* ── 1. Greeting ───────────────────────────────────── */}
+      {/* ── Greeting ─────────────────────────────────────────── */}
       <div className="pt-1">
         <p className="text-sm stitch-text-secondary font-medium">{greeting()}</p>
         <h1 className="stitch-headline text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
           {firstName} 👋
         </h1>
 
-        {/* Identity + momentum row */}
-        <div className="flex flex-wrap items-center gap-2 mt-2">
-          {workTypeLabel && (
-            <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
-              {workTypeLabel}
-            </span>
-          )}
-          {stats && stats.currentStreak > 0 && (
-            <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-              <Flame size={11} /> {stats.currentStreak} day streak
-            </span>
-          )}
-          {stats && stats.totalSessions > 0 && (
-            <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-              {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
-            </span>
-          )}
-          {stats && stats.completionRate > 0 && (
-            <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-              {stats.completionRate}% finish rate
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ── 2. Active session banner ──────────────────────── */}
-      <ActiveSessionBanner />
-
-      {/* ── 3. Hero CTA — state aware ─────────────────────── */}
-      {!activeSession && (
-        isNewUser
-          ? <NewUserHero onStart={() => setShowDeclare(true)} />
-          : <DailyFocusCard
-              suggestedGoal={suggestedGoal}
-              onStart={handleStartWithGoal}
-              onSchedule={() => setShowSchedule(true)}
-            />
-      )}
-
-      {/* ── 4. This week ──────────────────────────────────── */}
-      <SurfaceCard>
-        <WeekStrip weekSessions={weekSessions} />
-      </SurfaceCard>
-
-      {/* ── 4b. Your projects ─────────────────────────────── */}
-      <ProjectsSection
-        projects={projects}
-        tasks={tasks}
-        activeProjectId={activeProjectId}
-        onPin={setActiveProject}
-      />
-
-      {/* ── 5. Working now ────────────────────────────────── */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            {totalLive > 0 && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
-              {totalLive > 0 ? `${totalLive} working now` : 'Working now'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/sessions')}
-            className="flex items-center gap-1 text-xs font-semibold text-primary hover:opacity-70 transition-opacity"
-          >
-            See all <ArrowRight size={12} />
-          </button>
-        </div>
-
-        {livePeers.length > 0 ? (
-          <SurfaceCard>
-            <div className="divide-y divide-surface-container">
-              {livePeers.map((s) => <LivePersonRow key={s.id} session={s} />)}
-            </div>
-          </SurfaceCard>
-        ) : (
-          /* Empty community state — more motivating */
-          <div
-            className="rounded-[1.25rem] border-2 border-dashed border-surface-container-high flex flex-col items-center text-center py-8 px-6 cursor-pointer hover:border-primary/30 hover:bg-primary/[0.02] transition-all group"
-            onClick={() => setShowDeclare(true)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setShowDeclare(true)}
-          >
-            <div className="w-12 h-12 rounded-2xl bg-primary/8 group-hover:bg-primary/12 flex items-center justify-center mb-3 transition-colors">
-              <Users size={20} className="text-primary/50 group-hover:text-primary/70 transition-colors" />
-            </div>
-            <p className="text-sm font-bold stitch-text-primary mb-1">No one's working yet</p>
-            <p className="text-xs stitch-text-secondary mb-4 max-w-[200px] leading-relaxed">
-              Be the first to show up. Someone always has to start the room.
-            </p>
-            <span className="text-xs font-bold text-primary bg-primary/8 px-3 py-1.5 rounded-full group-hover:bg-primary/15 transition-colors">
-              Start a session →
-            </span>
+        {/* Momentum row — only when there's something to show */}
+        {(workTypeLabel || (stats && stats.totalSessions > 0)) && (
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            {workTypeLabel && (
+              <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
+                {workTypeLabel}
+              </span>
+            )}
+            {stats && stats.currentStreak > 0 && (
+              <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                <Flame size={11} /> {stats.currentStreak} day streak
+              </span>
+            )}
+            {stats && stats.totalSessions > 0 && (
+              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
+                {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
+              </span>
+            )}
+            {stats && stats.completionRate > 0 && (
+              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
+                {stats.completionRate}% finish rate
+              </span>
+            )}
           </div>
         )}
-      </section>
+      </div>
 
-      {/* ── 6. Up next (scheduled session) ───────────────── */}
-      {nextSession && (
-        <SurfaceCard>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Up next</p>
-            <span className="text-xs font-bold text-primary">
-              {formatScheduledTime(nextSession.scheduled_at ?? nextSession.start_time)}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <Calendar size={17} className="text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold stitch-text-primary truncate">
-                {nextSession.session_title ?? 'Focus session'}
-              </p>
-              <p className="text-xs stitch-text-secondary">
-                {nextSession.intended_duration_minutes}m · {nextSession.display_name}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate(`/join/${nextSession.join_code}`)}
-              className="shrink-0 text-xs font-bold text-primary bg-primary/8 hover:bg-primary/15 px-3 py-1.5 rounded-full transition-colors"
-            >
-              Join
-            </button>
-          </div>
-        </SurfaceCard>
-      )}
+      {/* ── Day-0 vs Returning split ─────────────────────────── */}
+      {isDayZero ? (
+        <>
+          {/* Community first — the room being alive is the strongest hook */}
+          <CommunityPulseCard
+            sessions={liveSessions}
+            excludeSessionId={activeSession?.id}
+            onStart={() => openDeclare()}
+          />
+          <DayZeroWelcome onStart={() => openDeclare()} />
+          <DailyIntentionCard />
+        </>
+      ) : (
+        <>
+          {/* Smart next move (handles active session as its own state) */}
+          <SmartNextCard
+            liveSessions={liveSessions}
+            upcomingScheduled={upcomingScheduled}
+            myUserId={user?.id}
+            onDeclareCustom={openDeclare}
+            onSchedule={() => setShowSchedule(true)}
+          />
 
-      {/* ── 7. Recent ships ───────────────────────────────── */}
-      {myShips.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Recent ships</p>
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              className="flex items-center gap-1 text-xs font-semibold text-primary hover:opacity-70 transition-opacity"
-            >
-              All <ArrowRight size={12} />
-            </button>
-          </div>
-          <SurfaceCard>
-            <div className="divide-y divide-surface-container">
-              {myShips.map((s) => <ShipRow key={s.id} ship={s} />)}
-            </div>
-          </SurfaceCard>
-        </section>
+          {/* Today's intention */}
+          <DailyIntentionCard />
+
+          {/* Community pulse */}
+          <CommunityPulseCard
+            sessions={liveSessions}
+            excludeSessionId={activeSession?.id}
+            onStart={() => openDeclare()}
+          />
+
+          {/* Projects */}
+          <ProjectsMiniGrid
+            projects={projects}
+            tasks={tasks}
+            activeProjectId={activeProjectId}
+            onPin={setActiveProject}
+          />
+
+          {/* Week strip — only when we have data */}
+          {hasWeekData && (
+            <SurfaceCard>
+              <WeekStrip weekSessions={weekSessions} />
+            </SurfaceCard>
+          )}
+
+          {/* Recent finishes */}
+          {myShips.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Recent finishes</p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/profile')}
+                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:opacity-70 transition-opacity"
+                >
+                  All <ArrowRight size={12} />
+                </button>
+              </div>
+              <SurfaceCard>
+                <div className="divide-y divide-surface-container">
+                  {myShips.map((s) => <ShipRow key={s.id} ship={s} />)}
+                </div>
+              </SurfaceCard>
+            </section>
+          )}
+        </>
       )}
 
       {/* Modals */}

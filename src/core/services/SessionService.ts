@@ -191,7 +191,7 @@ export async function startScheduledSession(sessionId: string): Promise<FocusSes
 export async function fetchUpcomingScheduledSessions(): Promise<ScheduledSessionWithProfile[]> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
+    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'scheduled')
     .eq('session_type', 'scheduled')
     .order('scheduled_at', { ascending: true })
@@ -209,7 +209,7 @@ export async function fetchUpcomingScheduledSessions(): Promise<ScheduledSession
 export async function fetchSessionByJoinCode(joinCode: string): Promise<ScheduledSessionWithProfile | null> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
+    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('join_code', joinCode)
     .single();
 
@@ -228,7 +228,7 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
 
   let query = supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
+    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'completed')
     .gt('ended_at', since)
     .order('ended_at', { ascending: false })
@@ -251,7 +251,7 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
 export async function fetchActiveCommunitySessionsWithProfiles(): Promise<CommunitySession[]> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
+    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'active')
     .neq('session_mode', 'solo') // Solo sessions are private — never in community feed
     .order('start_time', { ascending: true });
@@ -262,5 +262,7 @@ export async function fetchActiveCommunitySessionsWithProfiles(): Promise<Commun
     ...row,
     display_name: row.profiles?.display_name ?? 'Someone',
     avatar_url: row.profiles?.avatar_url ?? null,
+    country_code: row.profiles?.country_code ?? null,
+    work_type: row.profiles?.work_type ?? null,
   })) as CommunitySession[];
 }

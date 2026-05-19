@@ -57,6 +57,10 @@ export interface FocusSession {
 export interface CommunitySession extends FocusSession {
   display_name: string;
   avatar_url?: string | null;
+  /** Optional fields used by the home-page community pulse. Sourced from
+   *  the profiles join; absent on older sessions. */
+  country_code?: string | null;
+  work_type?: string | null;
 }
 
 export interface FocusEvent {
