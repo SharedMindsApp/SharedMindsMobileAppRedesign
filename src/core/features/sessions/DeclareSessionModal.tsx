@@ -138,11 +138,11 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 sm:backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="relative w-full sm:max-w-2xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+        className="relative w-full sm:max-w-xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile grab handle */}
