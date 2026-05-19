@@ -236,11 +236,16 @@ export function CalendarView() {
     return `${anchor.toLocaleDateString('en-GB', { month: 'short' })} – ${last.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`;
   }, [anchor, days]);
 
+  // Total live count (excluding solo and excluding self) for header strip
+  const liveCount = active.filter(
+    (s) => s.session_mode !== 'solo' && s.user_id !== user?.id
+  ).length;
+
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-5 min-h-[600px]">
+    <div className="flex flex-col lg:flex-row gap-0 lg:gap-6 min-h-[calc(100vh-8rem)]">
 
       {/* ── Sidebar ──────────────────────────────────────── */}
-      <aside className="w-full lg:w-72 shrink-0 space-y-3">
+      <aside className="w-full lg:w-64 shrink-0 space-y-3 lg:pt-1">
         {/* Active session rejoin banner */}
         {activeSession && (
           <ActiveSessionBanner
@@ -269,87 +274,74 @@ export function CalendarView() {
           type="button"
           onClick={() => setModalState({ kind: 'solo' })}
           disabled={!!activeSession}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-surface-container-low stitch-text-primary text-sm font-semibold hover:bg-surface-container active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <User size={15} />
+          <User size={14} />
           Solo session
         </button>
 
-        {/* Schedule info card */}
-        <div className="rounded-2xl bg-surface-container-low p-4">
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
-            How it works
-          </p>
-          <ul className="space-y-2 text-xs stitch-text-secondary leading-relaxed">
-            <li className="flex gap-2">
-              <span className="text-primary font-bold">1.</span>
-              Tap an empty slot to book a session at that time.
-            </li>
-            <li className="flex gap-2">
-              <span className="text-primary font-bold">2.</span>
-              Tap someone else's session to join.
-            </li>
-            <li className="flex gap-2">
-              <span className="text-primary font-bold">3.</span>
-              Show up, declare your goal, finish it together.
-            </li>
-          </ul>
-        </div>
-
-        {/* Legend */}
-        <div className="rounded-2xl bg-surface-container-low p-4">
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
-            Legend
-          </p>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-md bg-emerald-400 shrink-0" />
-              <span className="stitch-text-secondary">Live now</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-md bg-cyan-400 shrink-0" />
-              <span className="stitch-text-secondary">Scheduled</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <UserPlus size={12} className="text-violet-500 shrink-0" />
-              <span className="stitch-text-secondary">1-on-1 partner slot</span>
-            </div>
+        {/* Live activity strip */}
+        <div className="rounded-2xl bg-surface-container-low px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex w-2 h-2">
+              <span className={`absolute inline-flex h-full w-full rounded-full ${liveCount > 0 ? 'bg-emerald-400 opacity-75 animate-ping' : 'bg-slate-400 opacity-50'}`} />
+              <span className={`relative inline-flex w-2 h-2 rounded-full ${liveCount > 0 ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            </span>
+            <p className="text-xs stitch-text-secondary">
+              {liveCount === 0
+                ? 'Nobody else is working right now'
+                : liveCount === 1
+                ? <><span className="font-bold stitch-text-primary tabular-nums">1</span> person working now</>
+                : <><span className="font-bold stitch-text-primary tabular-nums">{liveCount}</span> people working now</>}
+            </p>
           </div>
         </div>
+
+        {/* Tiny inline legend + hint */}
+        <p className="text-[11px] stitch-text-secondary leading-relaxed px-1">
+          Tap an empty slot to book a time. Tap someone's session to see details or take an open 1-on-1 slot.
+        </p>
       </aside>
 
       {/* ── Calendar ─────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 rounded-3xl bg-surface-container-low overflow-hidden flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col mt-4 lg:mt-0">
 
-        {/* Header */}
-        <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-surface-container">
-          <div className="flex items-center gap-2">
+        {/* Header — this IS the page title */}
+        <div className="shrink-0 flex items-center justify-between gap-3 pb-3 mb-3 border-b border-surface-container">
+          <div className="flex items-baseline gap-3 min-w-0">
+            <h1 className="stitch-headline text-2xl sm:text-3xl font-extrabold tracking-tight truncate">
+              {headerLabel}
+            </h1>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={goToToday}
-              className="px-3 py-1.5 rounded-full bg-surface-container text-xs font-bold stitch-text-primary hover:bg-surface-container-high transition-colors"
+              className="px-3 py-1.5 rounded-full bg-surface-container-low text-xs font-bold stitch-text-primary hover:bg-surface-container transition-colors"
             >
               Today
             </button>
             <button
               type="button"
               onClick={() => nudgeAnchor(-dayCount)}
-              className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors"
+              className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container transition-colors"
               aria-label="Previous days"
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={15} />
             </button>
             <button
               type="button"
               onClick={() => nudgeAnchor(dayCount)}
-              className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors"
+              className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container transition-colors"
               aria-label="Next days"
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={15} />
             </button>
-            <p className="ml-2 text-sm font-bold stitch-text-primary">{headerLabel}</p>
           </div>
         </div>
+
+        {/* Calendar shell */}
+        <div className="flex-1 min-h-0 rounded-2xl bg-surface-container-low overflow-hidden flex flex-col border border-surface-container/50">
 
         {/* Day-of-week column headers */}
         <div className="shrink-0 grid border-b border-surface-container" style={{ gridTemplateColumns: `60px repeat(${dayCount}, minmax(0, 1fr))` }}>
@@ -457,6 +449,7 @@ export function CalendarView() {
               );
             })}
           </div>
+        </div>
         </div>
       </div>
 

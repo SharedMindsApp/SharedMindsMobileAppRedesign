@@ -110,7 +110,7 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'progress', label: 'Progress', path: '/progress', icon: 'TrendingUp' },
   { id: 'tasks', label: 'Tasks', path: '/tasks', icon: 'Target' },
   { id: 'projects', label: 'Projects', path: '/projects', icon: 'Zap' },
-  { id: 'calendar', label: 'Calendar', path: '/calendar', icon: 'Calendar' },
+  // 'calendar' tab removed — /sessions is the calendar. /calendar redirects to /sessions.
   { id: 'pantry', label: 'Pantry', path: '/pantry', icon: 'Package', requiresAdmin: true },
   { id: 'journal', label: 'Journal', path: '/journal', icon: 'BookOpen', requiresAdmin: true },
   { id: 'connections', label: 'Connections', path: '/connections', icon: 'Link2' },

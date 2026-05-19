@@ -12,7 +12,7 @@ import { OnboardingModal } from './features/onboarding/OnboardingModal';
 import { ProgressPage } from './features/progress/ProgressPage';
 import { TasksPage } from './features/tasks/TasksPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
-import { CalendarPage } from './features/calendar/CalendarPage';
+// CalendarPage was removed — /sessions is now the calendar surface.
 import { PantryPage } from './features/pantry/PantryPage';
 import { JournalPage } from './features/journal/JournalPage';
 import { SettingsPage } from './features/settings/SettingsPage';
@@ -125,7 +125,7 @@ function AppContent() {
             <Route path="check-ins" element={<Navigate to="/home" replace />} />
             <Route path="tasks" element={<TasksPage />} />
             <Route path="projects" element={<ProjectsPage />} />
-            <Route path="calendar" element={<CalendarPage />} />
+            <Route path="calendar" element={<Navigate to="/sessions" replace />} />
             <Route
               path="pantry/*"
               element={
