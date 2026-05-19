@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Play, Calendar, StopCircle, Check, ArrowRight,
   Flame, Users, CheckCircle2, Pencil, Target, Zap,
+  Plus, Pin,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -321,6 +322,162 @@ function LivePersonRow({ session }: { session: CommunitySession }) {
   );
 }
 
+// ── Projects section ──────────────────────────────────────────────
+
+const PROJECT_DOT_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function projectDotHex(token: string | null) {
+  return PROJECT_DOT_HEX[token ?? ''] ?? PROJECT_DOT_HEX.blue;
+}
+
+function ProjectsSection({
+  projects,
+  tasks,
+  activeProjectId,
+  onPin,
+}: {
+  projects: import('../../data/CoreDataContext').CoreProject[];
+  tasks: import('../../data/CoreDataContext').CoreTask[];
+  activeProjectId: string | null;
+  onPin: (projectId: string | null) => void;
+}) {
+  const navigate = useNavigate();
+
+  // Empty state — push toward creating the first project
+  if (projects.length === 0) {
+    return (
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Your projects</p>
+        </div>
+        <div
+          className="rounded-[1.25rem] border-2 border-dashed border-surface-container-high flex items-center gap-3 py-4 px-5 cursor-pointer hover:border-primary/30 hover:bg-primary/[0.02] transition-all group"
+          onClick={() => navigate('/projects')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && navigate('/projects')}
+        >
+          <div className="w-10 h-10 rounded-2xl bg-primary/8 group-hover:bg-primary/12 flex items-center justify-center shrink-0 transition-colors">
+            <Target size={17} className="text-primary/60 group-hover:text-primary/80 transition-colors" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold stitch-text-primary leading-tight mb-0.5">
+              No projects yet
+            </p>
+            <p className="text-xs stitch-text-secondary leading-snug">
+              Capture the macro goal your sessions are chipping at.
+            </p>
+          </div>
+          <span className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/8 px-2.5 py-1.5 rounded-full group-hover:bg-primary/15 transition-colors">
+            <Plus size={11} strokeWidth={3} />
+            New
+          </span>
+        </div>
+      </section>
+    );
+  }
+
+  // Task counts per project
+  const counts = new Map<string, number>();
+  for (const t of tasks) {
+    if (!t.projectId || t.done) continue;
+    counts.set(t.projectId, (counts.get(t.projectId) ?? 0) + 1);
+  }
+
+  // Show up to 4 — pinned project always first, then most recently updated.
+  const sorted = [...projects].sort((a, b) => {
+    if (a.id === activeProjectId) return -1;
+    if (b.id === activeProjectId) return 1;
+    return 0;
+  });
+  const visible = sorted.slice(0, 4);
+  const hiddenCount = projects.length - visible.length;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Your projects</p>
+        <button
+          type="button"
+          onClick={() => navigate('/projects')}
+          className="flex items-center gap-1 text-xs font-semibold text-primary hover:opacity-70 transition-opacity"
+        >
+          See all <ArrowRight size={12} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        {visible.map((p) => {
+          const isPinned = p.id === activeProjectId;
+          const openCount = counts.get(p.id) ?? 0;
+          return (
+            <div
+              key={p.id}
+              className={`relative rounded-2xl p-3 cursor-pointer transition-all hover:shadow-md ${
+                isPinned
+                  ? 'bg-primary/5 ring-1 ring-primary/30'
+                  : 'bg-surface-container-low hover:bg-surface-container'
+              }`}
+              onClick={() => navigate(`/projects/${p.id}`)}
+              role="button"
+              tabIndex={0}
+            >
+              {/* Pin toggle in the corner */}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onPin(isPinned ? null : p.id); }}
+                title={isPinned ? 'Unpin' : 'Pin as active'}
+                className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                  isPinned
+                    ? 'text-primary bg-white shadow-sm'
+                    : 'text-transparent group-hover:text-primary hover:bg-surface-container'
+                }`}
+              >
+                <Pin size={10} fill={isPinned ? 'currentColor' : 'none'} strokeWidth={2.5} />
+              </button>
+
+              <div className="flex items-start gap-2 pr-6">
+                <span
+                  className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow"
+                  style={{ backgroundColor: projectDotHex(p.color) }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold stitch-text-primary leading-tight line-clamp-2 mb-1">
+                    {p.name}
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary">
+                      <Target size={9} /> {openCount}
+                    </span>
+                    {p.scope === 'shared' && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 bg-violet-100 px-1.5 py-px rounded-full">
+                        <Users size={8} /> {p.memberCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate('/projects')}
+            className="rounded-2xl p-3 bg-surface-container-low hover:bg-surface-container transition-colors flex flex-col items-center justify-center text-center"
+          >
+            <p className="text-sm font-bold stitch-text-primary">+{hiddenCount} more</p>
+            <p className="text-[10px] stitch-text-secondary mt-0.5">See all projects</p>
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── Finish row ────────────────────────────────────────────────────
 
 function ShipRow({ ship }: { ship: ShippedSession }) {
@@ -352,7 +509,7 @@ function ShipRow({ ship }: { ship: ShippedSession }) {
 export function DashboardPage() {
   const { user, profile } = useAuth();
   const { activeSession } = useFocusSession();
-  const { state: { tasks } } = useCoreData();
+  const { state: { tasks, projects, activeProjectId }, setActiveProject } = useCoreData();
   const { sessions: liveSessions } = useCommunitySessionsSubscription();
   const navigate = useNavigate();
 
@@ -442,6 +599,14 @@ export function DashboardPage() {
       <SurfaceCard>
         <WeekStrip weekSessions={weekSessions} />
       </SurfaceCard>
+
+      {/* ── 4b. Your projects ─────────────────────────────── */}
+      <ProjectsSection
+        projects={projects}
+        tasks={tasks}
+        activeProjectId={activeProjectId}
+        onPin={setActiveProject}
+      />
 
       {/* ── 5. Working now ────────────────────────────────── */}
       <section>
