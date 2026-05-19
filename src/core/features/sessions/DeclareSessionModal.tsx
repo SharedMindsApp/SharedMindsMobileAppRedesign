@@ -137,12 +137,23 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     : null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 sm:backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <>
+      {/* Backdrop — separate from the modal so we don't accidentally create
+          a containing block that traps the modal's fixed positioning. */}
       <div
-        className="relative w-full sm:max-w-xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+        className="fixed inset-0 z-50 bg-black/40"
+        onClick={onClose}
+      />
+      {/* Modal — anchored to bottom on mobile, centered on desktop via
+          explicit top-1/2 + translate. No reliance on flex parent alignment. */}
+      <div
+        className="
+          fixed left-1/2 -translate-x-1/2 z-50 w-full sm:w-auto sm:max-w-xl
+          bottom-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2
+          bg-surface flex flex-col
+          max-h-[88vh] sm:max-h-[85vh]
+          rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden
+        "
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile grab handle */}
@@ -465,6 +476,6 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
 
       </div>
-    </div>
+    </>
   );
 }
