@@ -23,6 +23,7 @@ import {
   type ConnectionWithProfile,
 } from '../../services/ConnectionService';
 import { getOrCreateDm } from '../../services/MessageService';
+import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
 
 const AVATAR_COLORS = [
@@ -205,6 +206,7 @@ function ConnectionCard({ conn, onRemove }: { conn: ConnectionWithProfile; onRem
   const [removing, setRemoving] = useState(false);
   const [messaging, setMessaging] = useState(false);
   const navigate = useNavigate();
+  const { openConversation, isMobile } = useMessagingDock();
 
   async function handleRemove() {
     if (!confirm(`Remove ${conn.display_name} from your connections?`)) return;
@@ -221,8 +223,11 @@ function ConnectionCard({ conn, onRemove }: { conn: ConnectionWithProfile; onRem
     setMessaging(true);
     try {
       const conversationId = await getOrCreateDm(conn.other_user_id);
-      navigate(`/messages/${conversationId}`);
-    } catch {
+      if (isMobile) navigate(`/messages/${conversationId}`);
+      else openConversation(conversationId);
+    } catch (err) {
+      console.error(err);
+    } finally {
       setMessaging(false);
     }
   }

@@ -4,6 +4,7 @@ import { Loader2, Flame, Check, Clock, Link2, Edit2, X, MapPin, Sparkles, Camera
 import { useAuth } from '../../auth/AuthProvider';
 import { ConnectButton } from '../connections/ConnectButton';
 import { getOrCreateDm } from '../../services/MessageService';
+import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard } from '../../ui/CorePage';
 import { findCountry, formatLocation } from '../../../lib/countries';
 import { findSkillCategory } from '../../../lib/skills';
@@ -446,6 +447,7 @@ export function ProfilePage() {
    profile owner and jumps to the thread page. */
 function MessageButton({ otherUserId }: { otherUserId: string }) {
   const navigate = useNavigate();
+  const { openConversation, isMobile } = useMessagingDock();
   const [busy, setBusy] = useState(false);
 
   async function handleClick() {
@@ -453,9 +455,12 @@ function MessageButton({ otherUserId }: { otherUserId: string }) {
     setBusy(true);
     try {
       const conversationId = await getOrCreateDm(otherUserId);
-      navigate(`/messages/${conversationId}`);
+      // Desktop: pop the dock chat. Mobile: navigate to the full page.
+      if (isMobile) navigate(`/messages/${conversationId}`);
+      else openConversation(conversationId);
     } catch (err) {
       console.error('[MessageButton] open DM failed:', err);
+    } finally {
       setBusy(false);
     }
   }

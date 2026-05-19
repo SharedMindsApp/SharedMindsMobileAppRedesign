@@ -17,6 +17,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { listMembers, type PublicProfile } from '../../services/ProfileService';
 import { fetchConnections, sendConnectionRequest, fetchConnectionStatus, type ConnectionStatus } from '../../services/ConnectionService';
 import { getOrCreateDm } from '../../services/MessageService';
+import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
 
 const WORK_TYPE_LABELS: Record<string, string> = {
@@ -42,6 +43,7 @@ function gradFor(name: string) {
 export function MembersDirectoryPage() {
   const navigate = useNavigate();
   const { profile: me } = useAuth();
+  const { openConversation, isMobile } = useMessagingDock();
   const [members, setMembers] = useState<PublicProfile[]>([]);
   const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -136,7 +138,8 @@ export function MembersDirectoryPage() {
   async function handleMessage(userId: string) {
     try {
       const conversationId = await getOrCreateDm(userId);
-      navigate(`/messages/${conversationId}`);
+      if (isMobile) navigate(`/messages/${conversationId}`);
+      else openConversation(conversationId);
     } catch (e) {
       console.error('handleMessage failed:', e);
     }

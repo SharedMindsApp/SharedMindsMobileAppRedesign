@@ -40,6 +40,7 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ActiveProjectProvider } from '../contexts/ActiveProjectContext';
 import { RegulationProvider } from '../contexts/RegulationContext';
 import { FocusSessionProvider } from '../contexts/FocusSessionContext';
+import { MessagingDockProvider } from './features/messages/MessagingDockContext';
 
 const LAST_ROUTE_STORAGE_KEY = 'sharedminds:last-core-route';
 const ROUTE_RESTORE_WINDOW_MS = 3000; // Allow restoration within 3s of mount
@@ -196,7 +197,9 @@ export default function CoreApp() {
               <ActiveProjectProvider>
                 <RegulationProvider>
                   <FocusSessionProvider>
-                    <AppContent />
+                    <MessagingDockProvider>
+                      <AppContent />
+                    </MessagingDockProvider>
                   </FocusSessionProvider>
                 </RegulationProvider>
               </ActiveProjectProvider>

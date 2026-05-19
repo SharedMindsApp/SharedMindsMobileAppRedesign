@@ -9,6 +9,7 @@ import { useAuth } from '../core/auth/AuthProvider';
 import { useViewAs } from '../contexts/ViewAsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { fetchTotalUnreadDms, subscribeToAnyIncomingDm } from '../core/services/MessageService';
+import { MessagingDock } from '../core/features/messages/MessagingDock';
 // SpaceSwitcher removed — replaced by SharedMinds brand text in header
 // Cleaned duplicate and missing imports
 import { getUserUIMode } from '../lib/mobileApps';
@@ -823,6 +824,10 @@ export function Layout({ children }: LayoutProps) {
           }
         }}
       />
+
+      {/* Persistent floating chat dock — portals to body so it sits above
+          all page content including active session/Jitsi overlays. */}
+      <MessagingDock />
     </div>
   );
 }
