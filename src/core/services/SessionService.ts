@@ -5,6 +5,7 @@ export interface CreateScheduledSessionInput {
   title: string;
   scheduledAt: Date;
   durationMinutes: 25 | 50 | 90;
+  projectId?: string;
 }
 
 export interface ScheduledSessionWithProfile extends FocusSession {
@@ -27,6 +28,7 @@ function generateJoinCode(): string {
 export interface StartCommunitySessionInput {
   goalText: string;
   taskId?: string;
+  projectId?: string;
   durationMinutes: 25 | 50 | 90;
   sessionMode?: 'group' | 'one_on_one' | 'solo';
   quietMode?: boolean;
@@ -51,6 +53,7 @@ export async function startCommunitySession(
       intended_duration_minutes: input.durationMinutes,
       session_goal: input.goalText,
       session_task_id: input.taskId ?? null,
+      project_id: input.projectId ?? null,
       session_mode: input.sessionMode ?? 'group',
       quiet_mode: input.quietMode ?? false,
       drift_count: 0,
@@ -146,6 +149,7 @@ export async function createScheduledSession(
       start_time: input.scheduledAt.toISOString(),
       target_end_time: targetEnd.toISOString(),
       intended_duration_minutes: input.durationMinutes,
+      project_id: input.projectId ?? null,
       join_code: joinCode,
       drift_count: 0,
       distraction_count: 0,
@@ -187,7 +191,7 @@ export async function startScheduledSession(sessionId: string): Promise<FocusSes
 export async function fetchUpcomingScheduledSessions(): Promise<ScheduledSessionWithProfile[]> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
     .eq('status', 'scheduled')
     .eq('session_type', 'scheduled')
     .order('scheduled_at', { ascending: true })
@@ -205,7 +209,7 @@ export async function fetchUpcomingScheduledSessions(): Promise<ScheduledSession
 export async function fetchSessionByJoinCode(joinCode: string): Promise<ScheduledSessionWithProfile | null> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
     .eq('join_code', joinCode)
     .single();
 
@@ -224,7 +228,7 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
 
   let query = supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
     .eq('status', 'completed')
     .gt('ended_at', since)
     .order('ended_at', { ascending: false })
@@ -247,7 +251,7 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
 export async function fetchActiveCommunitySessionsWithProfiles(): Promise<CommunitySession[]> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url)')
+    .select('*, profiles(display_name, avatar_url), project:projects(id, title, color)')
     .eq('status', 'active')
     .neq('session_mode', 'solo') // Solo sessions are private — never in community feed
     .order('start_time', { ascending: true });

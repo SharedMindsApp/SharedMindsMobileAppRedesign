@@ -22,6 +22,19 @@ const ENERGY_COLORS: Record<CoreTask['energy'], string> = {
   light: 'bg-sky-400',
 };
 
+const PROJECT_COLOR_HEX: Record<string, string> = {
+  cyan: '#22d3ee',
+  blue: '#3b82f6',
+  violet: '#8b5cf6',
+  emerald: '#10b981',
+  amber: '#f59e0b',
+  rose: '#f43f5e',
+};
+
+function projectSwatch(token: string | null): string {
+  return PROJECT_COLOR_HEX[token ?? ''] ?? PROJECT_COLOR_HEX.blue;
+}
+
 interface Props {
   onClose: () => void;
   initialGoal?: string;
@@ -29,11 +42,13 @@ interface Props {
   initialScheduledAt?: Date;
   /** Forces the mode picker to Solo and locks it (used by the sidebar Solo button). */
   forceSoloMode?: boolean;
+  /** Pre-selects a project to pin the session to. */
+  initialProjectId?: string;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId }: Props) {
   const navigate = useNavigate();
-  const { state: { tasks } } = useCoreData();
+  const { state: { tasks, projects, activeProjectId } } = useCoreData();
   const { setActiveSession } = useFocusSession();
 
   const isScheduling = initialScheduledAt != null;
@@ -46,6 +61,9 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     forceSoloMode ? 'solo' : 'group'
   );
   const [quietMode, setQuietMode] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    initialProjectId ?? activeProjectId ?? null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +82,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           title: resolvedGoal,
           scheduledAt: initialScheduledAt,
           durationMinutes: duration,
+          projectId: selectedProjectId ?? undefined,
         });
         onClose();
         return;
@@ -71,6 +90,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
       const session = await startCommunitySession({
         goalText: resolvedGoal,
         taskId: tab === 'pick' && selectedTask ? selectedTask.id : undefined,
+        projectId: selectedProjectId ?? undefined,
         durationMinutes: duration,
         sessionMode,
         // Solo has no audio room — quiet mode is meaningless there
@@ -210,6 +230,49 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </div>
           )}
         </div>
+
+        {/* ── Project pin (optional) ───────────────────────── */}
+        {projects.length > 0 && (
+          <div className="shrink-0 px-5 pt-3">
+            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
+              Pin to project <span className="opacity-60 normal-case font-medium">(optional)</span>
+            </p>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+              <button
+                type="button"
+                onClick={() => setSelectedProjectId(null)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                  selectedProjectId === null
+                    ? 'stitch-btn--primary text-white shadow-sm'
+                    : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
+                }`}
+              >
+                None
+              </button>
+              {projects.map((p) => {
+                const isSel = p.id === selectedProjectId;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedProjectId(p.id)}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                      isSel
+                        ? 'stitch-btn--primary text-white shadow-sm'
+                        : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                    }`}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: projectSwatch(p.color) }}
+                    />
+                    <span className="truncate max-w-[140px]">{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Duration picker ──────────────────────────────── */}
         <div className="shrink-0 px-5 pt-3">

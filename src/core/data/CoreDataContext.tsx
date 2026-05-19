@@ -11,6 +11,7 @@ import { SpaceService, type Space } from '../services/SpaceService';
 import { ProjectService } from '../services/ProjectService';
 import { TaskService } from '../services/TaskService';
 import { DailyOSService } from '../services/DailyOSService';
+import { supabase } from '../../lib/supabase';
 
 export type BrainStateId =
   | 'hyperfocus'
@@ -32,12 +33,18 @@ export type CoreProject = {
   name: string;
   scope: 'personal' | 'shared';
   description: string;
+  color: string | null;       // hex or token key (e.g. 'violet')
+  status: 'active' | 'paused' | 'completed' | 'archived';
+  targetDate: string | null;  // ISO date
+  memberCount: number;        // 1 = solo, >1 = shared
+  spaceId: string;            // needed for task scoping when creating tasks
 };
 
 export type CoreTask = {
   id: string;
   title: string;
-  projectId: string;
+  /** null when the task is unscoped (inbox); a project UUID when pinned. */
+  projectId: string | null;
   energy: 'deep' | 'medium' | 'light';
   priority: 'high' | 'medium' | 'low';
   dueLabel: string;
@@ -102,7 +109,7 @@ type CoreDataState = {
   activeSpaceId: string | null;
   spaces: Space[];
   currentBrainStateId: BrainStateId;
-  activeProjectId: string;
+  activeProjectId: string | null;
   projects: CoreProject[];
   tasks: CoreTask[];
   responsibilities: CoreResponsibility[];
@@ -119,9 +126,10 @@ type CoreDataContextValue = {
   state: CoreDataState;
   switchSpace: (spaceId: string) => void;
   setCurrentBrainState: (brainStateId: BrainStateId) => void;
-  setActiveProject: (projectId: string) => void;
+  setActiveProject: (projectId: string | null) => void;
+  refreshProjects: () => Promise<void>;
   toggleTask: (taskId: string) => void;
-  addTask: (title: string) => void;
+  addTask: (title: string, projectId?: string | null) => void;
   toggleResponsibility: (responsibilityId: string) => void;
   addActivityEntry: (title: string) => void;
   addParkedIdea: (text: string) => void;
@@ -134,6 +142,24 @@ type CoreDataContextValue = {
 };
 
 const STORAGE_KEY = 'sharedminds-core-state-v1';
+const ACTIVE_PROJECT_KEY = 'sharedminds-active-project-id';
+
+function readActiveProject(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(ACTIVE_PROJECT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeActiveProject(id: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (id === null) window.localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    else window.localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+  } catch { /* ignore */ }
+}
 
 const brainStateOptions: BrainStateOption[] = [
   { id: 'hyperfocus', label: 'Hyperfocus', emoji: '🔥', tone: 'bg-orange-100 text-orange-800' },
@@ -154,12 +180,15 @@ function makeId(prefix: string) {
 
 function buildCheckInPrompt(state: CoreDataState) {
   const project = state.projects.find((item) => item.id === state.activeProjectId) ?? state.projects[0];
-  const openTasks = state.tasks.filter((task) => !task.done && task.projectId === state.activeProjectId);
+  const openTasks = state.tasks.filter(
+    (task) => !task.done && state.activeProjectId !== null && task.projectId === state.activeProjectId,
+  );
   const openResponsibilities = state.responsibilities.filter((item) => !item.done);
   const brainState = brainStateOptions.find((item) => item.id === state.currentBrainStateId) ?? brainStateOptions[2];
   const latestActivity = state.activityLog[0];
 
-  return `${brainState.label} right now. ${project.name} is active, ${openTasks.length} tasks are still open, ${openResponsibilities.length} responsibilities remain, and your latest activity was "${latestActivity?.title ?? 'nothing logged yet'}". What is the smallest useful next step?`;
+  const projectName = project?.name ?? 'No project pinned';
+  return `${brainState.label} right now. ${projectName} is active, ${openTasks.length} tasks are still open, ${openResponsibilities.length} responsibilities remain, and your latest activity was "${latestActivity?.title ?? 'nothing logged yet'}". What is the smallest useful next step?`;
 }
 
 function buildReportSummary(state: CoreDataState) {
@@ -176,65 +205,9 @@ function seedState(): CoreDataState {
     activeSpaceId: null,
     spaces: [],
     currentBrainStateId: 'steady',
-    activeProjectId: 'project-sharedminds',
-    projects: [
-      {
-        id: 'project-sharedminds',
-        name: 'SharedMinds product build',
-        scope: 'personal',
-        description: 'Core product decisions, migration work, and design iterations.',
-      },
-      {
-        id: 'project-gtm',
-        name: 'Go-to-market',
-        scope: 'personal',
-        description: 'Community outreach, Skool and Meetup sessions, early user growth.',
-      },
-      {
-        id: 'project-health-reset',
-        name: 'Health reset',
-        scope: 'personal',
-        description: 'Sleep, movement, recovery, and low-friction routines.',
-      },
-    ],
-    tasks: [
-      {
-        id: 'task-session-flow',
-        title: 'Wire up Jitsi embed for public sessions',
-        projectId: 'project-sharedminds',
-        energy: 'deep',
-        priority: 'high',
-        dueLabel: 'This week',
-        done: false,
-      },
-      {
-        id: 'task-onboarding',
-        title: 'Write onboarding copy for first-time session joiners',
-        projectId: 'project-sharedminds',
-        energy: 'medium',
-        priority: 'high',
-        dueLabel: 'This week',
-        done: false,
-      },
-      {
-        id: 'task-skool',
-        title: 'Post first virtual coworking invite to Skool group',
-        projectId: 'project-gtm',
-        energy: 'light',
-        priority: 'medium',
-        dueLabel: 'Today',
-        done: false,
-      },
-      {
-        id: 'task-walk',
-        title: 'Take a short recovery walk',
-        projectId: 'project-health-reset',
-        energy: 'medium',
-        priority: 'low',
-        dueLabel: 'This evening',
-        done: false,
-      },
-    ],
+    activeProjectId: null,
+    projects: [],
+    tasks: [],
     responsibilities: [
       { id: 'resp-meds', name: 'Medication and breakfast', category: 'health', done: false },
       { id: 'resp-review', name: 'Daily task review', category: 'routine', done: false },
@@ -349,7 +322,54 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
     return () => { isMounted = false; };
   }, [user]);
 
-  // Load backend models (projects, tasks)
+  // Refresh projects across all spaces the user can see (own + shared).
+  // Exposed via context so list pages / editor modals can re-trigger after CUD.
+  const refreshProjects = async () => {
+    try {
+      const rows = await ProjectService.getProjectsForUser();
+
+      // Member counts in one round-trip
+      const memberCounts = new Map<string, number>();
+      if (rows.length > 0) {
+        const { data: memberRows } = await supabase
+          .from('project_members')
+          .select('project_id')
+          .in('project_id', rows.map(r => r.id));
+        for (const m of memberRows ?? []) {
+          memberCounts.set(m.project_id, (memberCounts.get(m.project_id) ?? 0) + 1);
+        }
+      }
+
+      const mapped: CoreProject[] = rows.map(p => {
+        const count = memberCounts.get(p.id) ?? 1;
+        return {
+          id: p.id,
+          name: p.title,
+          scope: count > 1 ? 'shared' : 'personal',
+          description: p.description ?? '',
+          color: p.color,
+          status: p.status,
+          targetDate: p.target_date,
+          memberCount: count,
+          spaceId: p.space_id,
+        };
+      });
+
+      setState(s => {
+        // Reconcile stored active project against fresh list — drop stale id
+        const storedActive = s.activeProjectId;
+        const nextActive = storedActive && mapped.some(p => p.id === storedActive)
+          ? storedActive
+          : null;
+        if (nextActive !== storedActive) writeActiveProject(nextActive);
+        return { ...s, projects: mapped, activeProjectId: nextActive };
+      });
+    } catch (err) {
+      console.warn('[CoreData] refreshProjects failed:', err);
+    }
+  };
+
+  // Load backend models (projects, tasks, daily OS)
   useEffect(() => {
     if (!activeSpaceId) return;
     let isMounted = true;
@@ -357,8 +377,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
       try {
         const todayStr = new Date().toISOString().split('T')[0];
 
-        const [projects, tasks, activities, responsibilities, checkins, journal] = await Promise.all([
-          ProjectService.getProjectsBySpace(activeSpaceId),
+        const [tasks, activities, responsibilities, checkins, journal] = await Promise.all([
           TaskService.getTasksBySpace(activeSpaceId),
           DailyOSService.getActivityLogs(user!.id, todayStr),
           DailyOSService.getResponsibilities(activeSpaceId, user!.id, todayStr),
@@ -367,29 +386,25 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
         ]);
         if (!isMounted) return;
 
-        const mappedProjects: CoreProject[] = projects.map(p => ({
-          id: p.id,
-          name: p.title,
-          scope: 'personal',
-          description: p.description || ''
-        }));
-
+        // Tasks keep null projectId when unscoped (fixes earlier bug that
+        // silently re-pointed inbox tasks at the first project).
         const mappedTasks: CoreTask[] = tasks.map(t => ({
           id: t.id,
           title: t.title,
-          projectId: t.project_id || mappedProjects[0]?.id || 'project-home-rhythm',
+          projectId: t.project_id ?? null,
           energy: t.energy_level === 'high' ? 'deep' : t.energy_level === 'medium' ? 'medium' : 'light',
           priority: t.priority,
           dueLabel: t.due_on ? new Date(t.due_on).toLocaleDateString() : 'Inbox',
           done: t.status === 'done' || t.status === 'dropped'
         }));
 
+        // Restore active project from localStorage (validated by refreshProjects).
+        const restoredActive = readActiveProject();
+
         setState(s => ({
           ...s,
-          // Only overwrite if backend has items, otherwise we start with seed so app isn't strictly empty yet
-          projects: mappedProjects.length > 0 ? mappedProjects : s.projects,
-          tasks: mappedTasks.length > 0 ? mappedTasks : s.tasks,
-          activeProjectId: mappedProjects.length > 0 ? mappedProjects[0].id : s.activeProjectId,
+          tasks: mappedTasks,
+          activeProjectId: restoredActive,
           activityLog: activities.length > 0 ? activities : s.activityLog,
           responsibilities: responsibilities.length > 0 ? responsibilities : s.responsibilities,
           checkins: checkins.length > 0 ? checkins : s.checkins,
@@ -401,6 +416,13 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
     })();
     return () => { isMounted = false; };
   }, [activeSpaceId, user]);
+
+  // Projects load independently of space — they may live in another user's space.
+  useEffect(() => {
+    if (!user) return;
+    refreshProjects();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const value = useMemo<CoreDataContextValue>(
     () => ({
@@ -417,8 +439,10 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
         setState((current) => ({ ...current, currentBrainStateId: brainStateId }));
       },
       setActiveProject: (projectId) => {
+        writeActiveProject(projectId);
         setState((current) => ({ ...current, activeProjectId: projectId }));
       },
+      refreshProjects,
       toggleTask: (taskId) => {
         setState((current) => ({
           ...current,
@@ -435,11 +459,26 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           }).catch(console.error);
         }
       },
-      addTask: (title) => {
+      addTask: (title, projectIdOverride) => {
         const cleanedTitle = title.trim();
         if (!cleanedTitle) {
           return;
         }
+
+        // Resolve which project (if any) the task belongs to:
+        //   - explicit override wins (e.g. from a project detail page)
+        //   - else fall back to the active project (if pinned)
+        //   - else null (inbox)
+        const pinnedProjectId =
+          projectIdOverride !== undefined ? projectIdOverride : state.activeProjectId;
+
+        // If creating into a shared project, scope the task to *that*
+        // project's space, not the user's personal space — RLS allows
+        // either, but task visibility hooks off space_id.
+        const project = pinnedProjectId
+          ? state.projects.find((p) => p.id === pinnedProjectId)
+          : null;
+        const targetSpaceId = project?.spaceId ?? activeSpaceId;
 
         const fakeId = makeId('task');
         setState((current) => ({
@@ -448,7 +487,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
             {
               id: fakeId,
               title: cleanedTitle,
-              projectId: current.activeProjectId,
+              projectId: pinnedProjectId,
               energy: 'medium',
               priority: 'medium',
               dueLabel: 'Inbox',
@@ -458,12 +497,12 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           ],
         }));
 
-        if (activeSpaceId && user) {
+        if (targetSpaceId && user) {
           TaskService.createTask({
-            space_id: activeSpaceId,
+            space_id: targetSpaceId,
             created_by: user.id,
             title: cleanedTitle,
-            project_id: state.activeProjectId.startsWith('project-') ? null : state.activeProjectId,
+            project_id: pinnedProjectId,
             status: 'inbox',
             priority: 'medium',
             energy_level: 'medium',

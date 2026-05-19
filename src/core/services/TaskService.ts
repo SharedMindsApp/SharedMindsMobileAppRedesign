@@ -20,6 +20,26 @@ export interface Task {
 }
 
 export const TaskService = {
+    /**
+     * Fetch all open + active tasks in a single project (across whatever
+     * space the project lives in). Used by the ProjectDetailPage.
+     */
+    async getTasksByProject(projectId: string): Promise<Task[]> {
+        const { data, error } = await supabase
+            .from('tasks')
+            .select('*')
+            .eq('project_id', projectId)
+            .in('status', ['inbox', 'active', 'done'])
+            .order('status', { ascending: true })   // inbox/active before done
+            .order('sort_order', { ascending: true });
+
+        if (error) {
+            console.error('[TaskService] Failed to fetch tasks by project:', error);
+            throw error;
+        }
+        return (data || []) as Task[];
+    },
+
     async getTasksBySpace(spaceId: string): Promise<Task[]> {
         const { data: tasks, error } = await supabase
             .from('tasks')

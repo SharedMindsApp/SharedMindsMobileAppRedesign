@@ -12,6 +12,7 @@ import { useIsMounted } from '../hooks/useMountedState';
 interface FocusSessionContextType {
   activeSession: FocusSession | null;
   sessionGoal: string | null;
+  sessionProject: { id: string; title: string; color: string | null } | null;
   isPaused: boolean;
   driftActive: boolean;
   pendingNudge: { type: 'soft' | 'hard' | 'regulation'; message: string } | null;
@@ -34,6 +35,7 @@ const FocusSessionContext = createContext<FocusSessionContextType | null>(null);
 export function FocusSessionProvider({ children }: { children: ReactNode }) {
   const [activeSession, setActiveSession] = useState<FocusSession | null>(null);
   const [sessionGoal, setSessionGoal] = useState<string | null>(null);
+  const [sessionProject, setSessionProject] = useState<{ id: string; title: string; color: string | null } | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [driftActive, setDriftActive] = useState(false);
   const [pendingNudge, setPendingNudge] = useState<{ type: 'soft' | 'hard' | 'regulation'; message: string } | null>(null);
@@ -79,6 +81,20 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
   const handleSetActiveSession = useCallback((session: FocusSession | null) => {
     setActiveSession(session);
     setSessionGoal(session?.session_goal ?? null);
+    // Pre-set project from the join if it's already on the session object.
+    // If not, we fetch lazily below so the active session header shows the chip.
+    setSessionProject(session?.project ?? null);
+    if (session?.project_id && !session.project) {
+      // Lazy fetch the project meta so the active session UI can show it.
+      supabase
+        .from('projects')
+        .select('id, title, color')
+        .eq('id', session.project_id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) setSessionProject(data as any);
+        });
+    }
   }, []);
 
   // Phase 2: Use safe subscription for session updates
@@ -148,6 +164,7 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
   function clearSession() {
     setActiveSession(null);
     setSessionGoal(null);
+    setSessionProject(null);
     setIsPaused(false);
     setDriftActive(false);
     setPendingNudge(null);
@@ -162,6 +179,7 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
       value={{
         activeSession,
         sessionGoal,
+        sessionProject,
         isPaused,
         driftActive,
         pendingNudge,

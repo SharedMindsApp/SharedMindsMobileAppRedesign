@@ -22,7 +22,7 @@ export type SessionMode = 'group' | 'one_on_one' | 'solo';
 export interface FocusSession {
   id: string;
   user_id: string;
-  project_id: string;
+  project_id: string | null;
   domain_id: string | null;
   start_time: string;
   end_time: string | null;
@@ -50,6 +50,8 @@ export interface FocusSession {
   session_mode?: SessionMode;
   quiet_mode?: boolean;
   partner_user_id?: string | null;
+  // Project pin — optional macro-goal context (joined via Supabase select)
+  project?: { id: string; title: string; color: string | null } | null;
 }
 
 export interface CommunitySession extends FocusSession {

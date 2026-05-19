@@ -39,6 +39,8 @@ function energyLabel(energy: CoreTask['energy']): string {
 export function TasksPage() {
   const [draftTask, setDraftTask] = useState('');
   const [energyFilter, setEnergyFilter] = useState<EnergyFilter>('all');
+  // null = "All projects"; '__inbox' = unscoped only; uuid = specific project
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [showCapture, setShowCapture] = useState(false);
   const [showDeclare, setShowDeclare] = useState(false);
   const { activeSession } = useFocusSession();
@@ -49,8 +51,16 @@ export function TasksPage() {
   } = useCoreData();
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
-  const openTasks = tasks.filter((t) => !t.done);
-  const completedTasks = tasks.filter((t) => t.done);
+
+  // Project filter applied first, then energy.
+  const projectFiltered = projectFilter === null
+    ? tasks
+    : projectFilter === '__inbox'
+      ? tasks.filter((t) => !t.projectId)
+      : tasks.filter((t) => t.projectId === projectFilter);
+
+  const openTasks = projectFiltered.filter((t) => !t.done);
+  const completedTasks = projectFiltered.filter((t) => t.done);
 
   const filteredOpen = energyFilter === 'all'
     ? openTasks
@@ -101,6 +111,57 @@ export function TasksPage() {
             </GradientButton>
           </div>
         </SurfaceCard>
+      )}
+
+      {/* ── Project Filter Chips ──────────────────────────── */}
+      {projects.length > 0 && (
+        <section>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+            <button
+              type="button"
+              onClick={() => setProjectFilter(null)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                projectFilter === null
+                  ? 'stitch-btn--primary text-white shadow-sm'
+                  : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setProjectFilter('__inbox')}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                projectFilter === '__inbox'
+                  ? 'stitch-btn--primary text-white shadow-sm'
+                  : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
+              }`}
+            >
+              Inbox
+            </button>
+            {projects.map((p) => {
+              const sel = projectFilter === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setProjectFilter(p.id)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                    sel
+                      ? 'stitch-btn--primary text-white shadow-sm'
+                      : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: projectChipHex(p.color) }}
+                  />
+                  <span className="truncate max-w-[140px]">{p.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* ── Energy Filter Tabs (Bento) ────────────────────── */}
@@ -170,11 +231,11 @@ export function TasksPage() {
       <section>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {filteredOpen.map((task) => (
-            <TaskCard key={task.id} task={task} onToggle={toggleTask} />
+            <TaskCard key={task.id} task={task} onToggle={toggleTask} projects={projects} />
           ))}
 
           {filteredDone.slice(0, 4).map((task) => (
-            <TaskCard key={task.id} task={task} onToggle={toggleTask} />
+            <TaskCard key={task.id} task={task} onToggle={toggleTask} projects={projects} />
           ))}
 
           {/* Empty / Quick-add prompt */}
@@ -211,8 +272,26 @@ export function TasksPage() {
   );
 }
 
+const PROJECT_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function projectChipHex(token: string | null): string {
+  return PROJECT_HEX[token ?? ''] ?? PROJECT_HEX.blue;
+}
+
 /* ── Individual Task Card ─────────────────────────────── */
-function TaskCard({ task, onToggle }: { task: CoreTask; onToggle: (id: string) => void }) {
+function TaskCard({
+  task,
+  onToggle,
+  projects,
+}: {
+  task: CoreTask;
+  onToggle: (id: string) => void;
+  projects: { id: string; name: string; color: string | null }[];
+}) {
+  const project = task.projectId ? projects.find((p) => p.id === task.projectId) : null;
+
   return (
     <div
       className={`stitch-card flex flex-col justify-between gap-4 p-4 sm:p-5 transition-all duration-200 hover:shadow-md ${
@@ -237,6 +316,18 @@ function TaskCard({ task, onToggle }: { task: CoreTask; onToggle: (id: string) =
         <h3 className={`text-base sm:text-lg font-bold leading-snug stitch-text-primary ${task.done ? 'line-through' : ''}`}>
           {task.title}
         </h3>
+
+        {project && (
+          <div className="mt-2 inline-flex items-center gap-1.5">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: projectChipHex(project.color) }}
+            />
+            <span className="text-[11px] font-bold stitch-text-secondary uppercase tracking-wider truncate">
+              {project.name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Bottom row: status + toggle */}

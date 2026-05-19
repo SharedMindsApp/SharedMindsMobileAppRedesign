@@ -23,6 +23,14 @@ function oneOnOneRoomName(sessionId: string): string {
   return `sharedminds-1on1-${safeId}`;
 }
 
+const PROJECT_CHIP_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function projectChipColor(token: string | null): string {
+  return PROJECT_CHIP_HEX[token ?? ''] ?? PROJECT_CHIP_HEX.blue;
+}
+
 function formatRemaining(seconds: number): string {
   if (seconds <= 0) return 'Time up';
   const m = Math.floor(seconds / 60);
@@ -53,7 +61,7 @@ function avatarClass(name: string): string {
 export function ActiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const { activeSession, sessionGoal, timerSecondsRemaining, setActiveSession, clearSession } = useFocusSession();
+  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, clearSession } = useFocusSession();
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
   const [ending, setEnding] = useState(false);
@@ -157,6 +165,17 @@ export function ActiveSessionPage() {
           <p className="text-sm font-bold text-white truncate leading-snug">
             {currentGoal || 'Your session'}
           </p>
+          {sessionProject && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: projectChipColor(sessionProject.color) }}
+              />
+              <span className="text-[11px] font-semibold text-white/70 truncate">
+                {sessionProject.title}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Timer */}

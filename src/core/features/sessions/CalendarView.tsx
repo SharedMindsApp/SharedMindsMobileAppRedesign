@@ -103,7 +103,18 @@ type GridSession = {
   intended_duration_minutes: number;
   startsAt: Date;
   status: 'active' | 'scheduled';
+  project_id?: string | null;
+  project_title?: string | null;
+  project_color?: string | null;
 };
+
+const PROJECT_DOT_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function projectDot(token: string | null | undefined): string {
+  return PROJECT_DOT_HEX[token ?? ''] ?? PROJECT_DOT_HEX.blue;
+}
 
 function toGridSession(s: CommunitySession): GridSession {
   return {
@@ -118,6 +129,9 @@ function toGridSession(s: CommunitySession): GridSession {
     intended_duration_minutes: s.intended_duration_minutes ?? 50,
     startsAt: new Date(s.start_time),
     status: 'active',
+    project_id: s.project_id ?? null,
+    project_title: s.project?.title ?? null,
+    project_color: s.project?.color ?? null,
   };
 }
 
@@ -135,6 +149,9 @@ function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     intended_duration_minutes: s.intended_duration_minutes ?? 50,
     startsAt: new Date(s.scheduled_at ?? s.start_time),
     status: 'scheduled',
+    project_id: s.project_id ?? null,
+    project_title: s.project?.title ?? null,
+    project_color: s.project?.color ?? null,
   };
 }
 
@@ -539,6 +556,17 @@ function SessionBlock({
       <p className="text-[10px] stitch-text-secondary leading-tight line-clamp-2">
         {session.session_goal ?? session.session_title ?? 'Working on something'}
       </p>
+      {session.project_title && height > 40 && (
+        <div className="flex items-center gap-1 mt-0.5">
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: projectDot(session.project_color) }}
+          />
+          <span className="text-[9px] font-bold uppercase tracking-wider stitch-text-secondary truncate">
+            {session.project_title}
+          </span>
+        </div>
+      )}
       {height > 50 && (
         <div className="flex items-center gap-1 mt-1 flex-wrap">
           {isOneOnOne ? (
@@ -696,6 +724,15 @@ function SessionDetailSheet({
           {session.quiet_mode && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-slate-100 text-slate-700">
               <MicOff size={9} /> Quiet
+            </span>
+          )}
+          {session.project_title && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-surface-container stitch-text-primary">
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: projectDot(session.project_color) }}
+              />
+              {session.project_title}
             </span>
           )}
         </div>
