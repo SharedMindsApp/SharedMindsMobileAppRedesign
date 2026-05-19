@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, Flame, Check, Clock, Link2, Edit2, X, MapPin, Sparkles, Camera } from 'lucide-react';
+import { Loader2, Flame, Check, Clock, Link2, Edit2, X, MapPin, Sparkles, Camera, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConnectButton } from '../connections/ConnectButton';
+import { getOrCreateDm } from '../../services/MessageService';
 import { SurfaceCard } from '../../ui/CorePage';
 import { findCountry, formatLocation } from '../../../lib/countries';
 import { findSkillCategory } from '../../../lib/skills';
@@ -305,8 +306,9 @@ export function ProfilePage() {
             Member since {formatMemberSince(profile.created_at)}
           </p>
           {!isOwn && (
-            <div className="mt-2">
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
               <ConnectButton otherUserId={profile.id} />
+              <MessageButton otherUserId={profile.id} />
             </div>
           )}
         </div>
@@ -436,5 +438,37 @@ export function ProfilePage() {
         )}
       </section>
     </div>
+  );
+}
+
+/* ── MessageButton ──────────────────────────────────────────────
+   Small inline component that opens (or creates) a DM with the
+   profile owner and jumps to the thread page. */
+function MessageButton({ otherUserId }: { otherUserId: string }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+
+  async function handleClick() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const conversationId = await getOrCreateDm(otherUserId);
+      navigate(`/messages/${conversationId}`);
+    } catch (err) {
+      console.error('[MessageButton] open DM failed:', err);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container transition-colors active:scale-95 disabled:opacity-50"
+    >
+      {busy ? <Loader2 size={12} className="animate-spin" /> : <MessageCircle size={12} />}
+      Message
+    </button>
   );
 }

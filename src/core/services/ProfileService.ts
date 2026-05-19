@@ -33,6 +33,30 @@ export interface RecentShip {
   end_time: string | null;
 }
 
+/**
+ * Browse members of the SharedMinds community. Returns all visible profiles
+ * (RLS controls who's visible) excluding the current user. Used by the
+ * /people directory.
+ */
+export async function listMembers(): Promise<PublicProfile[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, location, country_code, city, created_at')
+    .neq('id', user.id)
+    .not('display_name', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error('[ProfileService] listMembers failed:', error);
+    return [];
+  }
+  return (data ?? []) as PublicProfile[];
+}
+
 export async function fetchPublicProfile(userId: string): Promise<PublicProfile | null> {
   const { data, error } = await supabase
     .from('profiles')

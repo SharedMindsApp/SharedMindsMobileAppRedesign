@@ -8,6 +8,7 @@ import { signOut } from '../lib/auth';
 import { useAuth } from '../core/auth/AuthProvider';
 import { useViewAs } from '../contexts/ViewAsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
+import { fetchTotalUnreadDms, subscribeToAnyIncomingDm } from '../core/services/MessageService';
 // SpaceSwitcher removed — replaced by SharedMinds brand text in header
 // Cleaned duplicate and missing imports
 import { getUserUIMode } from '../lib/mobileApps';
@@ -64,6 +65,34 @@ export function Layout({ children }: LayoutProps) {
   const { clearViewAs } = useViewAs();
   const { config, updatePreferences } = useUIPreferences();
   const { toasts, dismissToast } = useToasts();
+
+  // Unread DM counter for the nav badge — polls on load + subscribes to any
+  // new dm_messages insert (RLS filters to ones we can see). Kept simple:
+  // any incoming insert triggers a refetch, no client-side optimism.
+  const [unreadDmCount, setUnreadDmCount] = useState(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const refresh = () => {
+      fetchTotalUnreadDms().then((n) => { if (!cancelled) setUnreadDmCount(n); }).catch(() => {});
+    };
+    refresh();
+    const unsub = subscribeToAnyIncomingDm(refresh);
+    // Also refresh when the route changes — covers "user just opened a thread"
+    return () => { cancelled = true; unsub(); };
+  }, [user?.id]);
+
+  // Decrement the badge eagerly when navigating into messages so it feels
+  // instant — server-side count catches up on next refresh.
+  useEffect(() => {
+    if (location.pathname.startsWith('/messages')) {
+      // Schedule a refetch in a moment to catch markConversationRead settling
+      const t = setTimeout(() => {
+        fetchTotalUnreadDms().then(setUnreadDmCount).catch(() => {});
+      }, 600);
+      return () => clearTimeout(t);
+    }
+  }, [location.pathname]);
 
   const spacesMenuButtonRef = useRef<HTMLButtonElement>(null);
   const moreMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -204,17 +233,25 @@ export function Layout({ children }: LayoutProps) {
 
   const renderNavTab = (tab: typeof ALL_NAVIGATION_TABS[0]) => {
     const Icon = ICON_MAP[tab.icon];
+    const showUnread = tab.id === 'messages' && unreadDmCount > 0;
 
     return (
       <button
         key={tab.id}
         onClick={() => navigate(tab.path)}
-        className={`flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-3 py-2 rounded-xl text-xs lg:text-sm font-medium transition-all duration-200 ${isTabActive(tab.path)
+        className={`relative flex items-center gap-1.5 lg:gap-2 px-2.5 lg:px-3 py-2 rounded-xl text-xs lg:text-sm font-medium transition-all duration-200 ${isTabActive(tab.path)
           ? 'bg-primary/[0.07] text-primary font-semibold'
           : 'text-on-surface-variant hover:bg-surface-container-low active:bg-surface-container'
           }`}
       >
-        <Icon size={16} className="lg:w-[18px] lg:h-[18px]" />
+        <span className="relative">
+          <Icon size={16} className="lg:w-[18px] lg:h-[18px]" />
+          {showUnread && (
+            <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center leading-none">
+              {unreadDmCount > 9 ? '9+' : unreadDmCount}
+            </span>
+          )}
+        </span>
         <span className="hidden lg:inline">{tab.label}</span>
       </button>
     );

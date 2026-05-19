@@ -154,6 +154,36 @@ export async function markConversationRead(conversationId: string): Promise<void
     .eq('user_id', user.id);
 }
 
+/**
+ * Total unread DMs for the current user across all conversations.
+ * Cheap-ish: one fetch of participant rows then one count query per
+ * conversation. With <50 conversations this is fine; if it grows we can
+ * move it into a single RPC.
+ */
+export async function fetchTotalUnreadDms(): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data: rows } = await supabase
+    .from('dm_participants')
+    .select('conversation_id, last_read_at')
+    .eq('user_id', user.id);
+
+  if (!rows || rows.length === 0) return 0;
+
+  let total = 0;
+  for (const row of rows as any[]) {
+    const { count } = await supabase
+      .from('dm_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', row.conversation_id)
+      .neq('sender_id', user.id)
+      .gt('created_at', row.last_read_at ?? '1970-01-01');
+    total += count ?? 0;
+  }
+  return total;
+}
+
 /** Subscribe to new messages in a conversation. Returns unsubscribe function. */
 export function subscribeToMessages(
   conversationId: string,
@@ -165,6 +195,24 @@ export function subscribeToMessages(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${conversationId}` },
       (payload) => onMessage(payload.new as DmMessage)
+    )
+    .subscribe();
+
+  return () => { supabase.removeChannel(channel); };
+}
+
+/**
+ * Subscribe to ANY new DM addressed to the current user. Used for the
+ * nav-level unread badge — fires a callback so the consumer can refetch
+ * the total count.
+ */
+export function subscribeToAnyIncomingDm(onIncoming: () => void): () => void {
+  const channel = supabase
+    .channel('dm:any-incoming')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'dm_messages' },
+      () => onIncoming()
     )
     .subscribe();
 

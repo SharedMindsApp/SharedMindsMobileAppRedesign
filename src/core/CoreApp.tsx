@@ -7,6 +7,9 @@ import { ActiveSessionPage } from './features/sessions/ActiveSessionPage';
 import { JoinSessionPage } from './features/sessions/JoinSessionPage';
 import { SessionSummaryPage } from '../components/sessions/SessionSummaryPage';
 import { ConnectionsPage } from './features/connections/ConnectionsPage';
+import { MembersDirectoryPage } from './features/people/MembersDirectoryPage';
+import { MessagesPage } from './features/messages/MessagesPage';
+import { MessageThreadPage } from './features/messages/MessageThreadPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { OnboardingModal } from './features/onboarding/OnboardingModal';
 import { ProgressPage } from './features/progress/ProgressPage';
@@ -122,6 +125,9 @@ function AppContent() {
             <Route path="session/:sessionId/summary" element={<SessionSummaryPage />} />
             <Route path="join/:joinCode" element={<JoinSessionPage />} />
             <Route path="connections" element={<ConnectionsPage />} />
+            <Route path="people" element={<MembersDirectoryPage />} />
+            <Route path="messages" element={<MessagesPage />} />
+            <Route path="messages/:conversationId" element={<MessageThreadPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="profile/:userId" element={<ProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
