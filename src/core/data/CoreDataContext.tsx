@@ -262,7 +262,7 @@ function seedState(): CoreDataState {
     journal: {
       sleepQuality: 4,
       exercise: '20 minute walk',
-      wins: 'Shipped the Sessions hub and declare modal.',
+      wins: 'Finished the Sessions hub and declare modal.',
       struggles: 'Context switching when reviewing community feedback.',
       reflection: 'The pivot feels clear — the simpler the loop, the faster I can test it.',
       tomorrowIntention: 'Start with the Jitsi embed and then write first-session onboarding copy.',

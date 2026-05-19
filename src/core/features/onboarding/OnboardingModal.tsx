@@ -35,7 +35,7 @@ const LOOP_STEPS = [
   {
     icon: CheckCircle2,
     color: 'bg-emerald-100 text-emerald-600',
-    title: 'Ship',
+    title: 'Finish',
     description: 'Report what actually happened. Your track record builds in public — one session at a time.',
   },
 ];

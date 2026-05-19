@@ -152,7 +152,7 @@ export function SessionSummaryPage() {
     return <OutcomeQuestion onSelect={handleOutcomeSelect} submitting={outcomeSubmitting} />;
   }
 
-  // ── Community session ship screen ────────────────────────────
+  // ── Community session finish screen ──────────────────────────
   if (summary.session.session_goal) {
     return <CommunitySummary summary={summary} onNewSession={handleStartNewSession} onHome={handleReturnToDashboard} />;
   }
@@ -284,7 +284,7 @@ export function SessionSummaryPage() {
   );
 }
 
-// ── Community ship screen ─────────────────────────────────────
+// ── Community finish screen ───────────────────────────────────
 
 const OUTCOME_DISPLAY: Record<string, {
   label: string;
@@ -295,11 +295,11 @@ const OUTCOME_DISPLAY: Record<string, {
   sub: string;
 }> = {
   finished: {
-    label: 'Shipped',
+    label: 'Finished',
     emoji: '🚀',
     bg: 'bg-emerald-50',
     text: 'text-emerald-700',
-    heading: 'You shipped it!',
+    heading: 'You finished it!',
     sub: 'Task complete. That’s one more thing done.',
   },
   partially: {

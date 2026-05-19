@@ -65,7 +65,7 @@ function formatTimeAgo(iso: string | null): string {
 }
 
 const OUTCOME_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  finished: { label: 'Shipped', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  finished: { label: 'Finished', bg: 'bg-emerald-100', text: 'text-emerald-700' },
   partially: { label: 'Partial', bg: 'bg-amber-100', text: 'text-amber-700' },
   something_came_up: { label: 'Interrupted', bg: 'bg-slate-100', text: 'text-slate-500' },
 };
@@ -413,12 +413,12 @@ export function ProfilePage() {
         </SurfaceCard>
       )}
 
-      {/* ── Recent ships ───────────────────────────────────── */}
+      {/* ── Recently finished ──────────────────────────────── */}
       <section>
         <div className="flex items-center gap-2 mb-3">
           <Flame size={13} className="stitch-text-secondary" />
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
-            Recently shipped
+            Recently finished
           </p>
         </div>
         {ships.length > 0 ? (

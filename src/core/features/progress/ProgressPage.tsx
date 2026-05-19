@@ -20,7 +20,7 @@ interface RecentSession {
 }
 
 const OUTCOME_CONFIG: Record<string, { icon: typeof CheckCircle2; label: string; color: string; bg: string }> = {
-  finished: { icon: CheckCircle2, label: 'Shipped', color: 'text-emerald-600', bg: 'bg-emerald-100' },
+  finished: { icon: CheckCircle2, label: 'Finished', color: 'text-emerald-600', bg: 'bg-emerald-100' },
   partially: { icon: CircleDashed, label: 'Partial', color: 'text-amber-500', bg: 'bg-amber-100' },
   something_came_up: { icon: CloudOff, label: 'Interrupted', color: 'text-slate-400', bg: 'bg-slate-100' },
 };
@@ -199,7 +199,7 @@ export function ProgressPage() {
           <p className="text-2xl font-extrabold stitch-headline leading-none">
             {loading ? '—' : shipped.length}
           </p>
-          <p className="text-[11px] font-semibold stitch-text-secondary uppercase tracking-wider">Shipped</p>
+          <p className="text-[11px] font-semibold stitch-text-secondary uppercase tracking-wider">Finished</p>
         </SurfaceCard>
 
         <SurfaceCard className="flex flex-col items-center justify-center py-5 text-center gap-1.5">

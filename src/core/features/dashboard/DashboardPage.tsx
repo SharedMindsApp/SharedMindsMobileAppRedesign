@@ -74,7 +74,7 @@ const WORK_TYPE_LABELS: Record<string, string> = {
 };
 
 const OUTCOME_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  finished: { label: 'Shipped', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  finished: { label: 'Finished', bg: 'bg-emerald-100', text: 'text-emerald-700' },
   partially: { label: 'Partial', bg: 'bg-amber-100', text: 'text-amber-700' },
   something_came_up: { label: 'Interrupted', bg: 'bg-slate-100', text: 'text-slate-500' },
 };
@@ -204,7 +204,7 @@ function NewUserHero({ onStart }: { onStart: () => void }) {
           Your first session<br />is waiting.
         </h2>
         <p className="text-sm text-white/70 mt-2 leading-relaxed">
-          Name your goal, show up alongside other solopreneurs, and ship it.
+          Name your goal, show up alongside other solopreneurs, and finish it.
         </p>
       </div>
 
@@ -213,7 +213,7 @@ function NewUserHero({ onStart }: { onStart: () => void }) {
         {[
           { icon: Target, label: 'Declare' },
           { icon: Zap, label: 'Work' },
-          { icon: CheckCircle2, label: 'Ship' },
+          { icon: CheckCircle2, label: 'Finish' },
         ].map(({ icon: Icon, label }, i) => (
           <div key={label} className="flex items-center">
             <div className="flex flex-col items-center gap-1.5">
@@ -264,7 +264,7 @@ function DailyFocusCard({
   return (
     <SurfaceCard>
       <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">
-        What are you shipping today?
+        What are you finishing today?
       </p>
       <div className="relative mb-3">
         <textarea
@@ -321,7 +321,7 @@ function LivePersonRow({ session }: { session: CommunitySession }) {
   );
 }
 
-// ── Ship row ──────────────────────────────────────────────────────
+// ── Finish row ────────────────────────────────────────────────────
 
 function ShipRow({ ship }: { ship: ShippedSession }) {
   const outcome = ship.session_outcome ? OUTCOME_CONFIG[ship.session_outcome] : null;
