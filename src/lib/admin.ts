@@ -30,24 +30,14 @@ async function adminFetch(endpoint: string, options: RequestInit = {}) {
 
 export interface User {
   id: string;
-  user_id: string;
-  email: string;
-  full_name: string;
+  display_name: string | null;
+  email: string | null;
   role: 'free' | 'premium' | 'admin';
+  work_types: string[] | null;
+  avatar_url: string | null;
+  onboarding_completed: boolean;
   created_at: string;
-  updated_at: string;
-  neurotype?: string;
-  neurotype_display_name?: string;
-}
-
-export interface Household {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  member_limit: number;
-  created_by: string | null;
-  members: Array<{ count: number }>;
+  last_sign_in_at: string | null;
 }
 
 export interface AnalyticsSummary {
@@ -116,25 +106,32 @@ export async function getUsers(params?: {
   search?: string;
   role?: string;
   limit?: number;
-  offset?: number;
-}) {
-  let query = supabase
-    .from('profiles')
-    .select('id, display_name, role, created_at, updated_at')
-    .order('created_at', { ascending: false })
-    .limit(params?.limit ?? 50)
-    .range(params?.offset ?? 0, (params?.offset ?? 0) + (params?.limit ?? 50) - 1);
+}): Promise<{ users: User[]; total: number }> {
+  // Uses the admin_list_users SECURITY DEFINER RPC which joins profiles
+  // with auth.users so we get email addresses. Returns empty for non-admin
+  // callers (the function itself enforces this via is_admin()).
+  const { data, error } = await supabase.rpc('admin_list_users');
+  if (error) throw error;
 
+  let users = (data ?? []) as User[];
+
+  // Filter client-side. With small user counts (sub-thousand) this is fine.
+  // If we ever scale past that we can push these into the RPC as args.
   if (params?.search) {
-    query = query.ilike('display_name', `%${params.search}%`);
+    const q = params.search.toLowerCase();
+    users = users.filter((u) =>
+      (u.display_name ?? '').toLowerCase().includes(q) ||
+      (u.email ?? '').toLowerCase().includes(q),
+    );
   }
   if (params?.role) {
-    query = query.eq('role', params.role);
+    users = users.filter((u) => u.role === params.role);
+  }
+  if (params?.limit && users.length > params.limit) {
+    users = users.slice(0, params.limit);
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return { users: data ?? [], total: data?.length ?? 0 };
+  return { users, total: users.length };
 }
 
 export async function updateUserRole(
@@ -147,11 +144,6 @@ export async function updateUserRole(
     .eq('id', targetUserId);
   if (error) throw error;
   return { success: true };
-}
-
-export async function getHouseholds() {
-  // Households are not used in SharedMinds — return empty
-  return { households: [], total: 0 };
 }
 
 export async function getAnalytics(): Promise<{ summary: AnalyticsSummary }> {

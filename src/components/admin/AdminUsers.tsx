@@ -1,9 +1,47 @@
-import { useEffect, useState } from 'react';
-import { Search, Filter, Edit, AlertCircle, CheckCircle, Brain } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, Filter, Edit, AlertCircle, CheckCircle, UserRound, Mail } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
-import { getUsers, updateUserRole, updateUserNeurotype, User } from '../../lib/admin';
-import { supabase } from '../../lib/supabase';
-import { NeurotypeProfile } from '../../lib/uiPreferencesTypes';
+import { getUsers, updateUserRole, type User } from '../../lib/admin';
+
+// ── Helpers ─────────────────────────────────────────────────────
+
+const WORK_TYPE_LABELS: Record<string, string> = {
+  designer: 'Designer', developer: 'Developer', writer: 'Writer',
+  founder: 'Founder', filmmaker: 'Filmmaker', marketer: 'Marketer',
+  consultant: 'Consultant', researcher: 'Researcher', other: 'Other',
+};
+
+const ROLE_BADGE: Record<string, string> = {
+  admin:   'bg-violet-100 text-violet-700',
+  premium: 'bg-teal-100 text-teal-700',
+  free:    'bg-gray-100 text-gray-700',
+};
+
+function avatarHashClass(name: string): string {
+  const colors = [
+    'bg-violet-200 text-violet-700',
+    'bg-blue-200 text-blue-700',
+    'bg-emerald-200 text-emerald-700',
+    'bg-amber-200 text-amber-700',
+    'bg-rose-200 text-rose-700',
+    'bg-indigo-200 text-indigo-700',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function lastSeenLabel(iso: string | null): string {
+  if (!iso) return 'never';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── Page ────────────────────────────────────────────────────────
 
 export function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
@@ -12,27 +50,20 @@ export function AdminUsers() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [editingUser, setEditingUser] = useState<string | null>(null);
-  const [editingNeurotype, setEditingNeurotype] = useState<string | null>(null);
   const [newRole, setNewRole] = useState<'free' | 'premium' | 'admin'>('free');
-  const [newNeurotypeId, setNewNeurotypeId] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [neurotypeProfiles, setNeurotypeProfiles] = useState<NeurotypeProfile[]>([]);
 
   useEffect(() => {
     loadUsers();
-    loadNeurotypeProfiles();
-  }, [searchQuery, roleFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadUsers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getUsers({
-        search: searchQuery || undefined,
-        role: roleFilter !== 'all' ? roleFilter : undefined,
-        limit: 100,
-      });
-      setUsers(data.users || []);
+      const data = await getUsers({ limit: 500 });
+      setUsers(data.users);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
     } finally {
@@ -40,26 +71,26 @@ export function AdminUsers() {
     }
   };
 
-  const loadNeurotypeProfiles = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('neurotype_profiles')
-        .select('*')
-        .eq('is_active', true)
-        .order('display_name');
-
-      if (error) throw error;
-      setNeurotypeProfiles(data || []);
-    } catch (err) {
-      console.error('Failed to load neurotype profiles:', err);
+  // Client-side filter for instant search-as-you-type
+  const visibleUsers = useMemo(() => {
+    let out = users;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      out = out.filter((u) =>
+        (u.display_name ?? '').toLowerCase().includes(q) ||
+        (u.email ?? '').toLowerCase().includes(q),
+      );
     }
-  };
+    if (roleFilter !== 'all') {
+      out = out.filter((u) => u.role === roleFilter);
+    }
+    return out;
+  }, [users, searchQuery, roleFilter]);
 
   const handleUpdateRole = async (userId: string) => {
     try {
-      const memberLimit = newRole === 'free' ? 2 : newRole === 'premium' ? 4 : undefined;
-      await updateUserRole(userId, newRole, memberLimit);
-      setSuccessMessage(`User role updated to ${newRole}`);
+      await updateUserRole(userId, newRole);
+      setSuccessMessage(`Role updated to ${newRole}`);
       setEditingUser(null);
       await loadUsers();
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -68,96 +99,60 @@ export function AdminUsers() {
     }
   };
 
-  const handleUpdateNeurotype = async (userId: string) => {
-    try {
-      if (!newNeurotypeId) {
-        setError('Please select a neurotype');
-        return;
-      }
-      await updateUserNeurotype(userId, newNeurotypeId);
-      const selectedProfile = neurotypeProfiles.find(p => p.id === newNeurotypeId);
-      setSuccessMessage(`Neurotype updated to ${selectedProfile?.display_name || 'selected profile'}`);
-      setEditingNeurotype(null);
-      await loadUsers();
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update user neurotype');
-    }
-  };
-
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'bg-violet-100 text-violet-700';
-      case 'premium':
-        return 'bg-teal-100 text-teal-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-  const getNeurotypeBadgeColor = (neurotype: string | undefined) => {
-    switch (neurotype) {
-      case 'adhd':
-        return 'bg-orange-100 text-orange-700';
-      case 'autism':
-        return 'bg-blue-100 text-blue-700';
-      case 'anxiety':
-        return 'bg-purple-100 text-purple-700';
-      case 'dyslexia':
-        return 'bg-green-100 text-green-700';
-      case 'neurotypical':
-        return 'bg-gray-100 text-gray-700';
-      default:
-        return 'bg-gray-100 text-gray-500';
-    }
-  };
-
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
-          <p className="text-gray-600">View and manage all user accounts</p>
+
+        {/* Header */}
+        <div className="flex items-end justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-1">User management</h1>
+            <p className="text-gray-600">View and manage all user accounts.</p>
+          </div>
+          <p className="text-sm text-gray-500 tabular-nums">
+            {visibleUsers.length} of {users.length} users
+          </p>
         </div>
 
         {successMessage && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-            <CheckCircle className="text-green-600" size={24} />
-            <p className="text-green-900">{successMessage}</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center gap-3">
+            <CheckCircle className="text-emerald-600 shrink-0" size={20} />
+            <p className="text-emerald-900 text-sm font-semibold">{successMessage}</p>
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-            <AlertCircle className="text-red-600" size={24} />
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
+            <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={20} />
             <div>
-              <h3 className="font-semibold text-red-900">Error</h3>
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-red-900 text-sm font-semibold">Error</p>
+              <p className="text-red-700 text-sm">{error}</p>
             </div>
           </div>
         )}
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+
+          {/* Filters */}
+          <div className="flex flex-col md:flex-row gap-3 p-5 border-b border-gray-100">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
-                placeholder="Search by email or name..."
+                placeholder="Search by name or email…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="all">All Roles</option>
+                <option value="all">All roles</option>
                 <option value="free">Free</option>
                 <option value="premium">Premium</option>
                 <option value="admin">Admin</option>
@@ -165,90 +160,133 @@ export function AdminUsers() {
             </div>
           </div>
 
+          {/* Table */}
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading users...</div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No users found</div>
+            <div className="text-center py-16 text-gray-500 text-sm">Loading users…</div>
+          ) : visibleUsers.length === 0 ? (
+            <EmptyState hasFilter={searchQuery !== '' || roleFilter !== 'all'} />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Role</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Neurotype UI</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Created</th>
-                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500">
+                    <th className="text-left py-3 px-5 font-semibold">User</th>
+                    <th className="text-left py-3 px-5 font-semibold">Email</th>
+                    <th className="text-left py-3 px-5 font-semibold">Role</th>
+                    <th className="text-left py-3 px-5 font-semibold">Work types</th>
+                    <th className="text-left py-3 px-5 font-semibold">Last seen</th>
+                    <th className="text-left py-3 px-5 font-semibold">Joined</th>
+                    <th className="text-right py-3 px-5 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">{user.full_name}</span>
-                          {user.neurotype && user.neurotype !== 'neurotypical' && (
-                            <Brain size={16} className="text-blue-500" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-600">{user.email}</td>
-                      <td className="py-3 px-4">
-                        {editingUser === user.user_id ? (
-                          <select
-                            value={newRole}
-                            onChange={(e) => setNewRole(e.target.value as 'free' | 'premium' | 'admin')}
-                            className="px-3 py-1 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="free">Free</option>
-                            <option value="premium">Premium</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        ) : (
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(user.role)}`}>
-                            {user.role.toUpperCase()}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        {editingNeurotype === user.user_id ? (
-                          <select
-                            value={newNeurotypeId}
-                            onChange={(e) => setNewNeurotypeId(e.target.value)}
-                            className="px-3 py-1 border border-gray-300 rounded text-sm w-full"
-                          >
-                            <option value="">Select Neurotype</option>
-                            {neurotypeProfiles.map((profile) => (
-                              <option key={profile.id} value={profile.id}>
-                                {profile.display_name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getNeurotypeBadgeColor(user.neurotype)}`}>
-                              {user.neurotype_display_name || 'Neurotypical'}
-                            </span>
+                  {visibleUsers.map((user) => {
+                    const name = user.display_name ?? '(no name)';
+                    const isEditing = editingUser === user.id;
+                    return (
+                      <tr key={user.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+
+                        {/* User cell — avatar + name */}
+                        <td className="py-3 px-5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {user.avatar_url ? (
+                              <img
+                                src={user.avatar_url}
+                                alt={name}
+                                className="w-8 h-8 rounded-lg object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className={`w-8 h-8 rounded-lg ${avatarHashClass(name)} flex items-center justify-center font-bold text-sm shrink-0`}>
+                                {name === '(no name)'
+                                  ? <UserRound size={14} />
+                                  : name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 truncate">{name}</p>
+                              {!user.onboarding_completed && (
+                                <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">
+                                  Onboarding incomplete
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-gray-600 text-sm">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col gap-2">
-                          {editingUser === user.user_id ? (
-                            <div className="flex gap-2">
+                        </td>
+
+                        {/* Email */}
+                        <td className="py-3 px-5">
+                          {user.email ? (
+                            <a
+                              href={`mailto:${user.email}`}
+                              className="flex items-center gap-1.5 text-gray-700 hover:text-blue-600 truncate"
+                            >
+                              <Mail size={12} className="text-gray-400 shrink-0" />
+                              <span className="truncate">{user.email}</span>
+                            </a>
+                          ) : (
+                            <span className="text-gray-400 text-xs">unknown</span>
+                          )}
+                        </td>
+
+                        {/* Role */}
+                        <td className="py-3 px-5">
+                          {isEditing ? (
+                            <select
+                              value={newRole}
+                              onChange={(e) => setNewRole(e.target.value as 'free' | 'premium' | 'admin')}
+                              className="px-2.5 py-1 border border-gray-300 rounded text-xs"
+                            >
+                              <option value="free">Free</option>
+                              <option value="premium">Premium</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          ) : (
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${ROLE_BADGE[user.role] ?? ROLE_BADGE.free}`}>
+                              {user.role}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Work types */}
+                        <td className="py-3 px-5">
+                          <div className="flex flex-wrap gap-1">
+                            {(user.work_types ?? []).slice(0, 2).map((wt) => (
+                              <span key={wt} className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[10px] font-semibold">
+                                {WORK_TYPE_LABELS[wt] ?? wt}
+                              </span>
+                            ))}
+                            {(user.work_types ?? []).length > 2 && (
+                              <span className="text-[10px] text-gray-400 font-bold">+{(user.work_types ?? []).length - 2}</span>
+                            )}
+                            {(user.work_types ?? []).length === 0 && (
+                              <span className="text-gray-400 text-xs">—</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Last seen */}
+                        <td className="py-3 px-5 text-gray-600 text-xs">
+                          {lastSeenLabel(user.last_sign_in_at)}
+                        </td>
+
+                        {/* Joined */}
+                        <td className="py-3 px-5 text-gray-600 text-xs">
+                          {new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-5 text-right">
+                          {isEditing ? (
+                            <div className="flex gap-2 justify-end">
                               <button
-                                onClick={() => handleUpdateRole(user.user_id)}
-                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                                onClick={() => handleUpdateRole(user.id)}
+                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
                               >
                                 Save
                               </button>
                               <button
                                 onClick={() => setEditingUser(null)}
-                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
+                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-xs font-semibold"
                               >
                                 Cancel
                               </button>
@@ -256,49 +294,19 @@ export function AdminUsers() {
                           ) : (
                             <button
                               onClick={() => {
-                                setEditingUser(user.user_id);
+                                setEditingUser(user.id);
                                 setNewRole(user.role);
                               }}
-                              className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm"
+                              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-700 text-xs font-semibold"
                             >
-                              <Edit size={14} />
-                              <span>Edit Role</span>
+                              <Edit size={12} />
+                              Edit role
                             </button>
                           )}
-                          {editingNeurotype === user.user_id ? (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleUpdateNeurotype(user.user_id)}
-                                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setEditingNeurotype(null)}
-                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setEditingNeurotype(user.user_id);
-                                const currentProfile = neurotypeProfiles.find(
-                                  p => p.name === user.neurotype
-                                );
-                                setNewNeurotypeId(currentProfile?.id || '');
-                              }}
-                              className="flex items-center gap-2 text-green-600 hover:text-green-700 text-sm"
-                            >
-                              <Brain size={14} />
-                              <span>Edit Neurotype</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -306,5 +314,21 @@ export function AdminUsers() {
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function EmptyState({ hasFilter }: { hasFilter: boolean }) {
+  return (
+    <div className="text-center py-16 px-5">
+      <div className="w-12 h-12 mx-auto rounded-xl bg-gray-100 flex items-center justify-center mb-3">
+        <UserRound size={20} className="text-gray-400" />
+      </div>
+      <p className="text-sm font-semibold text-gray-700 mb-1">
+        {hasFilter ? 'No users match these filters' : 'No users yet'}
+      </p>
+      <p className="text-xs text-gray-500">
+        {hasFilter ? 'Try clearing the search or role filter.' : 'Once people sign up, they\'ll appear here.'}
+      </p>
+    </div>
   );
 }
