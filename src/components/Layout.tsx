@@ -425,7 +425,6 @@ export function Layout({ children }: LayoutProps) {
                                     { path: '/admin', icon: Shield, label: 'Admin Panel' },
                                     { path: '/pantry', icon: Package, label: 'Pantry' },
                                     { path: '/journal', icon: BookOpen, label: 'Journal' },
-                                    { path: '/reports', icon: FileText, label: 'Reports' },
                                   ].map(({ path, icon: Icon, label }) => (
                                     <button
                                       key={path}

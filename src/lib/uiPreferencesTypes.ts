@@ -91,7 +91,6 @@ export type NavigationTabId =
   | 'calendar'
   | 'pantry'
   | 'journal'
-  | 'reports'
   | 'connections'
   | 'profile'
   | 'settings';
@@ -114,7 +113,6 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'calendar', label: 'Calendar', path: '/calendar', icon: 'Calendar' },
   { id: 'pantry', label: 'Pantry', path: '/pantry', icon: 'Package', requiresAdmin: true },
   { id: 'journal', label: 'Journal', path: '/journal', icon: 'BookOpen', requiresAdmin: true },
-  { id: 'reports', label: 'Reports', path: '/reports', icon: 'FileText', requiresAdmin: true },
   { id: 'connections', label: 'Connections', path: '/connections', icon: 'Link2' },
   { id: 'profile', label: 'Profile', path: '/profile', icon: 'UserRound' },
   { id: 'settings', label: 'Settings', path: '/settings', icon: 'Settings' },

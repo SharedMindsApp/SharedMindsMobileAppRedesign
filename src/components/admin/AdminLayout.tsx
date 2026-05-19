@@ -3,15 +3,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Home,
-  FileText,
   BarChart3,
   ScrollText,
   Settings,
   LogOut,
   Brain,
   ArrowLeft,
-  Layers,
   Cpu,
   Sun,
   Moon,
@@ -46,16 +43,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   const navItems = [
-    { path: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/admin/users', icon: Users, label: 'Users' },
-    { path: '/admin/households', icon: Home, label: 'Households' },
-    { path: '/admin/reports', icon: FileText, label: 'Reports' },
-    { path: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
-    { path: '/admin/logs', icon: ScrollText, label: 'Activity Logs' },
-    { path: '/admin/guardrails/project-types', icon: Layers, label: 'Guardrails Metadata' },
-    { path: '/admin/ai-providers', icon: Cpu, label: 'AI Providers' },
-    { path: '/admin/ai-routing', icon: Cpu, label: 'AI Routing' },
-    { path: '/admin/settings', icon: Settings, label: 'Settings' },
+    { path: '/admin',             icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/admin/users',       icon: Users,           label: 'Users' },
+    { path: '/admin/analytics',   icon: BarChart3,       label: 'Analytics' },
+    { path: '/admin/logs',        icon: ScrollText,      label: 'Activity Logs' },
+    { path: '/admin/ai-providers', icon: Cpu,            label: 'AI Providers' },
+    { path: '/admin/ai-routing',  icon: Cpu,             label: 'AI Routing' },
+    { path: '/admin/settings',    icon: Settings,        label: 'Settings' },
   ];
 
   return (
@@ -112,8 +106,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path ||
-              (item.path.includes('/guardrails') && location.pathname.startsWith('/admin/guardrails'));
+            const isActive = location.pathname === item.path;
 
             return (
               <Link

@@ -15,7 +15,6 @@ import { ProjectsPage } from './features/projects/ProjectsPage';
 import { CalendarPage } from './features/calendar/CalendarPage';
 import { PantryPage } from './features/pantry/PantryPage';
 import { JournalPage } from './features/journal/JournalPage';
-import { ReportsPage } from './features/reports/ReportsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AuthProvider as LegacyAuthProvider } from '../contexts/AuthContext';
@@ -26,7 +25,6 @@ import { AdminUsers } from '../components/admin/AdminUsers';
 import { AdminAnalytics } from '../components/admin/AdminAnalytics';
 import { AdminLogs } from '../components/admin/AdminLogs';
 import { AdminSettings } from '../components/admin/AdminSettings';
-import { AdminReports } from '../components/admin/AdminReports';
 import { AdminAIProvidersPage } from '../components/admin/AdminAIProvidersPage';
 import { AdminAIRoutingPage } from '../components/admin/AdminAIRoutingPage';
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
@@ -150,7 +148,6 @@ function AppContent() {
                   : <Navigate to="/sessions" replace />
               }
             />
-            <Route path="reports" element={<ReportsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/sessions" replace />} />
           </Route>
@@ -165,7 +162,6 @@ function AppContent() {
                   <Route path="analytics" element={<AdminAnalytics />} />
                   <Route path="logs" element={<AdminLogs />} />
                   <Route path="settings" element={<AdminSettings />} />
-                  <Route path="reports" element={<AdminReports />} />
                   <Route path="ai-providers" element={<AdminAIProvidersPage />} />
                   <Route path="ai-routing" element={<AdminAIRoutingPage />} />
                 </Routes>
