@@ -1,5 +1,5 @@
 import { X, AlertTriangle, Info, TrendingUp, TrendingDown, PartyPopper } from 'lucide-react';
-import { useRegulation } from '../../../contexts/RegulationContext';
+import { useRegulation } from '../../contexts/RegulationContext';
 
 export function RegulationNotificationBanner() {
   const { notification, dismissNotification } = useRegulation();

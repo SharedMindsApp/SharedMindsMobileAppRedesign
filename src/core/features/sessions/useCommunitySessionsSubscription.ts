@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSupabaseSubscription } from '../../../hooks/useSupabaseSubscription';
 import { fetchActiveCommunitySessionsWithProfiles } from '../../services/SessionService';
-import type { CommunitySession } from '../../../lib/guardrails/focusTypes';
+import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 
 export function useCommunitySessionsSubscription() {
   const [sessions, setSessions] = useState<CommunitySession[]>([]);

@@ -7,7 +7,7 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { SurfaceCard } from '../../ui/CorePage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
-import type { SessionOutcome } from '../../../lib/guardrails/focusTypes';
+import type { SessionOutcome } from '../../../lib/sessions/focusTypes';
 
 interface RecentSession {
   id: string;

@@ -5,7 +5,7 @@ import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
 import { supabase } from '../../../lib/supabase';
-import type { FocusSession } from '../../../lib/guardrails/focusTypes';
+import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
 // Daily shared room — everyone in a group session today joins the same Jitsi room.
 function dailyRoomName(): string {

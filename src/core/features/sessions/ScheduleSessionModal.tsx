@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Calendar, Loader2, Zap, Leaf, Coffee, Link, Copy, Check } from 'lucide-react';
 import { createScheduledSession } from '../../services/SessionService';
-import type { FocusSession } from '../../../lib/guardrails/focusTypes';
+import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
 type DurationOption = 25 | 50 | 90;
 

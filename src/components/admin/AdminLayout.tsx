@@ -9,7 +9,6 @@ import {
   LogOut,
   Brain,
   ArrowLeft,
-  Cpu,
   Sun,
   Moon,
   Zap,
@@ -53,8 +52,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin/users',       icon: Users,           label: 'Users' },
     { path: '/admin/analytics',   icon: BarChart3,       label: 'Analytics' },
     { path: '/admin/logs',        icon: ScrollText,      label: 'Activity Logs' },
-    { path: '/admin/ai-providers', icon: Cpu,            label: 'AI Providers' },
-    { path: '/admin/ai-routing',  icon: Cpu,             label: 'AI Routing' },
     { path: '/admin/settings',    icon: Settings,        label: 'Settings' },
   ];
 

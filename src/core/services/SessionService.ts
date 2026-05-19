@@ -1,5 +1,5 @@
 import { supabase } from '../../lib/supabase';
-import type { FocusSession, CommunitySession, SessionOutcome } from '../../lib/guardrails/focusTypes';
+import type { FocusSession, CommunitySession, SessionOutcome } from '../../lib/sessions/focusTypes';
 
 export interface CreateScheduledSessionInput {
   title: string;

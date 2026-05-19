@@ -3,7 +3,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import type { FocusSession, SessionEvent } from '../lib/guardrails/focusTypes';
+import type { FocusSession, SessionEvent } from '../lib/sessions/focusTypes';
 import { supabase } from '../lib/supabase';
 import { useSafeInterval } from '../hooks/useSafeInterval';
 import { useSupabaseSubscription } from '../hooks/useSupabaseSubscription';

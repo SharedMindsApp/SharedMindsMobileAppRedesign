@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw } from 'lucide-react';
-import { getFocusSessionSummary, endFocusSession } from '../../../lib/guardrails/focus';
-import { endCommunitySession } from '../../../core/services/SessionService';
-import type { FocusSessionSummary, SessionOutcome } from '../../../lib/guardrails/focusTypes';
+import { getFocusSessionSummary, endFocusSession } from '../../lib/sessions/focus';
+import { endCommunitySession } from '../../core/services/SessionService';
+import type { FocusSessionSummary, SessionOutcome } from '../../lib/sessions/focusTypes';
 
 const OUTCOME_OPTIONS: { value: SessionOutcome; label: string; icon: any; description: string }[] = [
   { value: 'finished', label: 'Yes, I finished it', icon: CheckCircle2, description: 'Task complete' },

@@ -5,7 +5,7 @@ import { SessionsPage } from './features/sessions/SessionsPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ActiveSessionPage } from './features/sessions/ActiveSessionPage';
 import { JoinSessionPage } from './features/sessions/JoinSessionPage';
-import { SessionSummaryPage } from '../components/guardrails/focus/SessionSummaryPage';
+import { SessionSummaryPage } from '../components/sessions/SessionSummaryPage';
 import { ConnectionsPage } from './features/connections/ConnectionsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { OnboardingModal } from './features/onboarding/OnboardingModal';
@@ -25,8 +25,6 @@ import { AdminUsers } from '../components/admin/AdminUsers';
 import { AdminAnalytics } from '../components/admin/AdminAnalytics';
 import { AdminLogs } from '../components/admin/AdminLogs';
 import { AdminSettings } from '../components/admin/AdminSettings';
-import { AdminAIProvidersPage } from '../components/admin/AdminAIProvidersPage';
-import { AdminAIRoutingPage } from '../components/admin/AdminAIRoutingPage';
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
 import { ViewAsProvider } from '../contexts/ViewAsContext';
 import { ActiveDataProvider } from '../contexts/ActiveDataContext';
@@ -162,8 +160,6 @@ function AppContent() {
                   <Route path="analytics" element={<AdminAnalytics />} />
                   <Route path="logs" element={<AdminLogs />} />
                   <Route path="settings" element={<AdminSettings />} />
-                  <Route path="ai-providers" element={<AdminAIProvidersPage />} />
-                  <Route path="ai-routing" element={<AdminAIRoutingPage />} />
                 </Routes>
               </LegacyAuthProvider>
             ) : <Navigate to="/sessions" replace />

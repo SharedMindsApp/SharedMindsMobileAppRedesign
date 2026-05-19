@@ -15,7 +15,7 @@ import { fetchRecentShippedSessions, fetchUpcomingScheduledSessions } from '../.
 import { SurfaceCard } from '../../ui/CorePage';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
-import type { CommunitySession } from '../../../lib/guardrails/focusTypes';
+import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 
 // ── Utilities ─────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useAuth } from '../../auth/AuthProvider';
 import { SurfaceCard, GradientButton } from '../../ui/CorePage';
 import { fetchUpcomingScheduledSessions, fetchRecentShippedSessions, joinOneOnOneSession } from '../../services/SessionService';
-import type { CommunitySession } from '../../../lib/guardrails/focusTypes';
+import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import type { ScheduledSessionWithProfile, ShippedSession } from '../../services/SessionService';
 
 // ── Utilities ────────────────────────────────────────────────────

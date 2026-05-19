@@ -14,9 +14,7 @@ import { getUserUIMode } from '../lib/mobileApps';
 import type { UIMode } from '../lib/mobileTypes';
 import type { AppTheme, NavigationTabId } from '../lib/uiPreferencesTypes';
 import { ALL_NAVIGATION_TABS, DEFAULT_FAVOURITE_NAV_TABS } from '../lib/uiPreferencesTypes';
-import { RegulationNotificationBanner } from './guardrails/regulation/RegulationNotificationBanner';
-import { FloatingAIChatWidget } from './ai-chat/FloatingAIChatWidget';
-import { FEATURE_AI_CHAT_WIDGET } from '../lib/featureFlags';
+import { RegulationNotificationBanner } from './sessions/RegulationNotificationBanner';
 import { OfflineIndicator } from './OfflineIndicator';
 import { AppUpdateBanner } from './system/AppUpdateBanner';
 import { NotificationBell } from './notifications/NotificationBell';
@@ -189,7 +187,6 @@ export function Layout({ children }: LayoutProps) {
       '/onboarding/',
       '/brain-profile/onboarding',
       '/journey',
-      '/guardrails/wizard',
     ];
 
     // Hide on auth and onboarding pages
@@ -708,12 +705,6 @@ export function Layout({ children }: LayoutProps) {
       </div>
 
       <RegulationNotificationBanner />
-      {/* Hide AI chat widget on planner, spaces routes, mobile devices, and when feature flag is disabled */}
-      {FEATURE_AI_CHAT_WIDGET &&
-        !location.pathname.startsWith('/planner') &&
-        !location.pathname.startsWith('/spaces') &&
-        !isMobile &&
-        <FloatingAIChatWidget />}
       <OfflineIndicator />
       <AppUpdateBanner />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
