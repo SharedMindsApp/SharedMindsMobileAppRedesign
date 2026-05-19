@@ -130,6 +130,8 @@ type CoreDataContextValue = {
   refreshProjects: () => Promise<void>;
   toggleTask: (taskId: string) => void;
   addTask: (title: string, projectId?: string | null) => void;
+  /** Same as addTask, but awaits the DB insert and returns the real task id. */
+  addTaskAsync: (title: string, projectId?: string | null) => Promise<string>;
   toggleResponsibility: (responsibilityId: string) => void;
   addActivityEntry: (title: string) => void;
   addParkedIdea: (text: string) => void;
@@ -514,6 +516,49 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
             }));
           }).catch(console.error);
         }
+      },
+      addTaskAsync: async (title, projectIdOverride) => {
+        const cleanedTitle = title.trim();
+        if (!cleanedTitle) throw new Error('Task title required');
+
+        const pinnedProjectId =
+          projectIdOverride !== undefined ? projectIdOverride : state.activeProjectId;
+        const project = pinnedProjectId
+          ? state.projects.find((p) => p.id === pinnedProjectId)
+          : null;
+        const targetSpaceId = project?.spaceId ?? activeSpaceId;
+
+        if (!targetSpaceId || !user) throw new Error('Personal space not ready');
+
+        const realTask = await TaskService.createTask({
+          space_id: targetSpaceId,
+          created_by: user.id,
+          title: cleanedTitle,
+          project_id: pinnedProjectId,
+          status: 'inbox',
+          priority: 'medium',
+          energy_level: 'medium',
+          sort_order: 0,
+        });
+
+        // Optimistically mirror to local state so the next modal-open includes it
+        setState((current) => ({
+          ...current,
+          tasks: [
+            {
+              id: realTask.id,
+              title: cleanedTitle,
+              projectId: pinnedProjectId,
+              energy: 'medium',
+              priority: 'medium',
+              dueLabel: 'Inbox',
+              done: false,
+            },
+            ...current.tasks,
+          ],
+        }));
+
+        return realTask.id;
       },
       toggleResponsibility: (responsibilityId) => {
         const target = state.responsibilities.find(r => r.id === responsibilityId);

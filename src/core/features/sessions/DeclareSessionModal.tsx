@@ -50,7 +50,7 @@ interface Props {
 
 export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration }: Props) {
   const navigate = useNavigate();
-  const { state: { tasks, projects, activeProjectId } } = useCoreData();
+  const { state: { tasks, projects, activeProjectId }, addTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
 
   const isScheduling = initialScheduledAt != null;
@@ -66,6 +66,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
   );
+  /** When the user types a free-form goal, also save it as a real task so
+   *  it shows up in "From my tasks" next time. Default ON — most goals
+   *  are real tasks people want to track. Toggle off for ad-hoc one-offs. */
+  const [saveAsTask, setSaveAsTask] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +82,20 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     setSubmitting(true);
     setError(null);
     try {
+      // Resolve task id: either a pre-existing task the user picked, OR a
+      // brand-new task we create on the fly (when "Save as task" is on).
+      let resolvedTaskId: string | undefined;
+      if (tab === 'pick' && selectedTask) {
+        resolvedTaskId = selectedTask.id;
+      } else if (tab === 'type' && saveAsTask && goalText.trim()) {
+        try {
+          resolvedTaskId = await addTaskAsync(goalText.trim(), selectedProjectId);
+        } catch (taskErr) {
+          // Don't block session start if task save fails — log + continue
+          console.warn('[DeclareSessionModal] Save-as-task failed:', taskErr);
+        }
+      }
+
       if (isScheduling && initialScheduledAt) {
         // Future slot → create scheduled session, do not navigate into it
         await createScheduledSession({
@@ -91,7 +109,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
       }
       const session = await startCommunitySession({
         goalText: resolvedGoal,
-        taskId: tab === 'pick' && selectedTask ? selectedTask.id : undefined,
+        taskId: resolvedTaskId,
         projectId: selectedProjectId ?? undefined,
         durationMinutes: duration,
         sessionMode,
@@ -119,11 +137,21 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface">
-      <div className="relative w-full h-full flex flex-col max-w-2xl mx-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 sm:backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full sm:max-w-2xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Mobile grab handle */}
+        <div className="sm:hidden flex justify-center pt-2 pb-1 shrink-0">
+          <span className="w-10 h-1 rounded-full bg-surface-container-high" />
+        </div>
 
         {/* ── Header ───────────────────────────────────────── */}
-        <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3">
+        <div className="shrink-0 flex items-center justify-between px-5 pt-3 sm:pt-4 pb-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl stitch-card--accent flex items-center justify-center shrink-0">
               <Timer size={18} className="text-white" />
@@ -220,14 +248,36 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               <p className="mt-1.5 text-xs stitch-text-secondary px-1">
                 Be specific — you'll report back when you're done.
               </p>
-              {/* Goal confirmation strip */}
+
+              {/* Save-as-task toggle — only shown when there's something to save */}
               {goalText.trim() && (
-                <div className="mt-3 flex items-center gap-2 px-3 py-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
-                  <Check size={13} className="text-emerald-500 shrink-0" strokeWidth={3} />
-                  <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium leading-snug">
-                    {goalText.trim()}
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSaveAsTask((v) => !v)}
+                  className={`mt-3 w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left ${
+                    saveAsTask
+                      ? 'bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-200/60 dark:ring-emerald-800/40'
+                      : 'bg-surface-container-low hover:bg-surface-container'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all ${
+                    saveAsTask ? 'bg-emerald-500 text-white' : 'bg-white ring-1 ring-surface-container-high'
+                  }`}>
+                    {saveAsTask && <Check size={11} strokeWidth={3} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold stitch-text-primary leading-tight">
+                      Save as a task
+                    </p>
+                    <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
+                      {saveAsTask
+                        ? selectedProjectId
+                          ? <>Saves to <span className="font-semibold">{projects.find((p) => p.id === selectedProjectId)?.name ?? 'project'}</span> · appears in "From my tasks" next time</>
+                          : <>Saves to <span className="font-semibold">Inbox</span> · appears in "From my tasks" next time</>
+                        : 'Goal stays on this session only'}
+                    </p>
+                  </div>
+                </button>
               )}
             </div>
           )}
