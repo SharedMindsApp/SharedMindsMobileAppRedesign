@@ -216,29 +216,56 @@ async function processAvatarImage(file: File, size = 512): Promise<{
   return { dataUrl, blob };
 }
 
-/** Call the moderation Edge Function. Throws AvatarRejectedError on flag. */
+/**
+ * Call the moderation Edge Function.
+ *
+ * - Throws AvatarRejectedError if the function explicitly says `approved: false`
+ *   (the only hard-block path).
+ * - **Fails open** if the function isn't deployed or returns a network error —
+ *   logs a warning and proceeds. This lets uploads work in dev / pre-launch
+ *   before OPENAI_API_KEY is configured on the Supabase project. Once the
+ *   function IS deployed and returns flagged content, this still blocks it.
+ */
 async function moderateAvatar(dataUrl: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
-  const { data, error } = await supabase.functions.invoke<{
-    approved: boolean;
-    reasons?: string[];
-    error?: string;
-  }>('moderate-avatar', {
-    body: { image: dataUrl },
-  });
+  let data: { approved: boolean; reasons?: string[]; error?: string } | null = null;
+  let error: { message?: string } | null = null;
+
+  try {
+    const result = await supabase.functions.invoke<{
+      approved: boolean;
+      reasons?: string[];
+      error?: string;
+    }>('moderate-avatar', { body: { image: dataUrl } });
+    data = result.data;
+    error = result.error;
+  } catch (e) {
+    // Network / function-not-deployed errors land here.
+    console.warn('[moderateAvatar] moderation unavailable — proceeding without it:', e);
+    return;
+  }
 
   if (error) {
-    throw new Error(`Moderation request failed: ${error.message}`);
+    // Function exists but errored. Most common cause: not deployed yet, missing
+    // OPENAI_API_KEY, or transient network. Fail-open with a warning.
+    console.warn('[moderateAvatar] moderation function error — proceeding without it:', error.message);
+    return;
   }
+
   if (!data) {
-    throw new Error('Moderation returned no result');
+    console.warn('[moderateAvatar] moderation returned no result — proceeding without it');
+    return;
   }
-  if (!data.approved) {
+
+  // Function explicitly rejected the image — this IS a hard block.
+  if (data.approved === false) {
     if (data.error) throw new Error(data.error);
     throw new AvatarRejectedError(data.reasons ?? ['flagged']);
   }
+
+  // approved === true (or anything truthy) → proceed.
 }
 
 /**

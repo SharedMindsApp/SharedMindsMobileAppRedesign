@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserRound, ChevronRight, Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles } from 'lucide-react';
+import { UserRound, ChevronRight, Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera, AlertCircle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
 import { SurfaceCard } from '../../ui/CorePage';
@@ -8,6 +8,7 @@ import { CountryPicker } from '../../ui/CountryPicker';
 import { CityAutocomplete } from '../../ui/CityAutocomplete';
 import { SkillsEditor } from '../../ui/SkillsEditor';
 import { formatLocation } from '../../../lib/countries';
+import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
 
 const WORK_TYPES = [
   { id: 'designer', label: 'Designer', emoji: '🎨' },
@@ -47,6 +48,34 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+
+  // Avatar upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  async function handleAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so the same file can be re-picked after a failure
+    if (!file) return;
+    setAvatarError(null);
+    setUploadingAvatar(true);
+    try {
+      await uploadAvatar(file);
+      await refreshProfile();
+    } catch (err) {
+      if (err instanceof AvatarRejectedError) {
+        setAvatarError('That image was rejected by moderation. Please pick a different photo.');
+      } else if (err instanceof Error) {
+        setAvatarError(err.message);
+      } else {
+        setAvatarError('Upload failed.');
+      }
+      setTimeout(() => setAvatarError(null), 6000);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -168,6 +197,63 @@ export function SettingsPage() {
       {/* ── Profile details ───────────────────────────────── */}
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-4">Profile</p>
+
+        {/* Avatar upload */}
+        <div className="mb-5 flex items-start gap-4">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingAvatar}
+            className="relative w-20 h-20 rounded-2xl shrink-0 overflow-hidden group focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
+            aria-label="Change profile photo"
+          >
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={profile.display_name ?? 'Profile'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full stitch-card--accent flex items-center justify-center text-2xl font-extrabold text-white">
+                {(profile?.display_name ?? user?.email ?? '?').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+              {uploadingAvatar ? (
+                <Loader2 size={20} className="animate-spin text-white" />
+              ) : (
+                <Camera
+                  size={18}
+                  className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  strokeWidth={2.25}
+                />
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleAvatarFile}
+              className="hidden"
+            />
+          </button>
+          <div className="flex-1 min-w-0 pt-1">
+            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5">
+              Profile photo
+            </p>
+            <p className="text-xs stitch-text-secondary leading-relaxed">
+              Click your avatar to upload a new one.<br />
+              JPG, PNG, or WebP. Resized to 512×512 on upload.
+            </p>
+          </div>
+        </div>
+
+        {avatarError && (
+          <div className="mb-4 flex items-start gap-2 px-3.5 py-2.5 rounded-xl bg-red-50 text-red-700 text-xs">
+            <AlertCircle size={13} className="shrink-0 mt-0.5" />
+            <p className="leading-relaxed">{avatarError}</p>
+          </div>
+        )}
 
         <div className="space-y-3">
           {/* Display name */}
