@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
@@ -150,17 +151,22 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  return (
+  // Render into document.body via portal — escapes any ancestor with a
+  // transform/filter/contain style that would otherwise turn our `position:
+  // fixed` into `position: absolute` relative to that ancestor (which is why
+  // `top: 50%` was landing well below viewport center — the Layout or one of
+  // the wrapping providers creates a containing block).
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/40"
+        className="fixed inset-0 z-[100] bg-black/40"
         onClick={onClose}
       />
       {/* Modal — explicit inline positioning, no Tailwind responsive
           shenanigans. Desktop: centered. Mobile: anchored to bottom. */}
       <div
-        className="fixed z-50 w-full sm:w-auto sm:max-w-xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+        className="fixed z-[101] w-full sm:w-auto sm:max-w-xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
         style={
           isDesktop
             ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
@@ -488,6 +494,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
 
       </div>
-    </>
+    </>,
+    document.body
   );
 }
