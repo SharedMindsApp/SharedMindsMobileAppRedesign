@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
@@ -136,24 +136,36 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
       })
     : null;
 
+  // Track desktop vs mobile so we can use inline styles for centering —
+  // Tailwind responsive `sm:bottom-auto` was failing to unset `bottom-0`
+  // reliably, leaving the modal stretched between top:50% and bottom:0.
+  // Inline styles bypass that entirely.
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 640 : true
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => setIsDesktop(window.innerWidth >= 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
   return (
     <>
-      {/* Backdrop — separate from the modal so we don't accidentally create
-          a containing block that traps the modal's fixed positioning. */}
+      {/* Backdrop */}
       <div
         className="fixed inset-0 z-50 bg-black/40"
         onClick={onClose}
       />
-      {/* Modal — anchored to bottom on mobile, centered on desktop via
-          explicit top-1/2 + translate. No reliance on flex parent alignment. */}
+      {/* Modal — explicit inline positioning, no Tailwind responsive
+          shenanigans. Desktop: centered. Mobile: anchored to bottom. */}
       <div
-        className="
-          fixed left-1/2 -translate-x-1/2 z-50 w-full sm:w-auto sm:max-w-xl
-          bottom-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2
-          bg-surface flex flex-col
-          max-h-[88vh] sm:max-h-[85vh]
-          rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden
-        "
+        className="fixed z-50 w-full sm:w-auto sm:max-w-xl bg-surface flex flex-col max-h-[88vh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+        style={
+          isDesktop
+            ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+            : { bottom: 0, left: 0, right: 0 }
+        }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile grab handle */}
