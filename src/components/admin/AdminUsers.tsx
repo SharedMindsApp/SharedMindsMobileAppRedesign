@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Filter, Edit, AlertCircle, CheckCircle, UserRound, Mail } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { getUsers, updateUserRole, type User } from '../../lib/admin';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ function lastSeenLabel(iso: string | null): string {
 // ── Page ────────────────────────────────────────────────────────
 
 export function AdminUsers() {
+  const { user: currentUser, refreshProfile } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +95,11 @@ export function AdminUsers() {
       setSuccessMessage(`Role updated to ${newRole}`);
       setEditingUser(null);
       await loadUsers();
+      // If the admin updated their own role, refresh the auth context so the
+      // sidebar badge updates without needing a page reload.
+      if (currentUser && userId === currentUser.id) {
+        await refreshProfile();
+      }
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user role');

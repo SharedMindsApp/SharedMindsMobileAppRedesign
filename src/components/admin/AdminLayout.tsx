@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -29,7 +29,13 @@ interface AdminLayoutProps {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, profile } = useAuth();
+  const { signOut, profile, refreshProfile } = useAuth();
+
+  // Always refresh the user's profile when entering the admin panel.
+  // Avoids stale role badges (e.g. user was just promoted to admin elsewhere).
+  useEffect(() => {
+    refreshProfile().catch(() => {});
+  }, [refreshProfile]);
   const { config, updatePreferences } = useUIPreferences();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
