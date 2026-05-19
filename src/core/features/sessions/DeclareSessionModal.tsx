@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import { startCommunitySession } from '../../services/SessionService';
+import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
 import { InputWell } from '../../ui/CorePage';
 
 type DurationOption = 25 | 50 | 90;
@@ -25,18 +25,26 @@ const ENERGY_COLORS: Record<CoreTask['energy'], string> = {
 interface Props {
   onClose: () => void;
   initialGoal?: string;
+  /** Pre-fills the modal with a future start time. When set, the session is created as `scheduled` instead of `active`. */
+  initialScheduledAt?: Date;
+  /** Forces the mode picker to Solo and locks it (used by the sidebar Solo button). */
+  forceSoloMode?: boolean;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode }: Props) {
   const navigate = useNavigate();
   const { state: { tasks } } = useCoreData();
   const { setActiveSession } = useFocusSession();
+
+  const isScheduling = initialScheduledAt != null;
 
   const [tab, setTab] = useState<GoalTab>(initialGoal ? 'type' : 'pick');
   const [selectedTask, setSelectedTask] = useState<CoreTask | null>(null);
   const [goalText, setGoalText] = useState(initialGoal ?? '');
   const [duration, setDuration] = useState<DurationOption>(50);
-  const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>('group');
+  const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
+    forceSoloMode ? 'solo' : 'group'
+  );
   const [quietMode, setQuietMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +58,16 @@ export function DeclareSessionModal({ onClose, initialGoal }: Props) {
     setSubmitting(true);
     setError(null);
     try {
+      if (isScheduling && initialScheduledAt) {
+        // Future slot → create scheduled session, do not navigate into it
+        await createScheduledSession({
+          title: resolvedGoal,
+          scheduledAt: initialScheduledAt,
+          durationMinutes: duration,
+        });
+        onClose();
+        return;
+      }
       const session = await startCommunitySession({
         goalText: resolvedGoal,
         taskId: tab === 'pick' && selectedTask ? selectedTask.id : undefined,
@@ -67,6 +85,17 @@ export function DeclareSessionModal({ onClose, initialGoal }: Props) {
     }
   }
 
+  // Format the scheduled time for the header subtitle
+  const scheduledLabel = initialScheduledAt
+    ? initialScheduledAt.toLocaleString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-surface">
       <div className="relative w-full h-full flex flex-col max-w-2xl mx-auto">
@@ -79,10 +108,10 @@ export function DeclareSessionModal({ onClose, initialGoal }: Props) {
             </div>
             <div>
               <h2 className="stitch-headline text-base font-extrabold leading-tight">
-                Declare your focus
+                {isScheduling ? 'Schedule a session' : forceSoloMode ? 'Solo focus session' : 'Declare your focus'}
               </h2>
               <p className="text-xs stitch-text-secondary">
-                What's the one thing you'll finish?
+                {scheduledLabel ?? "What's the one thing you'll finish?"}
               </p>
             </div>
           </div>
@@ -214,7 +243,8 @@ export function DeclareSessionModal({ onClose, initialGoal }: Props) {
           </div>
         </div>
 
-        {/* ── Session mode ─────────────────────────────────── */}
+        {/* ── Session mode (hidden when locked to Solo or when scheduling) ── */}
+        {!forceSoloMode && !isScheduling && (
         <div className="shrink-0 px-5 pt-3">
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
             Mode
@@ -249,6 +279,7 @@ export function DeclareSessionModal({ onClose, initialGoal }: Props) {
             })}
           </div>
         </div>
+        )}
 
         {/* ── Quiet mode toggle (hidden for Solo — no audio room) ── */}
         {sessionMode !== 'solo' && (
@@ -307,8 +338,12 @@ export function DeclareSessionModal({ onClose, initialGoal }: Props) {
               <Loader2 size={18} className="animate-spin" />
             ) : (
               <>
-                <Timer size={18} />
-                {canSubmit ? `Start ${duration}-min session` : 'Pick a goal to start'}
+                {isScheduling ? <Calendar size={18} /> : <Timer size={18} />}
+                {!canSubmit
+                  ? 'Pick a goal to start'
+                  : isScheduling
+                  ? `Schedule ${duration}-min session`
+                  : `Start ${duration}-min session`}
               </>
             )}
           </button>
