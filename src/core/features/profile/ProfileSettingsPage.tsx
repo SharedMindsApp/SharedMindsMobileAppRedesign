@@ -19,7 +19,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera,
   AlertCircle, Eye, EyeOff, UserRound, Bell, Shield, Settings as SettingsIcon,
-  Sun, Moon, Zap, Check,
+  Sun, Moon, Zap, Check, Smartphone,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
@@ -30,6 +30,9 @@ import { SkillsEditor } from '../../ui/SkillsEditor';
 import { formatLocation } from '../../../lib/countries';
 import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
 import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
+import {
+  isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush, isSubscribed,
+} from '../../services/PushNotificationService';
 import { useUIPreferences } from '../../../contexts/UIPreferencesContext';
 import { ProfilePage } from './ProfilePage';
 
@@ -565,6 +568,71 @@ function PrivacyToggle({
   );
 }
 
+// ── PushNotificationRow ────────────────────────────────────────────────────
+
+function PushNotificationRow() {
+  const supported = isPushSupported();
+  const [permission, setPermission] = useState<NotificationPermission>(() =>
+    supported ? getPushPermission() : 'denied',
+  );
+  const [subscribed, setSubscribed] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!supported) return;
+    isSubscribed().then(setSubscribed);
+  }, [supported]);
+
+  async function handleEnable() {
+    setBusy(true);
+    const ok = await subscribeToPush();
+    setSubscribed(ok);
+    setPermission(getPushPermission());
+    setBusy(false);
+  }
+
+  async function handleDisable() {
+    setBusy(true);
+    await unsubscribeFromPush();
+    setSubscribed(false);
+    setBusy(false);
+  }
+
+  if (!supported) return null;
+
+  return (
+    <div className="px-3 py-2.5 flex items-start gap-3">
+      <div className="w-8 h-8 rounded-xl bg-primary/8 flex items-center justify-center shrink-0 mt-0.5">
+        <Smartphone size={15} className="text-primary" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold stitch-text-primary leading-tight">Push notifications</p>
+        <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+          {permission === 'denied'
+            ? 'Blocked in browser settings — enable in your browser to use push'
+            : subscribed
+            ? 'You\'ll get push alerts on this device even when the app isn\'t open'
+            : 'Get alerts on this device even when the app isn\'t open'}
+        </p>
+      </div>
+      {permission !== 'denied' && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={subscribed ? handleDisable : handleEnable}
+          className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 disabled:opacity-50 ${
+            subscribed
+              ? 'bg-surface-container stitch-text-secondary hover:bg-surface-container-high'
+              : 'stitch-btn--primary text-white'
+          }`}
+        >
+          {busy ? '…' : subscribed ? 'Disable' : 'Enable'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── NotificationPreferencesPanel (lifted from old SettingsPage) ───────────
 
 function NotificationPreferencesPanel() {
@@ -645,6 +713,12 @@ function NotificationPreferencesPanel() {
 
   return (
     <div className="space-y-1">
+      {/* Push notification toggle — shown only if browser supports it */}
+      <div className="mb-3 pb-3 border-b border-surface-container/50">
+        <p className="text-[11px] stitch-text-secondary mb-1 px-3 leading-relaxed">This device:</p>
+        <PushNotificationRow />
+      </div>
+
       <p className="text-[11px] stitch-text-secondary mb-2 leading-relaxed">Email me about:</p>
       {rows.map((row) => {
         const value = !!prefs[row.key];

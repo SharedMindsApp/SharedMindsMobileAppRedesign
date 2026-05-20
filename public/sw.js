@@ -183,3 +183,59 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// ── Web Push: receive push events and show notifications ────────────────────
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'SharedMinds', body: event.data ? event.data.text() : '' };
+  }
+
+  const title    = data.title    ?? 'SharedMinds';
+  const body     = data.body     ?? '';
+  const deepLink = data.deepLink ?? '/';
+  const tag      = data.tag      ?? 'sharedminds-push';
+  const type     = data.type     ?? '';
+
+  const icon  = '/icon-192.png';
+  const badge = '/icon-192-maskable.png';
+
+  const options = {
+    body,
+    icon,
+    badge,
+    tag,
+    requireInteraction: ['session_reminder_15min', 'session_now'].includes(type),
+    data: { deepLink },
+    vibrate: [200, 100, 200],
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+// ── Web Push: handle notification click ────────────────────────────────────
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const deepLink = event.notification.data?.deepLink ?? '/';
+
+  event.waitUntil(
+    clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((windowClients) => {
+        for (const client of windowClients) {
+          if ('focus' in client) {
+            client.navigate(deepLink);
+            return client.focus();
+          }
+        }
+        return clients.openWindow(deepLink);
+      })
+  );
+});

@@ -60,6 +60,7 @@ export interface NotificationPreferences {
   email_marketing: boolean;
   digest_mode: 'realtime' | 'daily' | 'off';
   dm_inactivity_threshold_hours: number;
+  push_enabled: boolean;
   updated_at: string;
 }
 

@@ -1,18 +1,23 @@
 // dispatch-notifications Edge Function
-// Fetches pending notifications and sends real-time emails via Resend.
-// Respects per-user digest_mode and per-category email preferences.
+// Fetches pending notifications and dispatches them via email (Resend) AND
+// Web Push (VAPID). Respects per-user digest_mode and category preferences.
 //
 // Deploy:
 //   supabase functions deploy dispatch-notifications
-//   supabase secrets set RESEND_API_KEY=re_...
-//   supabase secrets set DISPATCH_SECRET=some-secret-token
 //
-// Invoke via pg_cron (every minute) or external cron hitting:
-//   POST https://<project>.supabase.co/functions/v1/dispatch-notifications
-//   Authorization: Bearer <DISPATCH_SECRET>
+// Required secrets:
+//   supabase secrets set RESEND_API_KEY=re_...
+//   supabase secrets set DISPATCH_SECRET=<random-token>
+//   supabase secrets set VAPID_PUBLIC_KEY=<base64url>   # from: npx web-push generate-vapid-keys
+//   supabase secrets set VAPID_PRIVATE_KEY=<base64url>
+//   supabase secrets set VAPID_SUBJECT=mailto:hello@sharedminds.app
+//   supabase secrets set APP_URL=https://app.sharedminds.app
+//
+// Schedule via pg_cron (every minute) — see migration 20260520000019.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import webpush from 'npm:web-push';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -270,10 +275,19 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const resendApiKey = Deno.env.get('RESEND_API_KEY');
-  const appUrl = Deno.env.get('APP_URL') ?? 'https://app.sharedminds.app';
+  const supabaseUrl      = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const resendApiKey     = Deno.env.get('RESEND_API_KEY');
+  const appUrl           = Deno.env.get('APP_URL') ?? 'https://app.sharedminds.app';
+  const vapidPublicKey   = Deno.env.get('VAPID_PUBLIC_KEY');
+  const vapidPrivateKey  = Deno.env.get('VAPID_PRIVATE_KEY');
+  const vapidSubject     = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:hello@sharedminds.app';
+
+  // Configure web-push VAPID credentials (optional — push just skipped if absent)
+  const pushEnabled = !!(vapidPublicKey && vapidPrivateKey);
+  if (pushEnabled) {
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey!, vapidPrivateKey!);
+  }
   const fromAddress = 'notifications@sharedminds.app';
   const settingsUrl = `${appUrl}/settings`;
 
@@ -369,9 +383,27 @@ Deno.serve(async (req: Request) => {
   }
 
   // ------------------------------------------------------------------
+  // Pre-fetch push subscriptions for all users in this batch
+  // (one query instead of N queries inside the loop)
+  // ------------------------------------------------------------------
+  const pushSubsByUser: Record<string, Array<{ endpoint: string; p256dh: string; auth_key: string }>> = {};
+
+  if (pushEnabled && userIds.length > 0) {
+    const { data: pushSubs } = await supabase
+      .from('push_subscriptions')
+      .select('user_id, endpoint, p256dh, auth_key')
+      .in('user_id', userIds);
+
+    for (const sub of (pushSubs ?? []) as Array<{ user_id: string; endpoint: string; p256dh: string; auth_key: string }>) {
+      if (!pushSubsByUser[sub.user_id]) pushSubsByUser[sub.user_id] = [];
+      pushSubsByUser[sub.user_id].push({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth_key: sub.auth_key });
+    }
+  }
+
+  // ------------------------------------------------------------------
   // Process each notification
   // ------------------------------------------------------------------
-  const stats = { processed: 0, sent: 0, skipped: 0, queued_for_digest: 0, failed: 0 };
+  const stats = { processed: 0, sent: 0, skipped: 0, queued_for_digest: 0, failed: 0, push_sent: 0 };
 
   for (const row of rows) {
     stats.processed++;
@@ -490,6 +522,70 @@ Deno.serve(async (req: Request) => {
         .update({ email_status: 'failed' })
         .eq('id', row.id);
       stats.failed++;
+    }
+
+    // ── Web Push ────────────────────────────────────────────────────────────
+    // Send push independently of email — different channel, different opt-in.
+    // We always attempt push for realtime notifications (never for digest_queued
+    // or skipped-by-category). Push preference checked via push_enabled column.
+    if (pushEnabled && digestMode !== 'off' && digestMode !== 'daily') {
+      const subs = pushSubsByUser[row.user_id] ?? [];
+      if (subs.length === 0) {
+        await supabase
+          .from('notifications')
+          .update({ push_status: 'no_subscription' })
+          .eq('id', row.id);
+      } else {
+        const payload = JSON.stringify({
+          title:     row.title,
+          body:      row.body,
+          deepLink:  row.deep_link ?? '/',
+          tag:       `sm-${row.type}-${row.id}`,
+          type:      row.type,
+        });
+
+        let pushOk = false;
+        const expiredEndpoints: string[] = [];
+
+        await Promise.allSettled(
+          subs.map(async (sub) => {
+            try {
+              await webpush.sendNotification(
+                { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
+                payload,
+                { TTL: 60 * 60 * 24 }, // expire after 24 hours if undeliverable
+              );
+              pushOk = true;
+            } catch (err: any) {
+              // 410 Gone / 404 = subscription expired, clean it up
+              if (err?.statusCode === 410 || err?.statusCode === 404) {
+                expiredEndpoints.push(sub.endpoint);
+              } else {
+                console.warn(`Push failed for ${sub.endpoint}:`, err?.message ?? err);
+              }
+            }
+          }),
+        );
+
+        // Clean up expired subscriptions
+        if (expiredEndpoints.length > 0) {
+          await supabase
+            .from('push_subscriptions')
+            .delete()
+            .eq('user_id', row.user_id)
+            .in('endpoint', expiredEndpoints);
+        }
+
+        await supabase
+          .from('notifications')
+          .update({
+            push_status:  pushOk ? 'sent' : 'failed',
+            push_sent_at: pushOk ? new Date().toISOString() : null,
+          })
+          .eq('id', row.id);
+
+        if (pushOk) stats.push_sent++;
+      }
     }
   }
 
