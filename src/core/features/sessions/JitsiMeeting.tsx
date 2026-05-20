@@ -35,6 +35,7 @@ interface JitsiEventListeners {
   participantLeft?: (data: { id: string }) => void;
   connectionFailed?: () => void;
   errorOccurred?: (data: { error: string }) => void;
+  lobbyUserJoined?: (data: { id: string; name: string }) => void;
 }
 
 interface JitsiAPI {
@@ -56,7 +57,7 @@ declare global {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ConnectionState = 'loading' | 'connected' | 'error';
+type ConnectionState = 'loading' | 'lobby' | 'connected' | 'error';
 
 export interface JitsiMeetingProps {
   roomName: string;
@@ -170,10 +171,15 @@ export function JitsiMeeting({
           configOverwrite: {
             startWithAudioMuted: startAudioMuted,
             startWithVideoMuted: startVideoMuted,
+            // Disable prejoin — use both old + new API keys for compatibility
             prejoinPageEnabled: false,
+            prejoinConfig: { enabled: false },
             disableDeepLinking: true,
             disableInviteFunctions: true,
             enableWelcomePage: false,
+            // Don't fail hard when no camera/mic is present
+            disableAudioLevels: true,
+            disableInitialGUM: false,
             // Lobby: enabled so participants wait until the host admits them.
             // Moderators see the "Admit / Deny" controls automatically.
             lobbyModeEnabled: true,
@@ -228,6 +234,13 @@ export function JitsiMeeting({
             onParticipantCountChangedRef.current?.(count);
           },
 
+          // Non-moderators land in the lobby — show a waiting state
+          // instead of the raw JaaS lobby screen.
+          lobbyUserJoined: () => {
+            if (cancelled) return;
+            if (!isModerator) setConnectionState('lobby');
+          },
+
           connectionFailed: () => {
             if (cancelled) return;
             setConnectionState('error');
@@ -269,21 +282,35 @@ export function JitsiMeeting({
   return (
     <div className="relative w-full h-full bg-[#1a1a2e]">
 
-      {/* ── Loading overlay ──────────────────────────────────── */}
-      {connectionState === 'loading' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-3 pointer-events-none">
+      {/* ── Jitsi mount point ────────────────────────────────── */}
+      {/* Fade in the iframe only once JaaS has joined to avoid the white
+          prejoin/loading screen bleeding through our custom overlay. */}
+      <div
+        ref={containerRef}
+        className={`w-full h-full transition-opacity duration-500 ${
+          connectionState === 'connected' ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+
+      {/* ── Loading / lobby overlay (above the iframe — rendered after in DOM) ── */}
+      {(connectionState === 'loading' || connectionState === 'lobby') && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 gap-3 bg-[#1a1a2e]">
           <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center">
             <Loader2 size={28} className="animate-spin text-primary" />
           </div>
           <p className="text-sm text-white/50">
-            {isModerator ? 'Setting up your room…' : 'Waiting for host to admit you…'}
+            {connectionState === 'lobby'
+              ? 'Waiting for the host to admit you…'
+              : isModerator
+              ? 'Setting up your room…'
+              : 'Joining room…'}
           </p>
         </div>
       )}
 
       {/* ── Error state ──────────────────────────────────────── */}
       {connectionState === 'error' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 gap-4">
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 gap-4 bg-[#1a1a2e]">
           <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
             <WifiOff size={30} className="text-white/30" />
           </div>
@@ -303,9 +330,6 @@ export function JitsiMeeting({
           </button>
         </div>
       )}
-
-      {/* ── Jitsi mount point ────────────────────────────────── */}
-      <div ref={containerRef} className="w-full h-full" />
 
       {/* ── Participant count badge ──────────────────────────── */}
       {connectionState === 'connected' && participantCount > 1 && (
