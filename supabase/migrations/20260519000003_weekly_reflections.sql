@@ -46,6 +46,7 @@ for each row execute function public.set_updated_at();
 
 alter table public.weekly_reflections enable row level security;
 
+drop policy if exists "weekly_reflections_all_self" on public.weekly_reflections;
 create policy "weekly_reflections_all_self"
 on public.weekly_reflections for all
 using (user_id = auth.uid())
@@ -83,6 +84,7 @@ for each row execute function public.set_updated_at();
 
 alter table public.weekly_intentions enable row level security;
 
+drop policy if exists "weekly_intentions_all_self" on public.weekly_intentions;
 create policy "weekly_intentions_all_self"
 on public.weekly_intentions for all
 using (user_id = auth.uid())

@@ -104,12 +104,14 @@ create index if not exists notifications_email_queue_idx
 alter table public.notifications enable row level security;
 
 -- Read your own
+drop policy if exists "notifications_select_self" on public.notifications;
 create policy "notifications_select_self"
 on public.notifications for select
 to authenticated
 using (user_id = auth.uid());
 
 -- Update only the read flag on your own
+drop policy if exists "notifications_update_self" on public.notifications;
 create policy "notifications_update_self"
 on public.notifications for update
 to authenticated
@@ -153,16 +155,19 @@ for each row execute function public.set_updated_at();
 
 alter table public.notification_preferences enable row level security;
 
+drop policy if exists "notif_prefs_select_self" on public.notification_preferences;
 create policy "notif_prefs_select_self"
 on public.notification_preferences for select
 to authenticated
 using (user_id = auth.uid());
 
+drop policy if exists "notif_prefs_upsert_self" on public.notification_preferences;
 create policy "notif_prefs_upsert_self"
 on public.notification_preferences for insert
 to authenticated
 with check (user_id = auth.uid());
 
+drop policy if exists "notif_prefs_update_self" on public.notification_preferences;
 create policy "notif_prefs_update_self"
 on public.notification_preferences for update
 to authenticated
@@ -221,6 +226,7 @@ create index if not exists email_events_type_idx
 alter table public.email_events enable row level security;
 
 -- Users can see email events for their own notifications (debugging / transparency)
+drop policy if exists "email_events_select_own" on public.email_events;
 create policy "email_events_select_own"
 on public.email_events for select
 to authenticated
@@ -233,6 +239,7 @@ using (
 );
 
 -- Admins can see everything (deliverability dashboards later)
+drop policy if exists "email_events_select_admin" on public.email_events;
 create policy "email_events_select_admin"
 on public.email_events for select
 to authenticated

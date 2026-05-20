@@ -196,6 +196,7 @@ create index if not exists project_invites_project_idx
 alter table public.project_invites enable row level security;
 
 -- Project members (any role) can see invites for their project
+drop policy if exists "project_invites_select_if_member" on public.project_invites;
 create policy "project_invites_select_if_member"
 on public.project_invites for select
 using (
@@ -208,6 +209,7 @@ using (
 
 -- Anonymous/authenticated users may resolve an invite by token to view
 -- its target project on the accept page. Token is the secret here.
+drop policy if exists "project_invites_select_by_token" on public.project_invites;
 create policy "project_invites_select_by_token"
 on public.project_invites for select
 to anon, authenticated
@@ -217,6 +219,7 @@ using (
 );
 
 -- Project owners/collaborators can create invites for their project
+drop policy if exists "project_invites_insert_if_can_manage" on public.project_invites;
 create policy "project_invites_insert_if_can_manage"
 on public.project_invites for insert
 with check (
@@ -230,6 +233,7 @@ with check (
 );
 
 -- Project owners can delete (revoke) any invite for their project
+drop policy if exists "project_invites_delete_if_owner" on public.project_invites;
 create policy "project_invites_delete_if_owner"
 on public.project_invites for delete
 using (

@@ -50,12 +50,14 @@ alter table public.community_posts enable row level security;
 
 -- Read: any authenticated user. We're a small private community; everyone
 -- sees everything in the feed.
+drop policy if exists "community_posts_select_authenticated" on public.community_posts;
 create policy "community_posts_select_authenticated"
 on public.community_posts for select
 to authenticated
 using (true);
 
 -- Insert manual posts: self only, only the manual post types
+drop policy if exists "community_posts_insert_manual_self" on public.community_posts;
 create policy "community_posts_insert_manual_self"
 on public.community_posts for insert
 to authenticated
@@ -66,6 +68,7 @@ with check (
 );
 
 -- Update: only your own (used for edits)
+drop policy if exists "community_posts_update_self" on public.community_posts;
 create policy "community_posts_update_self"
 on public.community_posts for update
 to authenticated
@@ -73,11 +76,13 @@ using (author_id = auth.uid())
 with check (author_id = auth.uid());
 
 -- Delete: only your own (or admins via separate policy below)
+drop policy if exists "community_posts_delete_self" on public.community_posts;
 create policy "community_posts_delete_self"
 on public.community_posts for delete
 to authenticated
 using (author_id = auth.uid());
 
+drop policy if exists "community_posts_delete_admin" on public.community_posts;
 create policy "community_posts_delete_admin"
 on public.community_posts for delete
 to authenticated
@@ -101,14 +106,17 @@ create index if not exists community_post_reactions_post_idx
 
 alter table public.community_post_reactions enable row level security;
 
+drop policy if exists "post_reactions_select_authenticated" on public.community_post_reactions;
 create policy "post_reactions_select_authenticated"
 on public.community_post_reactions for select
 to authenticated using (true);
 
+drop policy if exists "post_reactions_insert_self" on public.community_post_reactions;
 create policy "post_reactions_insert_self"
 on public.community_post_reactions for insert
 to authenticated with check (user_id = auth.uid());
 
+drop policy if exists "post_reactions_delete_self" on public.community_post_reactions;
 create policy "post_reactions_delete_self"
 on public.community_post_reactions for delete
 to authenticated using (user_id = auth.uid());
@@ -137,19 +145,23 @@ for each row execute function public.set_updated_at();
 
 alter table public.community_post_replies enable row level security;
 
+drop policy if exists "post_replies_select_authenticated" on public.community_post_replies;
 create policy "post_replies_select_authenticated"
 on public.community_post_replies for select
 to authenticated using (true);
 
+drop policy if exists "post_replies_insert_self" on public.community_post_replies;
 create policy "post_replies_insert_self"
 on public.community_post_replies for insert
 to authenticated with check (author_id = auth.uid());
 
+drop policy if exists "post_replies_update_self" on public.community_post_replies;
 create policy "post_replies_update_self"
 on public.community_post_replies for update
 to authenticated using (author_id = auth.uid())
 with check (author_id = auth.uid());
 
+drop policy if exists "post_replies_delete_self" on public.community_post_replies;
 create policy "post_replies_delete_self"
 on public.community_post_replies for delete
 to authenticated using (author_id = auth.uid());

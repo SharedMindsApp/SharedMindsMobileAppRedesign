@@ -65,6 +65,7 @@ for each row execute function public.set_updated_at();
 alter table public.recurring_session_templates enable row level security;
 
 -- Admin-only manage
+drop policy if exists "recurring_templates_admin_manage" on public.recurring_session_templates;
 create policy "recurring_templates_admin_manage"
 on public.recurring_session_templates for all
 using (public.is_admin())
@@ -72,6 +73,7 @@ with check (public.is_admin());
 
 -- All authenticated users may read enabled templates (used for "we run a
 -- weekly reset at 6pm" disclosure on the home page / about copy)
+drop policy if exists "recurring_templates_read_enabled" on public.recurring_session_templates;
 create policy "recurring_templates_read_enabled"
 on public.recurring_session_templates for select
 to authenticated

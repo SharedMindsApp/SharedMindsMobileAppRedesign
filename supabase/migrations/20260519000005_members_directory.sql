@@ -14,6 +14,7 @@
 -- The other profile RLS policies (self, recent-session-owners, admin)
 -- remain in place as belt-and-suspenders.
 
+drop policy if exists "profiles_select_all_authenticated" on public.profiles;
 create policy "profiles_select_all_authenticated"
 on public.profiles for select
 to authenticated
