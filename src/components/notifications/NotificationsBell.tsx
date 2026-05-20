@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell, Loader2, CheckCheck, MessageCircle, Heart, UserPlus, Sparkles, Calendar,
@@ -84,6 +85,8 @@ export function NotificationsBell() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
 
   // Refresh: pull the latest list + count
   const refresh = async () => {
@@ -108,6 +111,17 @@ export function NotificationsBell() {
       refresh().finally(() => setLoading(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Calculate portal position whenever dropdown opens
+  useEffect(() => {
+    if (open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+    }
   }, [open]);
 
   // Click-outside to close
@@ -155,6 +169,7 @@ export function NotificationsBell() {
   return (
     <div ref={containerRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="relative w-9 h-9 rounded-full hover:bg-surface-container-low flex items-center justify-center transition-colors"
@@ -168,68 +183,76 @@ export function NotificationsBell() {
         )}
       </button>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div className="absolute right-0 top-12 z-[70] w-[360px] max-h-[70vh] bg-surface rounded-2xl shadow-2xl ring-1 ring-surface-container/60 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-surface-container/60">
-            <div className="flex items-center gap-2">
-              <Bell size={14} className="text-primary" />
-              <p className="text-sm font-extrabold stitch-text-primary">Notifications</p>
+      {/* Dropdown panel — portalled to body so the nav's overflow:hidden doesn't clip it */}
+      {open && createPortal(
+        <>
+          {/* Backdrop to catch outside clicks */}
+          <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-[95] w-[360px] max-h-[70vh] bg-surface rounded-2xl shadow-2xl ring-1 ring-surface-container/60 flex flex-col overflow-hidden"
+            style={{ top: dropdownPos.top, right: dropdownPos.right }}
+          >
+            {/* Header */}
+            <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-surface-container/60">
+              <div className="flex items-center gap-2">
+                <Bell size={14} className="text-primary" />
+                <p className="text-sm font-extrabold stitch-text-primary">Notifications</p>
+                {unread > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold tabular-nums">
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </div>
               {unread > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold tabular-nums">
-                  {unread > 9 ? '9+' : unread}
-                </span>
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  className="text-[11px] font-bold text-primary hover:underline"
+                >
+                  Mark all read
+                </button>
               )}
             </div>
-            {unread > 0 && (
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto">
+              {loading && items.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 size={18} className="animate-spin stitch-text-secondary" />
+                </div>
+              ) : items.length === 0 ? (
+                <EmptyState />
+              ) : (
+                buckets.map((bucket) => (
+                  <div key={bucket.label}>
+                    <p className="px-4 pt-3 pb-1.5 text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+                      {bucket.label}
+                    </p>
+                    {bucket.items.map((n) => (
+                      <NotificationRow
+                        key={n.id}
+                        notification={n}
+                        onClick={() => handleClick(n)}
+                      />
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 px-3 py-2 border-t border-surface-container/60 flex items-center justify-between">
               <button
                 type="button"
-                onClick={handleMarkAllRead}
-                className="text-[11px] font-bold text-primary hover:underline"
+                onClick={() => { setOpen(false); navigate('/profile?tab=notifications'); }}
+                className="text-[11px] font-semibold stitch-text-secondary hover:stitch-text-primary"
               >
-                Mark all read
+                Notification settings
               </button>
-            )}
+            </div>
           </div>
-
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {loading && items.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={18} className="animate-spin stitch-text-secondary" />
-              </div>
-            ) : items.length === 0 ? (
-              <EmptyState />
-            ) : (
-              buckets.map((bucket) => (
-                <div key={bucket.label}>
-                  <p className="px-4 pt-3 pb-1.5 text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
-                    {bucket.label}
-                  </p>
-                  {bucket.items.map((n) => (
-                    <NotificationRow
-                      key={n.id}
-                      notification={n}
-                      onClick={() => handleClick(n)}
-                    />
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="shrink-0 px-3 py-2 border-t border-surface-container/60 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => { setOpen(false); navigate('/profile?tab=notifications'); }}
-              className="text-[11px] font-semibold stitch-text-secondary hover:stitch-text-primary"
-            >
-              Notification settings
-            </button>
-          </div>
-        </div>
+        </>,
+        document.body
       )}
     </div>
   );
