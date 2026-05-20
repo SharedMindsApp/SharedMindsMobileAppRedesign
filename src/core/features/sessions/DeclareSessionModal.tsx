@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2 } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -75,6 +75,27 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [error, setError] = useState<string | null>(null);
   // After a future session is scheduled, show a 2.5s confirmation before closing
   const [scheduledConfirm, setScheduledConfirm] = useState(false);
+
+  // Inline task creation in the "From my tasks" tab
+  const [newTaskText, setNewTaskText] = useState('');
+  const [savingTask, setSavingTask] = useState(false);
+  const newTaskInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleAddTask() {
+    const title = newTaskText.trim();
+    if (!title || savingTask) return;
+    setSavingTask(true);
+    try {
+      await addTaskAsync(title, selectedProjectId);
+      setNewTaskText('');
+      // Keep focus in the input so users can keep adding tasks quickly
+      newTaskInputRef.current?.focus();
+    } catch (err) {
+      console.warn('[DeclareSessionModal] Add task failed:', err);
+    } finally {
+      setSavingTask(false);
+    }
+  }
 
   const openTasks = tasks.filter((t) => !t.done);
   const resolvedGoal = tab === 'pick' ? (selectedTask?.title ?? '') : goalText.trim();
@@ -254,39 +275,68 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         <div className="flex-1 overflow-y-auto px-5 min-h-0">
           {tab === 'pick' ? (
             <div className="space-y-1.5 pb-2">
-              {openTasks.length === 0 ? (
-                <div className="text-center py-8 stitch-card rounded-2xl">
-                  <p className="text-sm font-medium stitch-text-primary mb-1">No tasks yet</p>
-                  <p className="text-xs stitch-text-secondary">
-                    Switch to "Type a goal" to declare what you're working on.
-                  </p>
-                </div>
-              ) : (
-                openTasks.map((task) => {
-                  const isSelected = selectedTask?.id === task.id;
-                  return (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => setSelectedTask(isSelected ? null : task)}
-                      className={`w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150 ${
-                        isSelected
-                          ? 'bg-primary/8 ring-2 ring-primary/25 shadow-sm'
-                          : 'bg-surface-container-low hover:bg-surface-container active:scale-[0.99]'
-                      }`}
-                    >
-                      <div className={`w-1 self-stretch rounded-full shrink-0 ${ENERGY_COLORS[task.energy]}`} />
-                      <span className="flex-1 text-sm font-medium stitch-text-primary leading-snug">
-                        {task.title}
-                      </span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                        isSelected ? 'bg-primary' : 'border-2 border-surface-container'
-                      }`}>
-                        {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
-                      </div>
-                    </button>
-                  );
-                })
+              {openTasks.map((task) => {
+                const isSelected = selectedTask?.id === task.id;
+                return (
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() => setSelectedTask(isSelected ? null : task)}
+                    className={`w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150 ${
+                      isSelected
+                        ? 'bg-primary/8 ring-2 ring-primary/25 shadow-sm'
+                        : 'bg-surface-container-low hover:bg-surface-container active:scale-[0.99]'
+                    }`}
+                  >
+                    <div className={`w-1 self-stretch rounded-full shrink-0 ${ENERGY_COLORS[task.energy]}`} />
+                    <span className="flex-1 text-sm font-medium stitch-text-primary leading-snug">
+                      {task.title}
+                    </span>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                      isSelected ? 'bg-primary' : 'border-2 border-surface-container'
+                    }`}>
+                      {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* ── Inline task creation row ── */}
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
+                newTaskText ? 'bg-surface-container ring-1 ring-primary/20' : 'bg-surface-container-low'
+              }`}>
+                <Plus size={14} className="stitch-text-secondary shrink-0" />
+                <input
+                  ref={newTaskInputRef}
+                  type="text"
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); handleAddTask(); }
+                    if (e.key === 'Escape') setNewTaskText('');
+                  }}
+                  placeholder={openTasks.length === 0 ? 'Add your first task…' : 'Add another task…'}
+                  className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none min-w-0"
+                />
+                {newTaskText.trim() && (
+                  <button
+                    type="button"
+                    onClick={handleAddTask}
+                    disabled={savingTask}
+                    className="shrink-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50"
+                  >
+                    {savingTask
+                      ? <Loader2 size={11} className="text-white animate-spin" />
+                      : <Check size={11} className="text-white" strokeWidth={3} />
+                    }
+                  </button>
+                )}
+              </div>
+
+              {openTasks.length === 0 && !newTaskText && (
+                <p className="text-center text-xs stitch-text-secondary pt-1 pb-2">
+                  Type a task above, or switch to "Type a goal" for a one-off.
+                </p>
               )}
             </div>
           ) : (

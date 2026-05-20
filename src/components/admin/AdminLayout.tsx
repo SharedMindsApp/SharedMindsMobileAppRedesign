@@ -14,7 +14,6 @@ import {
   CalendarRange,
   ShieldCheck,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { getOpenFlagCount } from '../../core/services/ModerationService';
 import { useAuth } from '../../core/auth/AuthProvider';
 import { useUIPreferences } from '../../contexts/UIPreferencesContext';
