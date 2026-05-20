@@ -490,22 +490,22 @@ END;
 $$;
 
 -- Register cron jobs only if pg_cron was successfully installed above
-DO $$
+DO $outer$
 BEGIN
   -- Session reminders: every 10 minutes
   PERFORM cron.schedule(
     'session-reminders',
     '*/10 * * * *',
-    $$SELECT public.create_session_reminders();$$
+    'SELECT public.create_session_reminders();'
   );
 
   -- Weekly review prompts: Sundays at 18:00 UTC
   PERFORM cron.schedule(
     'weekly-review-prompts',
     '0 18 * * 0',
-    $$SELECT public.create_weekly_review_prompts();$$
+    'SELECT public.create_weekly_review_prompts();'
   );
 EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'pg_cron scheduling skipped: %', SQLERRM;
 END;
-$$;
+$outer$;
