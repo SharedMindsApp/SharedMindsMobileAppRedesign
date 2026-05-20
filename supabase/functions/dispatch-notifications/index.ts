@@ -303,17 +303,16 @@ Deno.serve(async (req: Request) => {
   });
 
   // ------------------------------------------------------------------
-  // Fetch up to 50 pending notifications
+  // Fetch up to 50 pending notifications (with profile join only)
+  // notification_preferences has no FK to notifications so we fetch it
+  // separately below to avoid schema-cache join errors.
   // ------------------------------------------------------------------
   const { data: notifications, error: fetchError } = await supabase
     .from('notifications')
     .select(`
       id, user_id, type, title, body, related_id, deep_link,
       read_at, email_sent_at, email_status, scheduled_for, created_at,
-      profiles!inner ( display_name, timezone, last_seen_at ),
-      notification_preferences ( email_session_reminders, email_messages, email_post_replies,
-        email_connection_requests, email_weekly_review, email_onboarding,
-        email_community_sessions, email_marketing, digest_mode, dm_inactivity_threshold_hours )
+      profiles!inner ( display_name, timezone, last_seen_at )
     `)
     .is('email_sent_at', null)
     .not('email_status', 'in', '("sent","failed","skipped","digest_queued")')
@@ -326,15 +325,25 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Failed to fetch notifications', details: fetchError.message }, 500);
   }
 
-  // The join returns nested objects; flatten them for convenience
+  // Collect unique user IDs for follow-up queries
+  const userIds = [...new Set(((notifications ?? []) as Record<string, unknown>[]).map((n) => n['user_id'] as string))];
+
+  // Fetch notification preferences separately (no FK to notifications table)
+  const prefsMap: Record<string, Record<string, unknown>> = {};
+  if (userIds.length > 0) {
+    const { data: prefsRows } = await supabase
+      .from('notification_preferences')
+      .select('user_id, email_session_reminders, email_messages, email_post_replies, email_connection_requests, email_weekly_review, email_onboarding, email_community_sessions, email_marketing, digest_mode, dm_inactivity_threshold_hours')
+      .in('user_id', userIds);
+    for (const p of (prefsRows ?? []) as Record<string, unknown>[]) {
+      prefsMap[p['user_id'] as string] = p;
+    }
+  }
+
+  // Flatten notifications + profiles + prefs into rows
   const rows: NotificationRow[] = ((notifications ?? []) as Record<string, unknown>[]).map((n) => {
     const profile = (n['profiles'] as Record<string, unknown> | null) ?? {};
-    // notification_preferences may arrive as an object or a 1-element array
-    // depending on Supabase's relationship inference — normalise to object.
-    const prefsRaw = n['notification_preferences'];
-    const prefs: Record<string, unknown> = Array.isArray(prefsRaw)
-      ? ((prefsRaw[0] as Record<string, unknown>) ?? {})
-      : ((prefsRaw as Record<string, unknown>) ?? {});
+    const prefs: Record<string, unknown> = prefsMap[n['user_id'] as string] ?? {};
     return {
       id: n['id'] as string,
       user_id: n['user_id'] as string,
@@ -351,7 +360,7 @@ Deno.serve(async (req: Request) => {
       display_name: (profile['display_name'] as string) ?? 'there',
       timezone: profile['timezone'] as string | null,
       last_seen_at: profile['last_seen_at'] as string | null,
-      user_email: n['user_email'] as string,
+      user_email: '',
       email_session_reminders: prefs['email_session_reminders'] as boolean | null,
       email_messages: prefs['email_messages'] as boolean | null,
       email_post_replies: prefs['email_post_replies'] as boolean | null,
@@ -365,9 +374,7 @@ Deno.serve(async (req: Request) => {
     };
   });
 
-  // We also need auth.users emails — the join above won't work with the normal
-  // Supabase client on auth.users. Fetch them separately using the admin API.
-  const userIds = [...new Set(rows.map((r) => r.user_id))];
+  // Fetch auth.users emails via admin API (not accessible via normal join)
   const emailMap: Record<string, string> = {};
 
   if (userIds.length > 0) {
