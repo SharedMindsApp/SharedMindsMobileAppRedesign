@@ -81,15 +81,18 @@ function loadJitsiScript(): Promise<void> {
   if (window.JitsiMeetExternalAPI) return Promise.resolve();
   if (scriptPromise) return scriptPromise;
 
+  // JaaS serves the External API from /libs/external_api.min.js
+  const SCRIPT_URL = `https://${JAAS_DOMAIN}/libs/external_api.min.js`;
+
   scriptPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(`script[src*="${JAAS_DOMAIN}/external_api.js"]`);
+    const existing = document.querySelector(`script[src*="${JAAS_DOMAIN}/libs/external_api"]`);
     if (existing) {
       existing.addEventListener('load', () => resolve());
       existing.addEventListener('error', () => reject(new Error('Jitsi script failed')));
       return;
     }
     const script = document.createElement('script');
-    script.src = `https://${JAAS_DOMAIN}/external_api.js`;
+    script.src = SCRIPT_URL;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error('Failed to load JaaS External API'));

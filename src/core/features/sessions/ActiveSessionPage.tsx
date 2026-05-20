@@ -182,7 +182,7 @@ export function ActiveSessionPage() {
 
   if (loadingSession) {
     return (
-      <div className="fixed inset-0 bg-surface flex items-center justify-center z-40">
+      <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-surface flex items-center justify-center z-[55]">
         <Loader2 size={32} className="animate-spin text-primary" />
       </div>
     );
@@ -191,7 +191,7 @@ export function ActiveSessionPage() {
   if (!session) return null;
 
   return (
-    <div className="fixed inset-0 bg-[#1a1a2e] flex flex-col z-40 overflow-hidden">
+    <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-[#1a1a2e] flex flex-col z-[55] overflow-hidden">
 
       {/* ── Top bar ─────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center justify-between gap-4 px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm">
