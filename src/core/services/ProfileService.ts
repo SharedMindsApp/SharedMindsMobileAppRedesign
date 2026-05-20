@@ -21,6 +21,7 @@ export interface PublicProfile {
   country_code?: string | null;
   city?: string | null;
   created_at: string;
+  last_seen_at?: string | null;
 }
 
 export interface RecentShip {
@@ -44,7 +45,7 @@ export async function listMembers(): Promise<PublicProfile[]> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, location, country_code, city, created_at')
+    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, location, country_code, city, created_at, last_seen_at')
     .neq('id', user.id)
     .not('display_name', 'is', null)
     // Privacy: anyone who flipped the "hide me" toggle is excluded.

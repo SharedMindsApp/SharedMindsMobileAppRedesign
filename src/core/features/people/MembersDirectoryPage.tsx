@@ -1,24 +1,40 @@
 /**
  * MembersDirectoryPage — /people
  *
- * Browse all SharedMinds members. Filter by work type, country, or
- * skill. Tap any card to view their profile, or use the Connect /
- * Message buttons directly.
+ * Browse all SharedMinds members with live presence and session signals.
  *
- * "Suggested connections" section pinned at the top surfaces people in
- * the same work type or country — the only ranking signal we have today
- * at this scale.
+ * What lights up here:
+ *   • Online dot on every avatar (10-min last_seen_at heartbeat)
+ *   • "Working now" pulsing pill for anyone in an active public/shared session
+ *   • Smart sort: in-session first, then online, then by recency
+ *   • Accept-in-place if the person already requested *you*
+ *   • Country flags + "🟢 Online now" filter chip
+ *
+ * Product principle: "human presence is the product." This is the page
+ * that makes the community feel alive instead of a static directory.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Users, Sparkles, MessageCircle, UserPlus, Loader2, Globe, Briefcase } from 'lucide-react';
+import {
+  Search, Users, Sparkles, MessageCircle, UserPlus, Loader2,
+  Globe, Briefcase, Check, Activity,
+} from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { listMembers, type PublicProfile } from '../../services/ProfileService';
-import { fetchConnections, sendConnectionRequest, fetchConnectionStatus, type ConnectionStatus } from '../../services/ConnectionService';
+import {
+  fetchConnections,
+  sendConnectionRequest,
+  acceptConnectionRequest,
+  fetchConnectionStatus,
+  type ConnectionStatus,
+} from '../../services/ConnectionService';
 import { getOrCreateDm, DmPrivacyError } from '../../services/MessageService';
 import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
+import { Avatar } from '../../ui/Avatar';
+import { supabase } from '../../../lib/supabase';
+import { findCountry } from '../../../lib/countries';
 
 const WORK_TYPE_LABELS: Record<string, string> = {
   designer: 'Designer', developer: 'Developer', writer: 'Writer / Creator',
@@ -26,65 +42,111 @@ const WORK_TYPE_LABELS: Record<string, string> = {
   consultant: 'Consultant', researcher: 'Researcher', other: 'Creative',
 };
 
-const AVATAR_GRAD = [
-  'from-violet-400 to-fuchsia-500',
-  'from-cyan-400 to-blue-500',
-  'from-emerald-400 to-teal-500',
-  'from-amber-400 to-orange-500',
-  'from-rose-400 to-pink-500',
-  'from-indigo-400 to-purple-500',
-];
-function gradFor(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_GRAD[Math.abs(hash) % AVATAR_GRAD.length];
+const ONLINE_WINDOW_MS = 10 * 60 * 1000;
+
+interface ActiveSessionInfo {
+  goal: string | null;
+  mode: string | null;
+}
+
+/** A profile enriched with the connection state + a snapshot of the user's
+ *  current session (if any). Computed locally — never persisted. */
+interface EnrichedMember extends PublicProfile {
+  status: ConnectionStatus;
+  connectionId: string | null;
+  activeSession: ActiveSessionInfo | null;
+  isOnline: boolean;
 }
 
 export function MembersDirectoryPage() {
   const navigate = useNavigate();
   const { profile: me } = useAuth();
   const { openConversation, isMobile } = useMessagingDock();
+
   const [members, setMembers] = useState<PublicProfile[]>([]);
-  const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
+  const [statuses, setStatuses] = useState<Record<string, { status: ConnectionStatus; id: string | null }>>({});
+  const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSessionInfo>>({});
   const [loading, setLoading] = useState(true);
+
   const [query, setQuery] = useState('');
   const [workTypeFilter, setWorkTypeFilter] = useState<string | null>(null);
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  const [onlineOnly, setOnlineOnly] = useState(false);
 
+  // ── Fetch members + statuses + active sessions ──────────────────
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+
     Promise.all([
       listMembers(),
       fetchConnections(),
+      // Active public/shared sessions. Solo sessions are private — never surface them.
+      supabase
+        .from('focus_sessions')
+        .select('user_id, session_goal, session_mode')
+        .eq('status', 'active')
+        .in('session_mode', ['public', 'shared', 'one_on_one']),
     ])
-      .then(async ([all, connected]) => {
+      .then(async ([all, connected, sessionsRes]) => {
         if (cancelled) return;
         setMembers(all);
 
-        // Hydrate connection statuses for ALL fetched profiles in parallel.
-        // At 200-member cap this is fine; we'll batch via RPC later if it grows.
+        // Build active-session lookup
+        const sessions: Record<string, ActiveSessionInfo> = {};
+        for (const row of (sessionsRes.data ?? []) as any[]) {
+          sessions[row.user_id] = {
+            goal: row.session_goal ?? null,
+            mode: row.session_mode ?? null,
+          };
+        }
+        if (!cancelled) setActiveSessions(sessions);
+
+        // Hydrate connection statuses for every fetched profile in parallel.
         if (me?.id) {
-          const map: Record<string, ConnectionStatus> = {};
-          for (const c of connected) map[c.other_user_id] = 'connected';
+          const map: Record<string, { status: ConnectionStatus; id: string | null }> = {};
+          for (const c of connected) {
+            map[c.other_user_id] = { status: 'connected', id: c.id };
+          }
           const need = all.filter((p) => !(p.id in map));
           await Promise.all(
             need.map(async (p) => {
-              const { status } = await fetchConnectionStatus(me.id, p.id);
-              if (!cancelled) map[p.id] = status;
+              const { status, connectionId } = await fetchConnectionStatus(me.id, p.id);
+              if (!cancelled) map[p.id] = { status, id: connectionId };
             })
           );
           if (!cancelled) setStatuses(map);
         }
       })
       .finally(() => { if (!cancelled) setLoading(false); });
+
     return () => { cancelled = true; };
   }, [me?.id]);
 
-  // Derived sets for filter chips
+  // ── Enrich + sort members ───────────────────────────────────────
+  const enriched = useMemo<EnrichedMember[]>(() => {
+    const now = Date.now();
+    return members.map((m) => {
+      const lastSeen = m.last_seen_at ? new Date(m.last_seen_at).getTime() : 0;
+      const isOnline = lastSeen > 0 && (now - lastSeen) < ONLINE_WINDOW_MS;
+      const meta = statuses[m.id] ?? { status: 'none' as ConnectionStatus, id: null };
+      return {
+        ...m,
+        status: meta.status,
+        connectionId: meta.id,
+        activeSession: activeSessions[m.id] ?? null,
+        isOnline,
+      };
+    });
+  }, [members, statuses, activeSessions]);
+
+  // Derived filter options
   const workTypeOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const m of members) if (m.work_type) set.add(m.work_type);
+    for (const m of members) {
+      if (m.work_type) set.add(m.work_type);
+      for (const wt of (m.work_types ?? [])) set.add(wt);
+    }
     return Array.from(set).sort();
   }, [members]);
 
@@ -94,12 +156,16 @@ export function MembersDirectoryPage() {
     return Array.from(set).sort();
   }, [members]);
 
-  // Filtered list
+  // Filter + smart sort
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return members.filter((m) => {
-      if (workTypeFilter && m.work_type !== workTypeFilter) return false;
+    const out = enriched.filter((m) => {
+      if (workTypeFilter) {
+        const types = m.work_types?.length ? m.work_types : (m.work_type ? [m.work_type] : []);
+        if (!types.includes(workTypeFilter)) return false;
+      }
       if (countryFilter && m.country_code !== countryFilter) return false;
+      if (onlineOnly && !m.isOnline && !m.activeSession) return false;
       if (q) {
         const blob = [
           m.display_name,
@@ -112,26 +178,63 @@ export function MembersDirectoryPage() {
       }
       return true;
     });
-  }, [members, query, workTypeFilter, countryFilter]);
 
-  // Suggested = same work type OR same country, not yet connected, top 5
+    // Smart sort: in-session → online → recent last_seen → name
+    return out.sort((a, b) => {
+      const aRank = a.activeSession ? 0 : a.isOnline ? 1 : 2;
+      const bRank = b.activeSession ? 0 : b.isOnline ? 1 : 2;
+      if (aRank !== bRank) return aRank - bRank;
+      const aSeen = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+      const bSeen = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
+      if (aSeen !== bSeen) return bSeen - aSeen;
+      return a.display_name.localeCompare(b.display_name);
+    });
+  }, [enriched, query, workTypeFilter, countryFilter, onlineOnly]);
+
+  // Suggested: same work type or country, not yet connected
   const suggested = useMemo(() => {
     if (!me) return [];
-    return members
-      .filter((m) => statuses[m.id] !== 'connected' && statuses[m.id] !== 'pending_sent')
-      .filter((m) =>
-        (me.work_type && m.work_type === me.work_type) ||
-        (me.country_code && m.country_code === me.country_code)
-      )
+    return enriched
+      .filter((m) => m.status !== 'connected' && m.status !== 'pending_sent')
+      .filter((m) => {
+        const myTypes = (me as any).work_types?.length
+          ? (me as any).work_types
+          : (me.work_type ? [me.work_type] : []);
+        const theirTypes = m.work_types?.length ? m.work_types : (m.work_type ? [m.work_type] : []);
+        const sharedType = myTypes.some((t: string) => theirTypes.includes(t));
+        return sharedType || (me.country_code && m.country_code === me.country_code);
+      })
+      // Live people first in suggestions too
+      .sort((a, b) => {
+        const aRank = a.activeSession ? 0 : a.isOnline ? 1 : 2;
+        const bRank = b.activeSession ? 0 : b.isOnline ? 1 : 2;
+        return aRank - bRank;
+      })
       .slice(0, 5);
-  }, [members, statuses, me]);
+  }, [enriched, me]);
 
+  const onlineCount = useMemo(
+    () => enriched.filter((m) => m.isOnline || m.activeSession).length,
+    [enriched],
+  );
+
+  // ── Actions ─────────────────────────────────────────────────────
   async function handleConnect(userId: string) {
-    setStatuses((prev) => ({ ...prev, [userId]: 'pending_sent' }));
+    setStatuses((prev) => ({ ...prev, [userId]: { status: 'pending_sent', id: null } }));
     try {
-      await sendConnectionRequest(userId);
+      const conn = await sendConnectionRequest(userId);
+      setStatuses((prev) => ({ ...prev, [userId]: { status: 'pending_sent', id: conn.id } }));
     } catch {
-      setStatuses((prev) => ({ ...prev, [userId]: 'none' }));
+      setStatuses((prev) => ({ ...prev, [userId]: { status: 'none', id: null } }));
+    }
+  }
+
+  async function handleAccept(userId: string, connectionId: string) {
+    setStatuses((prev) => ({ ...prev, [userId]: { status: 'connected', id: connectionId } }));
+    try {
+      await acceptConnectionRequest(connectionId);
+    } catch {
+      setStatuses((prev) => ({ ...prev, [userId]: { status: 'pending_received', id: connectionId } }));
     }
   }
 
@@ -142,7 +245,7 @@ export function MembersDirectoryPage() {
       else openConversation(conversationId);
     } catch (e) {
       if (e instanceof DmPrivacyError) {
-        alert(e.message); // TODO: replace with toast once toast context is accessible here
+        alert(e.message);
       } else {
         console.error('handleMessage failed:', e);
       }
@@ -156,7 +259,7 @@ export function MembersDirectoryPage() {
         subtitle="Browse the community. Connect, message, or pull someone into a session."
       />
 
-      {/* Search + filters */}
+      {/* Search */}
       <div className="space-y-3">
         <div className="relative">
           <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 stitch-text-secondary pointer-events-none" />
@@ -169,51 +272,61 @@ export function MembersDirectoryPage() {
           />
         </div>
 
-        {/* Work type chips */}
-        {workTypeOptions.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-            <FilterChip
-              icon={<Briefcase size={11} />}
-              label="All work types"
-              active={workTypeFilter === null}
-              onClick={() => setWorkTypeFilter(null)}
-            />
-            {workTypeOptions.map((wt) => (
+        {/* Online filter + Work type chips */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+          <FilterChip
+            icon={<span className={`w-2 h-2 rounded-full ${onlineCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300'}`} />}
+            label={onlineCount > 0 ? `Online now · ${onlineCount}` : 'Online now'}
+            active={onlineOnly}
+            onClick={() => setOnlineOnly((v) => !v)}
+          />
+          {workTypeOptions.length > 0 && (
+            <>
               <FilterChip
-                key={wt}
-                label={WORK_TYPE_LABELS[wt] ?? wt}
-                active={workTypeFilter === wt}
-                onClick={() => setWorkTypeFilter(wt === workTypeFilter ? null : wt)}
+                icon={<Briefcase size={11} />}
+                label="All work"
+                active={workTypeFilter === null}
+                onClick={() => setWorkTypeFilter(null)}
               />
-            ))}
-          </div>
-        )}
+              {workTypeOptions.map((wt) => (
+                <FilterChip
+                  key={wt}
+                  label={WORK_TYPE_LABELS[wt] ?? wt}
+                  active={workTypeFilter === wt}
+                  onClick={() => setWorkTypeFilter(wt === workTypeFilter ? null : wt)}
+                />
+              ))}
+            </>
+          )}
+        </div>
 
-        {/* Country chips */}
+        {/* Country chips with flags */}
         {countryOptions.length > 1 && (
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
             <FilterChip
               icon={<Globe size={11} />}
-              label="Any country"
+              label="Anywhere"
               active={countryFilter === null}
               onClick={() => setCountryFilter(null)}
             />
-            {countryOptions.map((cc) => (
-              <FilterChip
-                key={cc}
-                label={cc}
-                active={countryFilter === cc}
-                onClick={() => setCountryFilter(cc === countryFilter ? null : cc)}
-              />
-            ))}
+            {countryOptions.map((cc) => {
+              const country = findCountry(cc);
+              return (
+                <FilterChip
+                  key={cc}
+                  label={country ? `${country.flag} ${country.name}` : cc}
+                  active={countryFilter === cc}
+                  onClick={() => setCountryFilter(cc === countryFilter ? null : cc)}
+                />
+              );
+            })}
           </div>
         )}
       </div>
 
+      {/* Body */}
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 size={20} className="animate-spin stitch-text-secondary" />
-        </div>
+        <SkeletonGrid />
       ) : members.length === 0 ? (
         <SurfaceCard>
           <div className="text-center py-12 px-6">
@@ -227,7 +340,7 @@ export function MembersDirectoryPage() {
       ) : (
         <>
           {/* Suggested */}
-          {suggested.length > 0 && !query && !workTypeFilter && !countryFilter && (
+          {suggested.length > 0 && !query && !workTypeFilter && !countryFilter && !onlineOnly && (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles size={13} className="text-violet-600" />
@@ -240,9 +353,9 @@ export function MembersDirectoryPage() {
                   <MemberCard
                     key={m.id}
                     member={m}
-                    status={statuses[m.id] ?? 'none'}
                     onView={() => navigate(`/profile/${m.id}`)}
                     onConnect={() => handleConnect(m.id)}
+                    onAccept={() => m.connectionId && handleAccept(m.id, m.connectionId)}
                     onMessage={() => handleMessage(m.id)}
                     accent
                   />
@@ -260,6 +373,12 @@ export function MembersDirectoryPage() {
                   {filtered.length === members.length ? 'All members' : 'Results'} · {filtered.length}
                 </p>
               </div>
+              {onlineCount > 0 && !onlineOnly && (
+                <p className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {onlineCount} online
+                </p>
+              )}
             </div>
             {filtered.length === 0 ? (
               <SurfaceCard>
@@ -273,9 +392,9 @@ export function MembersDirectoryPage() {
                   <MemberCard
                     key={m.id}
                     member={m}
-                    status={statuses[m.id] ?? 'none'}
                     onView={() => navigate(`/profile/${m.id}`)}
                     onConnect={() => handleConnect(m.id)}
+                    onAccept={() => m.connectionId && handleAccept(m.id, m.connectionId)}
                     onMessage={() => handleMessage(m.id)}
                   />
                 ))}
@@ -315,52 +434,91 @@ function FilterChip({
 // ── Member card ─────────────────────────────────────────────────
 
 function MemberCard({
-  member, status, onView, onConnect, onMessage, accent,
+  member, onView, onConnect, onAccept, onMessage, accent,
 }: {
-  member: PublicProfile;
-  status: ConnectionStatus;
+  member: EnrichedMember;
   onView: () => void;
   onConnect: () => void;
+  onAccept: () => void;
   onMessage: () => void;
   accent?: boolean;
 }) {
-  const workTypeLabel = member.work_type ? WORK_TYPE_LABELS[member.work_type] : null;
-  const isConnected = status === 'connected';
-  const isPending = status === 'pending_sent';
+  // Prefer work_types[0] if present, fall back to legacy work_type
+  const primaryWorkType = member.work_types?.[0] ?? member.work_type ?? null;
+  const workTypeLabel = primaryWorkType ? (WORK_TYPE_LABELS[primaryWorkType] ?? primaryWorkType) : null;
+  const country = findCountry(member.country_code);
+
+  const isConnected = member.status === 'connected';
+  const isPending = member.status === 'pending_sent';
+  const incoming = member.status === 'pending_received';
+  const inSession = !!member.activeSession;
 
   return (
-    <div className={`rounded-2xl p-4 transition-all hover:shadow-md ${
-      accent ? 'bg-gradient-to-br from-violet-50/60 to-white ring-1 ring-violet-200/40' : 'bg-surface-container-low'
-    }`}>
+    <div
+      className={`relative rounded-2xl p-4 transition-all hover:shadow-md ${
+        inSession
+          ? 'bg-gradient-to-br from-emerald-50/60 to-white ring-1 ring-emerald-200/60'
+          : accent
+            ? 'bg-gradient-to-br from-violet-50/60 to-white ring-1 ring-violet-200/40'
+            : 'bg-surface-container-low'
+      }`}
+    >
       <button
         type="button"
         onClick={onView}
         className="w-full text-left flex items-start gap-3 mb-3"
       >
-        {member.avatar_url ? (
-          <img src={member.avatar_url} alt={member.display_name} className="w-11 h-11 rounded-2xl object-cover shrink-0" />
-        ) : (
-          <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${gradFor(member.display_name)} flex items-center justify-center text-white font-extrabold shadow-sm shrink-0`}>
-            {member.display_name.charAt(0).toUpperCase()}
-          </div>
-        )}
+        <Avatar
+          displayName={member.display_name}
+          avatarUrl={member.avatar_url}
+          size="lg"
+          showPresence
+          lastSeenAt={member.last_seen_at}
+          ring={inSession ? 'green' : 'none'}
+        />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold stitch-text-primary truncate">{member.display_name}</p>
-          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-            {workTypeLabel && (
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{workTypeLabel}</span>
-            )}
-            {member.country_code && (
-              <span className="text-[10px] font-semibold stitch-text-secondary">· {member.country_code}{member.city ? ` · ${member.city}` : ''}</span>
-            )}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-sm font-bold stitch-text-primary truncate">
+              {member.display_name}
+            </p>
+            {country && <span className="text-xs leading-none" title={country.name}>{country.flag}</span>}
           </div>
-          {member.bio && (
+
+          {/* Working-now pill OR work type pill */}
+          {inSession ? (
+            <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <Activity size={9} strokeWidth={2.5} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                Working now
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+              {workTypeLabel && (
+                <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
+                  {workTypeLabel}
+                </span>
+              )}
+              {member.city && (
+                <span className="text-[10px] font-semibold stitch-text-secondary">· {member.city}</span>
+              )}
+            </div>
+          )}
+
+          {/* Session goal — replaces bio when in session */}
+          {inSession && member.activeSession?.goal ? (
+            <p className="text-[11px] stitch-text-secondary leading-snug line-clamp-2 mt-1.5 italic">
+              "{member.activeSession.goal}"
+            </p>
+          ) : member.bio ? (
             <p className="text-[11px] stitch-text-secondary leading-snug line-clamp-2 mt-1.5">
               {member.bio}
             </p>
-          )}
-          {/* Skills chips, max 3 */}
-          {member.skills && member.skills.length > 0 && (
+          ) : null}
+
+          {/* Skills — max 3 */}
+          {member.skills && member.skills.length > 0 && !inSession && (
             <div className="flex flex-wrap gap-1 mt-2">
               {member.skills.slice(0, 3).map((s) => (
                 <span key={s} className="text-[9px] font-bold uppercase tracking-wider stitch-text-secondary bg-white/70 px-1.5 py-0.5 rounded">
@@ -378,11 +536,20 @@ function MemberCard({
       {/* Actions */}
       <div className="flex items-center gap-2">
         {isConnected ? (
-          <span className="flex-1 text-center px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider">
-            ✓ Connected
+          <span className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider">
+            <Check size={11} strokeWidth={3} /> Connected
           </span>
+        ) : incoming ? (
+          <button
+            type="button"
+            onClick={onAccept}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold active:scale-95 transition-all"
+          >
+            <Check size={11} strokeWidth={3} />
+            Accept request
+          </button>
         ) : isPending ? (
-          <span className="flex-1 text-center px-3 py-2 rounded-xl bg-surface-container text-stitch-text-secondary text-[11px] font-bold uppercase tracking-wider">
+          <span className="flex-1 text-center px-3 py-2 rounded-xl bg-surface-container stitch-text-secondary text-[11px] font-bold uppercase tracking-wider">
             Requested
           </span>
         ) : (
@@ -406,5 +573,39 @@ function MemberCard({
         </button>
       </div>
     </div>
+  );
+}
+
+// ── Skeleton loader ─────────────────────────────────────────────
+
+function SkeletonGrid() {
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <Loader2 size={13} className="stitch-text-secondary animate-spin" />
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+          Loading members…
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl p-4 bg-surface-container-low animate-pulse">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-surface-container shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-2/3 rounded bg-surface-container" />
+                <div className="h-2 w-1/3 rounded bg-surface-container" />
+                <div className="h-2 w-full rounded bg-surface-container" />
+                <div className="h-2 w-4/5 rounded bg-surface-container" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 h-8 rounded-xl bg-surface-container" />
+              <div className="w-20 h-8 rounded-xl bg-surface-container" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
