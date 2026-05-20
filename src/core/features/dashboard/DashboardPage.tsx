@@ -4,22 +4,19 @@
  * Two distinct layouts:
  *
  *   ──── Day-0 (zero sessions ever) ────────────────────────────────
- *   1. Greeting (warm, no momentum chips when there's nothing to chip)
- *   2. CommunityPulseCard (the room is alive — strongest activation lever)
- *   3. DayZeroWelcome (compact hero: loop + Start CTA)
- *   4. DailyIntentionCard ("what's today about?")
+ *   1. Greeting
+ *   2. DayZeroWelcome hero
+ *   3. TodayPlannerCard (hour grid + quick-add + intention)
+ *   4. WeekPlannerCard (7-day strip + weekly intentions)
+ *   5. CommunityPulseCard → UpcomingStrip → Feed → Finishes → Checklist
  *
  *   ──── Returning (≥1 sessions) ───────────────────────────────────
- *   1. Greeting + momentum row (streak, sessions, finish rate)
- *   2. SmartNextCard (engine picks rejoin / scheduled / partner / pinned / declare)
- *   3. DailyIntentionCard
- *   4. CommunityPulseCard
- *   5. ProjectsSection (real grid)
- *   6. WeekStrip (now meaningful — has data)
- *   7. Recent finishes
- *
- * "This week" with no data is gone. Stacked empty-state cards are gone.
- * Every section either shows real data or is hidden.
+ *   1. Greeting + momentum chips
+ *   2. SmartNextCard
+ *   3. TodayPlannerCard
+ *   4. WeekPlannerCard
+ *   5. CommunityPulseCard → UpcomingStrip → Feed → Finishes → Projects →
+ *      Checklist → WeekStrip → Recent finishes
  */
 
 import { useState, useEffect } from 'react';
@@ -38,14 +35,13 @@ import { fetchRecentShippedSessions, fetchUpcomingScheduledSessions } from '../.
 import { SurfaceCard } from '../../ui/CorePage';
 import { SmartNextCard } from './SmartNextCard';
 import { CommunityPulseCard } from './CommunityPulseCard';
-import { DailyIntentionCard } from './DailyIntentionCard';
 import { DayZeroWelcome } from './DayZeroWelcome';
-import { QuickStartTemplates } from './QuickStartTemplates';
+import { TodayPlannerCard } from './TodayPlannerCard';
+import { WeekPlannerCard } from './WeekPlannerCard';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { FoundingMemberBadge } from './FoundingMemberBadge';
-import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
 import { fetchConnections } from '../../services/ConnectionService';
@@ -407,35 +403,32 @@ export function DashboardPage() {
           {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
           <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
 
-          {/* 1b. Weekly intentions + today's intention — side by side */}
-          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
-            <WeeklyIntentionsCard />
-            <DailyIntentionCard />
-          </div>
+          {/* 2. Today — hour grid + one-liner intention + quick-add templates */}
+          <TodayPlannerCard onStartSession={openDeclareWithTemplate} />
 
-          {/* 2. Quick-start templates — kills blank-page paralysis */}
-          <QuickStartTemplates onPick={openDeclareWithTemplate} />
+          {/* 3. This week — 7-day strip + weekly intentions + microtasks */}
+          <WeekPlannerCard />
 
-          {/* 3. Community pulse — the room is alive (or "be the first") */}
+          {/* 4. Community pulse — the room is alive (or "be the first") */}
           <CommunityPulseCard
             sessions={liveSessions}
             excludeSessionId={activeSession?.id}
             onStart={() => openDeclare()}
           />
 
-          {/* 4. Upcoming sessions on the calendar */}
+          {/* 5. Upcoming sessions on the calendar */}
           <UpcomingPublicSessionsStrip
             sessions={upcomingScheduled}
             myUserId={user?.id}
           />
 
-          {/* 4b. Community feed teaser */}
+          {/* 5b. Community feed teaser */}
           <CommunityFeedStrip />
 
-          {/* 5. Founders finished today — community proof */}
+          {/* 6. Founders finished today — community proof */}
           <RecentFinishesCarousel excludeUserId={user?.id} />
 
-          {/* 6. Onboarding checklist */}
+          {/* 7. Onboarding checklist */}
           <OnboardingChecklist stats={stats} connectionsCount={connectionsCount} />
         </>
       ) : (
@@ -449,14 +442,11 @@ export function DashboardPage() {
             onSchedule={() => setShowSchedule(true)}
           />
 
-          {/* 2. Quick-start templates — still valuable for returning users */}
-          <QuickStartTemplates onPick={openDeclareWithTemplate} />
+          {/* 2. Today — hour grid + one-liner intention + quick-add templates */}
+          <TodayPlannerCard onStartSession={openDeclareWithTemplate} />
 
-          {/* 2b. Weekly intentions + today's intention — side by side */}
-          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
-            <WeeklyIntentionsCard />
-            <DailyIntentionCard />
-          </div>
+          {/* 3. This week — 7-day strip + weekly intentions + microtasks */}
+          <WeekPlannerCard />
 
           {/* 4. Community pulse */}
           <CommunityPulseCard
