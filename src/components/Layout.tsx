@@ -21,7 +21,6 @@ import { ALL_NAVIGATION_TABS, DEFAULT_FAVOURITE_NAV_TABS } from '../lib/uiPrefer
 import { RegulationNotificationBanner } from './sessions/RegulationNotificationBanner';
 import { OfflineIndicator } from './OfflineIndicator';
 import { AppUpdateBanner } from './system/AppUpdateBanner';
-import { NotificationBell } from './notifications/NotificationBell';
 // SharedSpaceSwitcher removed — replaced by brand text
 import { SharedSpacesManagementPanel } from './shared/SharedSpacesManagementPanel';
 import { CreateSpaceModal } from './shared/CreateSpaceModal';
@@ -547,9 +546,6 @@ export function Layout({ children }: LayoutProps) {
                 </div>
               </div>
 
-              <div className="flex items-center flex-shrink-0">
-                {shouldShowNotificationBell() && <NotificationBell />}
-              </div>
             </div>
           </div>
         </nav>
