@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell, Loader2, CheckCheck, MessageCircle, Heart, UserPlus, Sparkles, Calendar,
   FolderPlus, CornerDownRight, HelpCircle, AlertCircle, Check,
@@ -79,7 +79,7 @@ function formatTimeAgo(iso: string): string {
 
 export function NotificationsBell() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // used by handleClick deep-links
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<Notification[]>([]);
@@ -242,13 +242,13 @@ export function NotificationsBell() {
 
             {/* Footer */}
             <div className="shrink-0 px-3 py-2 border-t border-surface-container/60 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => { setOpen(false); navigate('/profile?tab=notifications'); }}
+              <Link
+                to="/profile?tab=notifications"
+                onClick={() => setOpen(false)}
                 className="text-[11px] font-semibold stitch-text-secondary hover:stitch-text-primary"
               >
                 Notification settings
-              </button>
+              </Link>
             </div>
           </div>
         </>,

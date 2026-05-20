@@ -524,14 +524,22 @@ function PrivacyToggle({
 function NotificationPreferencesPanel() {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  function load() {
+    setLoading(true);
+    setLoadError(false);
     getPreferences().then((p) => {
-      if (!cancelled) { setPrefs(p); setLoading(false); }
+      setPrefs(p);
+      setLoading(false);
+      if (!p) setLoadError(true);
+    }).catch(() => {
+      setLoading(false);
+      setLoadError(true);
     });
-    return () => { cancelled = true; };
-  }, []);
+  }
+
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function toggle(field: keyof Omit<NotificationPreferences, 'user_id' | 'updated_at' | 'digest_mode' | 'dm_inactivity_threshold_hours'>) {
     if (!prefs) return;
@@ -563,8 +571,19 @@ function NotificationPreferencesPanel() {
     );
   }
 
-  if (!prefs) {
-    return <p className="text-xs stitch-text-secondary">Couldn't load notification preferences.</p>;
+  if (loadError || (!loading && !prefs)) {
+    return (
+      <div className="text-center py-6 space-y-3">
+        <p className="text-xs stitch-text-secondary">Couldn't load notification preferences.</p>
+        <button
+          type="button"
+          onClick={load}
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   const rows: { key: keyof typeof prefs; label: string; help: string }[] = [
