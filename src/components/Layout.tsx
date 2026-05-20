@@ -10,6 +10,7 @@ import { useViewAs } from '../contexts/ViewAsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { fetchTotalUnreadDms, subscribeToAnyIncomingDm } from '../core/services/MessageService';
 import { MessagingDock } from '../core/features/messages/MessagingDock';
+import { NotificationsBell } from './notifications/NotificationsBell';
 // SpaceSwitcher removed — replaced by SharedMinds brand text in header
 // Cleaned duplicate and missing imports
 import { getUserUIMode } from '../lib/mobileApps';
@@ -322,6 +323,9 @@ export function Layout({ children }: LayoutProps) {
 
                 <div className="hidden md:flex items-center gap-2">
                   {favouriteTabs.map((tab) => renderNavTab(tab))}
+
+                  {/* Notifications bell + dropdown */}
+                  <NotificationsBell />
 
                   {/* Avatar dropdown replaces the More button — holds everything personal */}
                   {(() => {

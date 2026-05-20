@@ -9,6 +9,7 @@ import { CityAutocomplete } from '../../ui/CityAutocomplete';
 import { SkillsEditor } from '../../ui/SkillsEditor';
 import { formatLocation } from '../../../lib/countries';
 import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
+import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
 
 const WORK_TYPES = [
   { id: 'designer', label: 'Designer', emoji: '🎨' },
@@ -391,6 +392,12 @@ export function SettingsPage() {
         )}
       </button>
 
+      {/* ── Notifications ─────────────────────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Notifications</p>
+        <NotificationPreferencesPanel />
+      </SurfaceCard>
+
       {/* ── Privacy ───────────────────────────────────────── */}
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Privacy</p>
@@ -493,5 +500,138 @@ function PrivacyToggle({
         }`} />
       </div>
     </button>
+  );
+}
+
+/* ── NotificationPreferencesPanel ───────────────────────────────
+   Per-category email opt-out + digest mode. Saves optimistically
+   per-toggle so users get instant feedback. */
+function NotificationPreferencesPanel() {
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPreferences().then((p) => {
+      if (!cancelled) { setPrefs(p); setLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function toggle(field: keyof Omit<NotificationPreferences, 'user_id' | 'updated_at' | 'digest_mode' | 'dm_inactivity_threshold_hours'>) {
+    if (!prefs) return;
+    const next = !prefs[field];
+    setPrefs({ ...prefs, [field]: next });
+    try {
+      await updatePreferences({ [field]: next });
+    } catch {
+      setPrefs((p) => p ? { ...p, [field]: !next } : p);
+    }
+  }
+
+  async function setDigestMode(mode: NotificationPreferences['digest_mode']) {
+    if (!prefs) return;
+    const prev = prefs.digest_mode;
+    setPrefs({ ...prefs, digest_mode: mode });
+    try {
+      await updatePreferences({ digest_mode: mode });
+    } catch {
+      setPrefs((p) => p ? { ...p, digest_mode: prev } : p);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 size={16} className="animate-spin stitch-text-secondary" />
+      </div>
+    );
+  }
+
+  if (!prefs) {
+    return <p className="text-xs stitch-text-secondary">Couldn't load notification preferences.</p>;
+  }
+
+  const rows: { key: keyof typeof prefs; label: string; help: string }[] = [
+    { key: 'email_session_reminders',  label: 'Session reminders',     help: '24 hours and 15 minutes before sessions you have booked' },
+    { key: 'email_messages',           label: 'Direct messages',       help: 'Only when you have been offline for a while' },
+    { key: 'email_post_replies',       label: 'Replies to your posts', help: 'When someone replies in the community feed' },
+    { key: 'email_connection_requests',label: 'Connection requests',   help: 'When someone wants to connect with you' },
+    { key: 'email_weekly_review',      label: 'Weekly review prompt',  help: 'Sunday evening nudge to reflect on your week' },
+    { key: 'email_community_sessions', label: 'Community sessions',    help: 'Reminders for admin-scheduled recurring sessions' },
+    { key: 'email_onboarding',         label: 'Onboarding tips',       help: 'First-week guidance — auto-stops after 7 days' },
+    { key: 'email_marketing',          label: 'Product updates',       help: 'Occasional emails about new features and tips (opt-in)' },
+  ];
+
+  return (
+    <div className="space-y-1">
+      {/* Per-category toggles */}
+      <p className="text-[11px] stitch-text-secondary mb-2 leading-relaxed">
+        Email me about:
+      </p>
+      {rows.map((row) => {
+        const value = !!prefs[row.key];
+        return (
+          <button
+            key={row.key}
+            type="button"
+            onClick={() => toggle(row.key as any)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-container-low transition-colors text-left"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold stitch-text-primary leading-tight">
+                {row.label}
+              </p>
+              <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+                {row.help}
+              </p>
+            </div>
+            <div className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
+              value ? 'bg-primary' : 'bg-surface-container'
+            }`}>
+              <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
+                value ? 'translate-x-4' : 'translate-x-0'
+              }`} />
+            </div>
+          </button>
+        );
+      })}
+
+      {/* Digest mode */}
+      <div className="mt-4 pt-4 border-t border-surface-container/50">
+        <p className="text-[11px] stitch-text-secondary mb-2 leading-relaxed">
+          Email delivery:
+        </p>
+        <div className="space-y-1.5">
+          {(['realtime', 'daily', 'off'] as const).map((mode) => {
+            const label = mode === 'realtime'
+              ? 'Send each email as it happens'
+              : mode === 'daily'
+              ? 'Bundle into one daily digest at 7pm'
+              : 'Turn off all emails (in-app stays on)';
+            const isSel = prefs.digest_mode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setDigestMode(mode)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                  isSel ? 'bg-primary/8 ring-1 ring-primary/25' : 'hover:bg-surface-container-low'
+                }`}
+              >
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  isSel ? 'border-primary' : 'border-surface-container-high'
+                }`}>
+                  {isSel && <div className="w-2 h-2 rounded-full bg-primary" />}
+                </div>
+                <span className={`text-sm leading-tight ${isSel ? 'font-bold stitch-text-primary' : 'stitch-text-primary'}`}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
