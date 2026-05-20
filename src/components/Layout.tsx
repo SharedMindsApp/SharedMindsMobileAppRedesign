@@ -25,6 +25,7 @@ import { NotificationBell } from './notifications/NotificationBell';
 // SharedSpaceSwitcher removed — replaced by brand text
 import { SharedSpacesManagementPanel } from './shared/SharedSpacesManagementPanel';
 import { CreateSpaceModal } from './shared/CreateSpaceModal';
+import { ChatBubble } from './ChatBubble';
 
 type LayoutProps = {
   children: React.ReactNode;
@@ -850,6 +851,9 @@ export function Layout({ children }: LayoutProps) {
       {/* Persistent floating chat dock — portals to body so it sits above
           all page content including active session/Jitsi overlays. */}
       <MessagingDock />
+
+      {/* Desktop community chat bubble — hidden on mobile, suppressed on /messages */}
+      <ChatBubble />
     </div>
   );
 }
