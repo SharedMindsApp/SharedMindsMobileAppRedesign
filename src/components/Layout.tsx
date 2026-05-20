@@ -9,6 +9,7 @@ import { useAuth } from '../core/auth/AuthProvider';
 import { useViewAs } from '../contexts/ViewAsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { fetchTotalUnreadDms, subscribeToAnyIncomingDm } from '../core/services/MessageService';
+import { supabase } from '../lib/supabase';
 import { MessagingDock } from '../core/features/messages/MessagingDock';
 import { NotificationsBell } from './notifications/NotificationsBell';
 // SpaceSwitcher removed — replaced by SharedMinds brand text in header
@@ -83,6 +84,23 @@ export function Layout({ children }: LayoutProps) {
     const unsub = subscribeToAnyIncomingDm(refresh);
     // Also refresh when the route changes — covers "user just opened a thread"
     return () => { cancelled = true; unsub(); };
+  }, [user?.id]);
+
+  // Heartbeat: update last_seen_at every 5 min so the email dispatcher knows
+  // the user is active and can skip DM emails within their inactivity threshold.
+  useEffect(() => {
+    if (!user?.id) return;
+    const ping = () => {
+      supabase
+        .from('profiles')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .then(() => {})
+        .catch(() => {});
+    };
+    ping(); // immediate on mount
+    const interval = setInterval(ping, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [user?.id]);
 
   // Decrement the badge eagerly when navigating into messages so it feels
