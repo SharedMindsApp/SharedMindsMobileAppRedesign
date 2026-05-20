@@ -119,7 +119,7 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'connections', label: 'Connections', path: '/connections', icon: 'Link2' },
   { id: 'community', label: 'Community', path: '/community', icon: 'MessageSquare' },
   { id: 'people', label: 'People', path: '/people', icon: 'Users' },
-  { id: 'messages', label: 'Messages', path: '/messages', icon: 'MessageCircle' },
+  { id: 'messages', label: 'Chat', path: '/messages', icon: 'MessageCircle' },
   { id: 'profile', label: 'Profile', path: '/profile', icon: 'UserRound' },
   { id: 'settings', label: 'Settings', path: '/settings', icon: 'Settings' },
 ];
@@ -127,9 +127,8 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
 export const DEFAULT_FAVOURITE_NAV_TABS: NavigationTabId[] = [
   'home',
   'sessions',
-  'community',
-  'people',
   'messages',
+  'people',
 ];
 
 export interface UIPreferencesConfig {
