@@ -50,12 +50,14 @@ CREATE INDEX IF NOT EXISTS focus_sessions_user_status_idx
 ALTER TABLE public.focus_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Allow users to insert their own sessions
-CREATE POLICY IF NOT EXISTS "focus_sessions_insert_self"
+DROP POLICY IF EXISTS "focus_sessions_insert_self" ON public.focus_sessions;
+CREATE POLICY "focus_sessions_insert_self"
 ON public.focus_sessions FOR INSERT
 WITH CHECK (user_id = auth.uid());
 
 -- Allow users to update their own sessions
-CREATE POLICY IF NOT EXISTS "focus_sessions_update_self"
+DROP POLICY IF EXISTS "focus_sessions_update_self" ON public.focus_sessions;
+CREATE POLICY "focus_sessions_update_self"
 ON public.focus_sessions FOR UPDATE
 USING (user_id = auth.uid());
 
