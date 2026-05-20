@@ -457,19 +457,7 @@ export function Layout({ children }: LayoutProps) {
                                 Weekly review
                               </button>
 
-                              {/* ── Settings (pinned) ── */}
-                              <button
-                                type="button"
-                                onClick={() => { setShowMoreMenu(false); navigate('/settings'); }}
-                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
-                                  isTabActive('/settings')
-                                    ? (isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50')
-                                    : (isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50')
-                                }`}
-                              >
-                                <Settings size={15} />
-                                Settings
-                              </button>
+                              {/* Settings merged into /profile — no separate entry needed */}
 
                               {/* ── Secondary tabs (Tasks / Projects / Progress / Calendar / etc) ── */}
                               {moreTabs.filter((t) => t.id !== 'settings').length > 0 && (

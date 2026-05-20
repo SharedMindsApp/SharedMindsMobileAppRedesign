@@ -71,7 +71,9 @@ export function MembersDirectoryPage() {
   const [query, setQuery] = useState('');
   const [workTypeFilter, setWorkTypeFilter] = useState<string | null>(null);
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  const [skillFilter, setSkillFilter] = useState<string | null>(null);
   const [onlineOnly, setOnlineOnly] = useState(false);
+  const [showAllSkills, setShowAllSkills] = useState(false);
 
   // ── Fetch members + statuses + active sessions ──────────────────
   useEffect(() => {
@@ -156,6 +158,20 @@ export function MembersDirectoryPage() {
     return Array.from(set).sort();
   }, [members]);
 
+  // Skill options ranked by how many members have them.
+  // Surfaces the most "filterable" skills first instead of a flat alpha list.
+  const skillOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of members) {
+      for (const s of (m.skills ?? [])) {
+        counts.set(s, (counts.get(s) ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([skill, count]) => ({ skill, count }));
+  }, [members]);
+
   // Filter + smart sort
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -165,6 +181,7 @@ export function MembersDirectoryPage() {
         if (!types.includes(workTypeFilter)) return false;
       }
       if (countryFilter && m.country_code !== countryFilter) return false;
+      if (skillFilter && !(m.skills ?? []).includes(skillFilter)) return false;
       if (onlineOnly && !m.isOnline && !m.activeSession) return false;
       if (q) {
         const blob = [
@@ -189,7 +206,7 @@ export function MembersDirectoryPage() {
       if (aSeen !== bSeen) return bSeen - aSeen;
       return a.display_name.localeCompare(b.display_name);
     });
-  }, [enriched, query, workTypeFilter, countryFilter, onlineOnly]);
+  }, [enriched, query, workTypeFilter, countryFilter, skillFilter, onlineOnly]);
 
   // Suggested: same work type or country, not yet connected
   const suggested = useMemo(() => {
@@ -299,6 +316,35 @@ export function MembersDirectoryPage() {
             </>
           )}
         </div>
+
+        {/* Skill chips — ranked by how many members have each skill */}
+        {skillOptions.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 items-center">
+            <FilterChip
+              icon={<Sparkles size={11} />}
+              label="Any skill"
+              active={skillFilter === null}
+              onClick={() => setSkillFilter(null)}
+            />
+            {(showAllSkills ? skillOptions : skillOptions.slice(0, 10)).map(({ skill, count }) => (
+              <FilterChip
+                key={skill}
+                label={count > 1 ? `${skill} · ${count}` : skill}
+                active={skillFilter === skill}
+                onClick={() => setSkillFilter(skill === skillFilter ? null : skill)}
+              />
+            ))}
+            {skillOptions.length > 10 && !showAllSkills && (
+              <button
+                type="button"
+                onClick={() => setShowAllSkills(true)}
+                className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
+              >
+                +{skillOptions.length - 10} more
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Country chips with flags */}
         {countryOptions.length > 1 && (

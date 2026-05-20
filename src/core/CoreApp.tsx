@@ -12,6 +12,7 @@ import { MessagesPage } from './features/messages/MessagesPage';
 import { MessageThreadPage } from './features/messages/MessageThreadPage';
 import { CommunityFeedPage } from './features/community/CommunityFeedPage';
 import { ProfilePage } from './features/profile/ProfilePage';
+import { ProfileSettingsPage } from './features/profile/ProfileSettingsPage';
 import { OnboardingModal } from './features/onboarding/OnboardingModal';
 import { ProgressPage } from './features/progress/ProgressPage';
 import { TasksPage } from './features/tasks/TasksPage';
@@ -22,7 +23,6 @@ import { ReflectionPage } from './features/reflection/ReflectionPage';
 // CalendarPage was removed — /sessions is now the calendar surface.
 import { PantryPage } from './features/pantry/PantryPage';
 import { JournalPage } from './features/journal/JournalPage';
-import { SettingsPage } from './features/settings/SettingsPage';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AuthProvider as LegacyAuthProvider } from '../contexts/AuthContext';
 import { AuthPage } from './auth/AuthPage';
@@ -131,7 +131,7 @@ function AppContent() {
             <Route path="messages" element={<MessagesPage />} />
             <Route path="messages/:conversationId" element={<MessageThreadPage />} />
             <Route path="community" element={<CommunityFeedPage />} />
-            <Route path="profile" element={<ProfilePage />} />
+            <Route path="profile" element={<ProfileSettingsPage />} />
             <Route path="profile/:userId" element={<ProfilePage />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="today" element={<Navigate to="/progress" replace />} />
@@ -162,7 +162,8 @@ function AppContent() {
                   : <Navigate to="/sessions" replace />
               }
             />
-            <Route path="settings" element={<SettingsPage />} />
+            {/* Settings merged into /profile. Old links redirect to the Edit tab. */}
+            <Route path="settings" element={<Navigate to="/profile?tab=edit" replace />} />
             <Route path="*" element={<Navigate to="/sessions" replace />} />
           </Route>
 

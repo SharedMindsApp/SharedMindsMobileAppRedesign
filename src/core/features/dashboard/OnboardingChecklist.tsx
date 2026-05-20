@@ -57,7 +57,7 @@ export function OnboardingChecklist({
 
   const steps: Step[] = [
     { id: 'avatar',     label: 'Add a profile picture',  Icon: Image,     done: hasAvatar,     cta: 'Upload',  onClick: () => navigate('/profile') },
-    { id: 'work-type',  label: 'Set your work type',     Icon: Briefcase, done: hasWorkType,   cta: 'Pick',    onClick: () => navigate('/settings') },
+    { id: 'work-type',  label: 'Set your work type',     Icon: Briefcase, done: hasWorkType,   cta: 'Pick',    onClick: () => navigate('/profile?tab=edit') },
     { id: 'project',    label: 'Create your first project', Icon: Target, done: hasProject,    cta: 'Create',  onClick: () => navigate('/projects') },
     { id: 'connection', label: 'Make a connection',      Icon: Link2,     done: hasConnection, cta: 'Browse',  onClick: () => navigate('/connections') },
     { id: 'session',    label: 'Finish your first session', Icon: Play,   done: hasFinished,   cta: 'Start',   onClick: () => navigate('/sessions') },

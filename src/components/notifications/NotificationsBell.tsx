@@ -223,7 +223,7 @@ export function NotificationsBell() {
           <div className="shrink-0 px-3 py-2 border-t border-surface-container/60 flex items-center justify-between">
             <button
               type="button"
-              onClick={() => { setOpen(false); navigate('/settings'); }}
+              onClick={() => { setOpen(false); navigate('/profile?tab=notifications'); }}
               className="text-[11px] font-semibold stitch-text-secondary hover:stitch-text-primary"
             >
               Notification settings
