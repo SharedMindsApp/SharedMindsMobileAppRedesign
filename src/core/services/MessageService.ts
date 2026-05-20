@@ -25,13 +25,45 @@ export interface DmMessage {
   created_at: string;
 }
 
-/** Get or create a 1:1 DM conversation with another user. Returns conversation ID. */
+export type DmPrivacy = 'open' | 'connections_only' | 'do_not_disturb';
+
+export class DmPrivacyError extends Error {
+  constructor(public readonly hint: 'do_not_disturb' | 'connections_only') {
+    super(
+      hint === 'do_not_disturb'
+        ? 'This person is not accepting messages right now.'
+        : 'This person only accepts messages from their connections.',
+    );
+    this.name = 'DmPrivacyError';
+  }
+}
+
+/** Get or create a 1:1 DM conversation with another user. Returns conversation ID.
+ *  Throws DmPrivacyError if the recipient's privacy settings block this. */
 export async function getOrCreateDm(otherUserId: string): Promise<string> {
   const { data, error } = await supabase.rpc('get_or_create_dm', {
     other_user_id: otherUserId,
   });
-  if (error) throw error;
+  if (error) {
+    // Detect privacy gate errors raised by the RPC (SQLSTATE P0002)
+    const hint = (error as any)?.hint as string | undefined;
+    if (hint === 'do_not_disturb' || hint === 'connections_only') {
+      throw new DmPrivacyError(hint);
+    }
+    throw error;
+  }
   return data as string;
+}
+
+/** Update the current user's DM privacy setting. */
+export async function updateDmPrivacy(privacy: DmPrivacy): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { error } = await supabase
+    .from('profiles')
+    .update({ dm_privacy: privacy })
+    .eq('id', user.id);
+  if (error) throw error;
 }
 
 /** Fetch all conversations for the current user with last message + other participant info. */

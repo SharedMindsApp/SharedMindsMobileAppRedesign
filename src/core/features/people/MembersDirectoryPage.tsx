@@ -16,7 +16,7 @@ import { Search, Users, Sparkles, MessageCircle, UserPlus, Loader2, Globe, Brief
 import { useAuth } from '../../auth/AuthProvider';
 import { listMembers, type PublicProfile } from '../../services/ProfileService';
 import { fetchConnections, sendConnectionRequest, fetchConnectionStatus, type ConnectionStatus } from '../../services/ConnectionService';
-import { getOrCreateDm } from '../../services/MessageService';
+import { getOrCreateDm, DmPrivacyError } from '../../services/MessageService';
 import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
 
@@ -141,7 +141,11 @@ export function MembersDirectoryPage() {
       if (isMobile) navigate(`/messages/${conversationId}`);
       else openConversation(conversationId);
     } catch (e) {
-      console.error('handleMessage failed:', e);
+      if (e instanceof DmPrivacyError) {
+        alert(e.message); // TODO: replace with toast once toast context is accessible here
+      } else {
+        console.error('handleMessage failed:', e);
+      }
     }
   }
 

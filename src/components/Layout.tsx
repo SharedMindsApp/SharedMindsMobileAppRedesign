@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, MessageSquare, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles } from 'lucide-react';
+import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, MessageSquare, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles, BellOff, Bell } from 'lucide-react';
 import { ToastContainer, useToasts } from './Toast';
 import { getUserHousehold, Household } from '../lib/household';
 import { signOut } from '../lib/auth';
 import { useAuth } from '../core/auth/AuthProvider';
 import { useViewAs } from '../contexts/ViewAsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
-import { fetchTotalUnreadDms, subscribeToAnyIncomingDm } from '../core/services/MessageService';
+import { fetchTotalUnreadDms, subscribeToAnyIncomingDm, updateDmPrivacy, type DmPrivacy } from '../core/services/MessageService';
 import { supabase } from '../lib/supabase';
 import { MessagingDock } from '../core/features/messages/MessagingDock';
 import { NotificationsBell } from './notifications/NotificationsBell';
@@ -435,6 +435,14 @@ export function Layout({ children }: LayoutProps) {
 
                               <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
 
+                              {/* ── DM Privacy / Do Not Disturb ── */}
+                              <DmPrivacyToggle
+                                current={(profile as any)?.dm_privacy ?? 'open'}
+                                isDark={isDark}
+                              />
+
+                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+
                               {/* ── Weekly review (pinned, ritual entry point) ── */}
                               <button
                                 type="button"
@@ -852,6 +860,91 @@ export function Layout({ children }: LayoutProps) {
           all page content including active session/Jitsi overlays. */}
       <MessagingDock />
 
+    </div>
+  );
+}
+
+// ── DM Privacy toggle (rendered inside the avatar dropdown) ──────────────────
+
+const DM_PRIVACY_OPTIONS: { value: DmPrivacy; label: string; icon: React.ReactNode; description: string }[] = [
+  {
+    value: 'open',
+    label: 'Everyone',
+    icon: <Bell size={12} />,
+    description: 'Anyone can message you',
+  },
+  {
+    value: 'connections_only',
+    label: 'Connections',
+    icon: <Users size={12} />,
+    description: 'Only people you\'re connected with',
+  },
+  {
+    value: 'do_not_disturb',
+    label: 'Off',
+    icon: <BellOff size={12} />,
+    description: 'No one can message you',
+  },
+];
+
+function DmPrivacyToggle({ current, isDark }: { current: DmPrivacy; isDark: boolean }) {
+  const [value, setValue] = useState<DmPrivacy>(current);
+  const [saving, setSaving] = useState(false);
+
+  // Sync if profile reloads
+  useEffect(() => { setValue(current); }, [current]);
+
+  async function handleChange(next: DmPrivacy) {
+    if (next === value || saving) return;
+    setValue(next); // optimistic
+    setSaving(true);
+    try {
+      await updateDmPrivacy(next);
+    } catch {
+      setValue(value); // revert
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const activeOption = DM_PRIVACY_OPTIONS.find((o) => o.value === value) ?? DM_PRIVACY_OPTIONS[0];
+
+  return (
+    <div className={`px-3 py-2.5`}>
+      <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        Direct messages from
+      </p>
+      <div className={`flex rounded-xl overflow-hidden border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'} p-0.5 gap-0.5`}>
+        {DM_PRIVACY_OPTIONS.map((opt) => {
+          const isActive = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleChange(opt.value)}
+              disabled={saving}
+              title={opt.description}
+              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                isActive
+                  ? opt.value === 'do_not_disturb'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : opt.value === 'connections_only'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-cyan-500 text-white shadow-sm'
+                  : isDark
+                  ? 'text-gray-400 hover:text-gray-200'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className={`text-[10px] mt-1.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {activeOption.description}
+      </p>
     </div>
   );
 }

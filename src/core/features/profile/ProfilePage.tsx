@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, Flame, Check, Clock, Link2, Edit2, X, MapPin, Sparkles, Camera, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConnectButton } from '../connections/ConnectButton';
-import { getOrCreateDm } from '../../services/MessageService';
+import { getOrCreateDm, DmPrivacyError } from '../../services/MessageService';
 import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard } from '../../ui/CorePage';
 import { findCountry, formatLocation } from '../../../lib/countries';
@@ -459,7 +459,11 @@ function MessageButton({ otherUserId }: { otherUserId: string }) {
       if (isMobile) navigate(`/messages/${conversationId}`);
       else openConversation(conversationId);
     } catch (err) {
-      console.error('[MessageButton] open DM failed:', err);
+      if (err instanceof DmPrivacyError) {
+        alert(err.message);
+      } else {
+        console.error('[MessageButton] open DM failed:', err);
+      }
     } finally {
       setBusy(false);
     }

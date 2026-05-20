@@ -22,7 +22,7 @@ import {
   removeConnection,
   type ConnectionWithProfile,
 } from '../../services/ConnectionService';
-import { getOrCreateDm } from '../../services/MessageService';
+import { getOrCreateDm, DmPrivacyError } from '../../services/MessageService';
 import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
 
@@ -226,7 +226,11 @@ function ConnectionCard({ conn, onRemove }: { conn: ConnectionWithProfile; onRem
       if (isMobile) navigate(`/messages/${conversationId}`);
       else openConversation(conversationId);
     } catch (err) {
-      console.error(err);
+      if (err instanceof DmPrivacyError) {
+        alert(err.message);
+      } else {
+        console.error(err);
+      }
     } finally {
       setMessaging(false);
     }
