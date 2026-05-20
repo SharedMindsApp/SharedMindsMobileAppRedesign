@@ -98,10 +98,14 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS dm_messages_notify ON public.dm_messages;
-CREATE TRIGGER dm_messages_notify
-  AFTER INSERT ON public.dm_messages
-  FOR EACH ROW EXECUTE FUNCTION public.notify_on_dm();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='dm_messages') THEN
+    DROP TRIGGER IF EXISTS dm_messages_notify ON public.dm_messages;
+    CREATE TRIGGER dm_messages_notify
+      AFTER INSERT ON public.dm_messages
+      FOR EACH ROW EXECUTE FUNCTION public.notify_on_dm();
+  END IF;
+END $$;
 
 
 -- ============================================================
@@ -144,10 +148,14 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS community_post_replies_notify ON public.community_post_replies;
-CREATE TRIGGER community_post_replies_notify
-  AFTER INSERT ON public.community_post_replies
-  FOR EACH ROW EXECUTE FUNCTION public.notify_on_post_reply();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='community_post_replies') THEN
+    DROP TRIGGER IF EXISTS community_post_replies_notify ON public.community_post_replies;
+    CREATE TRIGGER community_post_replies_notify
+      AFTER INSERT ON public.community_post_replies
+      FOR EACH ROW EXECUTE FUNCTION public.notify_on_post_reply();
+  END IF;
+END $$;
 
 
 -- ============================================================
@@ -209,10 +217,14 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS community_post_reactions_notify ON public.community_post_reactions;
-CREATE TRIGGER community_post_reactions_notify
-  AFTER INSERT ON public.community_post_reactions
-  FOR EACH ROW EXECUTE FUNCTION public.notify_on_post_reaction();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='community_post_reactions') THEN
+    DROP TRIGGER IF EXISTS community_post_reactions_notify ON public.community_post_reactions;
+    CREATE TRIGGER community_post_reactions_notify
+      AFTER INSERT ON public.community_post_reactions
+      FOR EACH ROW EXECUTE FUNCTION public.notify_on_post_reaction();
+  END IF;
+END $$;
 
 
 -- ============================================================
@@ -264,16 +276,18 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS person_connections_notify_insert ON public.person_connections;
-DROP TRIGGER IF EXISTS person_connections_notify_update ON public.person_connections;
-
-CREATE TRIGGER person_connections_notify_insert
-  AFTER INSERT ON public.person_connections
-  FOR EACH ROW EXECUTE FUNCTION public.notify_on_connection();
-
-CREATE TRIGGER person_connections_notify_update
-  AFTER UPDATE ON public.person_connections
-  FOR EACH ROW EXECUTE FUNCTION public.notify_on_connection();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='person_connections') THEN
+    DROP TRIGGER IF EXISTS person_connections_notify_insert ON public.person_connections;
+    DROP TRIGGER IF EXISTS person_connections_notify_update ON public.person_connections;
+    CREATE TRIGGER person_connections_notify_insert
+      AFTER INSERT ON public.person_connections
+      FOR EACH ROW EXECUTE FUNCTION public.notify_on_connection();
+    CREATE TRIGGER person_connections_notify_update
+      AFTER UPDATE ON public.person_connections
+      FOR EACH ROW EXECUTE FUNCTION public.notify_on_connection();
+  END IF;
+END $$;
 
 
 -- ============================================================
@@ -315,10 +329,14 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS project_members_notify ON public.project_members;
-CREATE TRIGGER project_members_notify
-  AFTER INSERT ON public.project_members
-  FOR EACH ROW EXECUTE FUNCTION public.notify_on_project_invite();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='project_members') THEN
+    DROP TRIGGER IF EXISTS project_members_notify ON public.project_members;
+    CREATE TRIGGER project_members_notify
+      AFTER INSERT ON public.project_members
+      FOR EACH ROW EXECUTE FUNCTION public.notify_on_project_invite();
+  END IF;
+END $$;
 
 
 -- ============================================================
