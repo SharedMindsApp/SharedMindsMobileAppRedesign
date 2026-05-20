@@ -100,6 +100,21 @@ export interface AdminLog {
   target_id: string | null;
   notes: string | null;
   created_at: string;
+  // Joined fields
+  admin_name?: string | null;
+  admin_avatar?: string | null;
+  target_name?: string | null;
+}
+
+// Unified platform event (aggregated from multiple tables)
+export interface PlatformEvent {
+  id: string;
+  type: 'signup' | 'session_started' | 'session_finished' | 'role_change' | 'post' | 'connection';
+  timestamp: string;
+  actorName: string;
+  actorAvatar: string | null;
+  description: string;
+  meta?: Record<string, unknown>;
 }
 
 export async function getUsers(params?: {
@@ -247,12 +262,14 @@ export async function getLogs(params?: {
   action_type?: string;
   limit?: number;
   offset?: number;
-}) {
-  // Admin logs table may not exist in SharedMinds — return empty gracefully
+}): Promise<{ logs: AdminLog[]; total: number }> {
   try {
     let query = supabase
       .from('admin_logs')
-      .select('*')
+      .select(`
+        id, action_type, target_id, notes, created_at,
+        admin:admin_id ( id, display_name, avatar_url )
+      `)
       .order('created_at', { ascending: false })
       .limit(params?.limit ?? 50);
 
@@ -260,10 +277,123 @@ export async function getLogs(params?: {
 
     const { data, error } = await query;
     if (error) return { logs: [], total: 0 };
-    return { logs: data ?? [], total: data?.length ?? 0 };
+
+    const logs: AdminLog[] = (data ?? []).map((row: any) => ({
+      id: row.id,
+      admin_id: row.admin?.id ?? '',
+      action_type: row.action_type,
+      target_id: row.target_id ?? null,
+      notes: row.notes ?? null,
+      created_at: row.created_at,
+      admin_name: row.admin?.display_name ?? null,
+      admin_avatar: row.admin?.avatar_url ?? null,
+    }));
+
+    return { logs, total: logs.length };
   } catch {
     return { logs: [], total: 0 };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Unified platform event feed
+// ---------------------------------------------------------------------------
+
+export async function getPlatformEvents(filter: 'all' | 'signup' | 'session' | 'admin' = 'all'): Promise<PlatformEvent[]> {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(); // last 7 days
+  const events: PlatformEvent[] = [];
+
+  const fetchSignups = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, display_name, avatar_url, created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(40);
+    for (const p of data ?? []) {
+      events.push({
+        id: `signup-${p.id}`,
+        type: 'signup',
+        timestamp: p.created_at,
+        actorName: p.display_name ?? 'Someone',
+        actorAvatar: p.avatar_url,
+        description: 'Joined SharedMinds',
+      });
+    }
+  };
+
+  const fetchSessions = async () => {
+    const { data } = await supabase
+      .from('focus_sessions')
+      .select(`
+        id, status, session_goal, session_outcome, session_mode,
+        start_time, ended_at,
+        profile:user_id ( display_name, avatar_url )
+      `)
+      .gte('start_time', since)
+      .order('start_time', { ascending: false })
+      .limit(60);
+    for (const s of data ?? []) {
+      const profile = (s as any).profile;
+      const name = profile?.display_name ?? 'Someone';
+      const avatar = profile?.avatar_url ?? null;
+      const goal = s.session_goal ? `"${s.session_goal}"` : 'a session';
+      const mode = s.session_mode === 'solo' ? ' (solo)' : s.session_mode === 'one_on_one' ? ' (1-on-1)' : '';
+
+      if (s.status === 'completed' && s.ended_at) {
+        const outcomeMap: Record<string, string> = {
+          finished: '✅ finished',
+          partially: '🔶 partially finished',
+          something_came_up: '⚡ something came up',
+        };
+        const outcome = s.session_outcome ? outcomeMap[s.session_outcome] ?? 'finished' : 'finished';
+        events.push({
+          id: `session-end-${s.id}`,
+          type: 'session_finished',
+          timestamp: s.ended_at,
+          actorName: name,
+          actorAvatar: avatar,
+          description: `Finished ${goal}${mode} — ${outcome}`,
+        });
+      } else {
+        events.push({
+          id: `session-start-${s.id}`,
+          type: 'session_started',
+          timestamp: s.start_time,
+          actorName: name,
+          actorAvatar: avatar,
+          description: `Started ${goal}${mode}`,
+        });
+      }
+    }
+  };
+
+  const fetchAdminActions = async () => {
+    const { logs } = await getLogs({ limit: 40 });
+    for (const l of logs) {
+      events.push({
+        id: `admin-${l.id}`,
+        type: 'role_change',
+        timestamp: l.created_at,
+        actorName: l.admin_name ?? 'Admin',
+        actorAvatar: l.admin_avatar ?? null,
+        description: l.notes ?? l.action_type,
+      });
+    }
+  };
+
+  if (filter === 'all') {
+    await Promise.all([fetchSignups(), fetchSessions(), fetchAdminActions()]);
+  } else if (filter === 'signup') {
+    await fetchSignups();
+  } else if (filter === 'session') {
+    await fetchSessions();
+  } else if (filter === 'admin') {
+    await fetchAdminActions();
+  }
+
+  events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return events.slice(0, 150);
 }
 
 export async function updateUserNeurotype(
