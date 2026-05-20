@@ -5,8 +5,15 @@ export interface ProfileStats {
   completedSessions: number;
   completionRate: number; // 0–100
   finishedCount: number;
-  currentStreak: number; // consecutive days with a completed session
+  currentStreak: number;       // consecutive days with a completed session, ending today
+  longestStreak: number;       // best run of consecutive days, all-time
   connectionCount: number;
+  totalFocusMinutes: number;   // sum of actual session durations
+  avgSessionMinutes: number;   // mean session length
+  bestDayOfWeek: string | null;     // e.g. "Tuesday" — null until 3+ sessions
+  bestWeekCount: number;       // sessions in best 7-day window
+  bestWeekStart: string | null;     // ISO date for best week
+  peopleAlongsideThisMonth: number; // unique co-participants in last 30 days
 }
 
 export interface PublicProfile {
@@ -76,7 +83,7 @@ export async function fetchPublicProfile(userId: string): Promise<PublicProfile 
 export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
   const { data: sessions } = await supabase
     .from('focus_sessions')
-    .select('status, session_outcome, ended_at, end_time')
+    .select('status, session_outcome, ended_at, end_time, start_time, intended_duration_minutes, partner_user_id')
     .eq('user_id', userId)
     .eq('status', 'completed')
     .order('ended_at', { ascending: false });
@@ -86,28 +93,98 @@ export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
   const finished = completed.filter((s) => s.session_outcome === 'finished').length;
   const completionRate = totalCompleted > 0 ? Math.round((finished / totalCompleted) * 100) : 0;
 
-  // Streak: count consecutive days (from today backwards) that have at least one completed session
-  const daySet = new Set(
-    completed.map((s) => {
-      const d = new Date(s.ended_at ?? s.end_time ?? '');
-      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    })
-  );
+  // ── Total focus minutes + avg ──
+  let totalMinutes = 0;
+  for (const s of completed) {
+    if (s.start_time && (s.ended_at || s.end_time)) {
+      const start = new Date(s.start_time).getTime();
+      const end = new Date(s.ended_at ?? s.end_time).getTime();
+      const mins = Math.max(0, Math.round((end - start) / 60000));
+      // Cap at intended + 25% to ignore stuck/forgotten sessions
+      const cap = s.intended_duration_minutes ? Math.round(s.intended_duration_minutes * 1.25) : 240;
+      totalMinutes += Math.min(mins, cap);
+    } else if (s.intended_duration_minutes) {
+      totalMinutes += s.intended_duration_minutes;
+    }
+  }
+  const avgSessionMinutes = totalCompleted > 0 ? Math.round(totalMinutes / totalCompleted) : 0;
 
-  let streak = 0;
+  // ── Day-key set for streak math ──
+  function dayKey(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
+
+  const dayKeys = completed
+    .map((s) => new Date(s.ended_at ?? s.end_time ?? ''))
+    .filter((d) => !isNaN(d.getTime()));
+  const daySet = new Set(dayKeys.map(dayKey));
+
+  // Current streak: from today backwards
+  let currentStreak = 0;
   const today = new Date();
   for (let i = 0; i < 365; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    if (daySet.has(key)) {
-      streak++;
-    } else if (i > 0) {
-      break;
+    if (daySet.has(dayKey(d))) currentStreak++;
+    else if (i > 0) break;
+  }
+
+  // Longest streak: walk every day with a session, count consecutive runs
+  const sortedDays = Array.from(daySet)
+    .map((k) => { const [y, m, day] = k.split('-').map(Number); return new Date(y, m, day).getTime(); })
+    .sort((a, b) => a - b);
+  let longestStreak = 0;
+  let run = 0;
+  let prev = -Infinity;
+  for (const ms of sortedDays) {
+    if (ms - prev === 86400000) run++;
+    else run = 1;
+    if (run > longestStreak) longestStreak = run;
+    prev = ms;
+  }
+
+  // ── Best day of the week (gated to 3+ sessions for signal) ──
+  let bestDayOfWeek: string | null = null;
+  if (totalCompleted >= 3) {
+    const dowCounts = [0, 0, 0, 0, 0, 0, 0];
+    for (const d of dayKeys) dowCounts[d.getDay()]++;
+    const peak = Math.max(...dowCounts);
+    if (peak > 0) {
+      const idx = dowCounts.indexOf(peak);
+      bestDayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][idx];
     }
   }
 
-  // Connection count
+  // ── Best week: sliding 7-day window across all sessions ──
+  let bestWeekCount = 0;
+  let bestWeekStart: string | null = null;
+  if (sortedDays.length > 0) {
+    const dayCounts = new Map<number, number>();
+    for (const d of dayKeys) {
+      const ms = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      dayCounts.set(ms, (dayCounts.get(ms) ?? 0) + 1);
+    }
+    for (const startMs of sortedDays) {
+      let count = 0;
+      for (let i = 0; i < 7; i++) {
+        count += dayCounts.get(startMs + i * 86400000) ?? 0;
+      }
+      if (count > bestWeekCount) {
+        bestWeekCount = count;
+        bestWeekStart = new Date(startMs).toISOString().slice(0, 10);
+      }
+    }
+  }
+
+  // ── People worked alongside this month (unique partner_user_ids in last 30d) ──
+  const thirtyDaysAgo = Date.now() - 30 * 86400000;
+  const partnerSet = new Set<string>();
+  for (const s of completed) {
+    const t = new Date(s.ended_at ?? s.end_time ?? '').getTime();
+    if (isNaN(t) || t < thirtyDaysAgo) continue;
+    if (s.partner_user_id) partnerSet.add(s.partner_user_id);
+  }
+  const peopleAlongsideThisMonth = partnerSet.size;
+
+  // ── Connection count ──
   const { count: connCount } = await supabase
     .from('connections')
     .select('id', { count: 'exact', head: true })
@@ -119,8 +196,15 @@ export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
     completedSessions: totalCompleted,
     completionRate,
     finishedCount: finished,
-    currentStreak: streak,
+    currentStreak,
+    longestStreak,
     connectionCount: connCount ?? 0,
+    totalFocusMinutes: totalMinutes,
+    avgSessionMinutes,
+    bestDayOfWeek,
+    bestWeekCount,
+    bestWeekStart,
+    peopleAlongsideThisMonth,
   };
 }
 
