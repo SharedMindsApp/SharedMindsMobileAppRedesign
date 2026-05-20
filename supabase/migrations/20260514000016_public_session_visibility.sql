@@ -17,7 +17,6 @@
 -- visible to anon via the existing profiles policy.
 
 DROP POLICY IF EXISTS "focus_sessions_public_community_view" ON public.focus_sessions;
-
 CREATE POLICY "focus_sessions_public_community_view"
 ON public.focus_sessions FOR SELECT
 TO anon

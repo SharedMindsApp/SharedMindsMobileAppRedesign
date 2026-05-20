@@ -17,28 +17,33 @@ CREATE INDEX IF NOT EXISTS connections_addressee_idx ON public.connections(addre
 ALTER TABLE public.connections ENABLE ROW LEVEL SECURITY;
 
 -- Each user can see connections they are part of
+DROP POLICY IF EXISTS "connections_select" ON public.connections;
 CREATE POLICY "connections_select"
 ON public.connections FOR SELECT
 USING (requester_id = auth.uid() OR addressee_id = auth.uid());
 
 -- Users can send connection requests (requester must be themselves)
+DROP POLICY IF EXISTS "connections_insert" ON public.connections;
 CREATE POLICY "connections_insert"
 ON public.connections FOR INSERT
 WITH CHECK (requester_id = auth.uid());
 
 -- Addressee can accept (update status to accepted); requester can cancel (delete via separate policy)
+DROP POLICY IF EXISTS "connections_update" ON public.connections;
 CREATE POLICY "connections_update"
 ON public.connections FOR UPDATE
 USING (addressee_id = auth.uid())
 WITH CHECK (status = 'accepted');
 
 -- Either party can remove the connection
+DROP POLICY IF EXISTS "connections_delete" ON public.connections;
 CREATE POLICY "connections_delete"
 ON public.connections FOR DELETE
 USING (requester_id = auth.uid() OR addressee_id = auth.uid());
 
 -- Expand profiles visibility: connected users can see each other's profiles
 DROP POLICY IF EXISTS "profiles_select_active_session_owners" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_select_policy" ON public.profiles;
 CREATE POLICY "profiles_select_policy"
 ON public.profiles FOR SELECT
 USING (
