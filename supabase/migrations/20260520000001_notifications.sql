@@ -46,6 +46,49 @@ create table if not exists public.notifications (
   created_at timestamptz not null default now()
 );
 
+-- ── Bridge from legacy schema ──────────────────────────────────
+-- The old notifications table (20260320110000) used is_read boolean.
+-- If that table already exists, CREATE TABLE IF NOT EXISTS above is a no-op,
+-- so we add the missing columns conditionally here.
+alter table public.notifications add column if not exists related_id uuid;
+alter table public.notifications add column if not exists deep_link text;
+alter table public.notifications add column if not exists read_at timestamptz;
+alter table public.notifications add column if not exists email_sent_at timestamptz;
+alter table public.notifications add column if not exists email_status text;
+alter table public.notifications add column if not exists push_sent_at timestamptz;
+
+-- Migrate is_read → read_at for any pre-existing rows
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'notifications'
+      and column_name  = 'is_read'
+  ) then
+    update public.notifications
+       set read_at = created_at
+     where is_read = true and read_at is null;
+  end if;
+end;
+$$;
+
+-- Add email_status check constraint if not already present
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where table_schema    = 'public'
+      and table_name      = 'notifications'
+      and constraint_name = 'notifications_email_status_check'
+  ) then
+    alter table public.notifications
+      add constraint notifications_email_status_check
+      check (email_status in ('queued','sent','failed','skipped','digest_queued'));
+  end if;
+end;
+$$;
+
 create index if not exists notifications_user_unread_idx
   on public.notifications(user_id, created_at desc)
   where read_at is null;
