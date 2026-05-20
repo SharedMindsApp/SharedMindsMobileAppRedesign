@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2 } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -54,14 +54,29 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const { state: { tasks, projects, activeProjectId }, addTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
 
-  const isScheduling = initialScheduledAt != null;
+  // "when" state — if initialScheduledAt was passed (calendar slot click), pre-fill it.
+  // Otherwise default to "now". User can toggle to "schedule" to pick a custom time.
+  const [whenMode, setWhenMode] = useState<'now' | 'schedule'>(
+    initialScheduledAt ? 'schedule' : 'now'
+  );
+  // Initialise the datetime-local input to either the passed-in time or +1 hour from now
+  const defaultScheduled = initialScheduledAt
+    ?? (() => { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0); return d; })();
+  const toLocalInput = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [scheduledAt, setScheduledAt] = useState<string>(toLocalInput(defaultScheduled));
+
+  const isScheduling = whenMode === 'schedule';
+  const resolvedScheduledAt = isScheduling ? new Date(scheduledAt) : null;
 
   const [tab, setTab] = useState<GoalTab>(initialGoal ? 'type' : 'pick');
   const [selectedTask, setSelectedTask] = useState<CoreTask | null>(null);
   const [goalText, setGoalText] = useState(initialGoal ?? '');
   const [duration, setDuration] = useState<DurationOption>(initialDuration ?? 50);
   const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
-    forceSoloMode ? 'solo' : 'group'
+    forceSoloMode ? 'solo' : 'one_on_one'
   );
   const [quietMode, setQuietMode] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
@@ -120,11 +135,11 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         }
       }
 
-      if (isScheduling && initialScheduledAt) {
+      if (isScheduling && resolvedScheduledAt) {
         // Future slot → create scheduled session, show reminder confirmation then close
         await createScheduledSession({
           title: resolvedGoal,
-          scheduledAt: initialScheduledAt,
+          scheduledAt: resolvedScheduledAt,
           durationMinutes: duration,
           projectId: selectedProjectId ?? undefined,
         });
@@ -151,8 +166,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   }
 
   // Format the scheduled time for the header subtitle
-  const scheduledLabel = initialScheduledAt
-    ? initialScheduledAt.toLocaleString('en-GB', {
+  const scheduledLabel = resolvedScheduledAt
+    ? resolvedScheduledAt.toLocaleString('en-GB', {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
@@ -428,6 +443,48 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           </div>
         )}
 
+        {/* ── When picker ──────────────────────────────────── */}
+        <div className="shrink-0 px-5 pt-3">
+          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
+            When
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setWhenMode('now')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+                whenMode === 'now'
+                  ? 'stitch-btn--primary text-white shadow-md shadow-primary/20'
+                  : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+              }`}
+            >
+              <Zap size={13} className={whenMode === 'now' ? 'text-white/80' : 'stitch-text-secondary'} />
+              Start now
+            </button>
+            <button
+              type="button"
+              onClick={() => setWhenMode('schedule')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+                whenMode === 'schedule'
+                  ? 'stitch-btn--primary text-white shadow-md shadow-primary/20'
+                  : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+              }`}
+            >
+              <Clock size={13} className={whenMode === 'schedule' ? 'text-white/80' : 'stitch-text-secondary'} />
+              Schedule
+            </button>
+          </div>
+          {whenMode === 'schedule' && (
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              min={toLocalInput(new Date())}
+              className="mt-2 w-full px-4 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-sm outline-none focus:ring-2 ring-primary/25 transition-all"
+            />
+          )}
+        </div>
+
         {/* ── Duration picker ──────────────────────────────── */}
         <div className="shrink-0 px-5 pt-3">
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
@@ -559,7 +616,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                 {!canSubmit
                   ? 'Pick a goal to start'
                   : isScheduling
-                  ? `Schedule ${duration}-min session`
+                  ? `Schedule for ${scheduledLabel ?? `${duration} min`}`
                   : `Start ${duration}-min session`}
               </>
             )}
