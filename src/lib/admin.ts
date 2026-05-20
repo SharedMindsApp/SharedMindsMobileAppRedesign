@@ -278,3 +278,48 @@ export async function updateUserNeurotype(
     }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// App config (app_config table)
+// ---------------------------------------------------------------------------
+
+export type AppConfigKey = 'signups_open' | 'maintenance_mode' | 'default_session_minutes';
+
+export interface AppConfig {
+  signups_open: boolean;
+  maintenance_mode: boolean;
+  default_session_minutes: number;
+}
+
+const CONFIG_DEFAULTS: AppConfig = {
+  signups_open: true,
+  maintenance_mode: false,
+  default_session_minutes: 45,
+};
+
+export async function getAppConfig(): Promise<AppConfig> {
+  const { data, error } = await supabase
+    .from('app_config')
+    .select('key, value');
+  if (error) return { ...CONFIG_DEFAULTS };
+
+  const result = { ...CONFIG_DEFAULTS };
+  for (const row of data ?? []) {
+    (result as Record<string, unknown>)[row.key] = row.value;
+  }
+  return result;
+}
+
+export async function setAppConfig(
+  key: AppConfigKey,
+  value: boolean | number,
+  updatedBy: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('app_config')
+    .upsert(
+      { key, value, updated_by: updatedBy, updated_at: new Date().toISOString() },
+      { onConflict: 'key' },
+    );
+  if (error) throw error;
+}
