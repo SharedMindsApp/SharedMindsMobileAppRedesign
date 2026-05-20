@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell, Loader2, CheckCheck, MessageCircle, Heart, UserPlus, Sparkles, Calendar,
   FolderPlus, CornerDownRight, HelpCircle, AlertCircle, Check,
@@ -80,7 +80,16 @@ function formatTimeAgo(iso: string): string {
 export function NotificationsBell() {
   const { user } = useAuth();
   const navigate = useNavigate(); // used by handleClick deep-links
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+
+  // Close the dropdown whenever the user navigates to a new route.
+  // This is the reliable way to handle Link clicks inside portals —
+  // synchronously calling setOpen(false) in an onClick can unmount the
+  // portal before React Router finishes the navigation.
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname, location.search]);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -152,7 +161,8 @@ export function NotificationsBell() {
       markRead(n.id).catch(() => refresh());
     }
     if (n.deep_link) {
-      setOpen(false);
+      // navigate() triggers the location effect which closes the dropdown.
+      // Don't call setOpen(false) here — it races with the portal unmount.
       navigate(n.deep_link);
     }
   }
@@ -244,7 +254,6 @@ export function NotificationsBell() {
             <div className="shrink-0 px-3 py-2 border-t border-surface-container/60 flex items-center justify-between">
               <Link
                 to="/profile?tab=notifications"
-                onClick={() => setOpen(false)}
                 className="text-[11px] font-semibold stitch-text-secondary hover:stitch-text-primary"
               >
                 Notification settings
