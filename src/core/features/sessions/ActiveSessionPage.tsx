@@ -4,8 +4,10 @@ import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, Aler
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
+import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
+import { JitsiMeeting } from './JitsiMeeting';
 
 // Daily shared room — everyone in a group session today joins the same Jitsi room.
 function dailyRoomName(): string {
@@ -61,7 +63,8 @@ function avatarClass(name: string): string {
 export function ActiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, clearSession } = useFocusSession();
+  const { profile } = useAuth();
+  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession } = useFocusSession();
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
   const [ending, setEnding] = useState(false);
@@ -71,7 +74,6 @@ export function ActiveSessionPage() {
     (activeSession?.partner_user_id ?? null) !== null,
   );
   const [showNoShowBanner, setShowNoShowBanner] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Load session if not in context (e.g. hard refresh)
   useEffect(() => {
@@ -172,8 +174,6 @@ export function ActiveSessionPage() {
   const roomName = session
     ? (isOneOnOne ? oneOnOneRoomName(session.id) : dailyRoomName())
     : dailyRoomName();
-
-  const jitsiUrl = `https://meet.jit.si/${roomName}#config.startWithAudioMuted=${isQuiet ? 'true' : 'false'}&config.startWithVideoMuted=false&config.prejoinPageEnabled=false&interfaceConfig.SHOW_JITSI_WATERMARK=false&interfaceConfig.TOOLBAR_BUTTONS=["microphone","camera","desktop","hangup","chat","raisehand","tileview","select-background","shortcuts"]`;
 
   const modeBadgeLabel = isSolo ? 'Solo' : isOneOnOne ? '1-on-1' : 'Group';
 
@@ -279,13 +279,16 @@ export function ActiveSessionPage() {
         />
       ) : (
         <div className="flex-1 relative min-h-0">
-          <iframe
-            ref={iframeRef}
-            src={jitsiUrl}
-            allow="camera; microphone; display-capture; autoplay; clipboard-write"
-            allowFullScreen
-            className="w-full h-full border-0"
-            title="SharedMinds coworking room"
+          <JitsiMeeting
+            roomName={roomName}
+            displayName={profile?.display_name ?? 'Member'}
+            startAudioMuted={isQuiet}
+            startVideoMuted={false}
+            onParticipantJoined={() => {
+              setPartnerJoined(true);
+              setShowNoShowBanner(false);
+            }}
+            onHangup={handleEnd}
           />
         </div>
       )}

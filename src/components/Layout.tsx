@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, MessageSquare, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles, BellOff, Bell } from 'lucide-react';
+import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, MessageSquare, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles, BellOff, Bell, Video } from 'lucide-react';
+import { useFocusSession } from '../contexts/FocusSessionContext';
 import { ToastContainer, useToasts } from './Toast';
 import { getUserHousehold, Household } from '../lib/household';
 import { signOut } from '../lib/auth';
@@ -64,6 +65,7 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, user, isAdmin, canAccessPantry, refreshProfile } = useAuth();
+  const { activeSession, sessionGoal } = useFocusSession();
   const role = profile?.role || 'free';
   // showAdmin: use isAdmin (profile.role) OR fall back to checking the JWT email
   // directly so the admin panel is visible even if the cached profile has stale role.
@@ -855,6 +857,27 @@ export function Layout({ children }: LayoutProps) {
           }
         }}
       />
+
+      {/* ── Return-to-session chip ─────────────────────────────────────────
+          Shown when there's an active session but the user has navigated
+          away from it. Floats above the mobile tab bar (bottom-20 on small
+          screens) so it never collides with the dock. */}
+      {activeSession && !location.pathname.startsWith(`/session/${activeSession.id}`) && (
+        <button
+          type="button"
+          onClick={() => navigate(`/session/${activeSession.id}`)}
+          className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-full shadow-lg text-sm font-bold active:scale-95 transition-all hover:bg-primary/90 pointer-events-auto"
+          style={{ boxShadow: '0 4px 20px rgba(99,102,241,0.5)' }}
+        >
+          <Video size={14} />
+          Back to session
+          {sessionGoal ? (
+            <span className="hidden sm:inline opacity-70 font-normal truncate max-w-[140px]">
+              · {sessionGoal}
+            </span>
+          ) : null}
+        </button>
+      )}
 
       {/* Persistent floating chat dock — portals to body so it sits above
           all page content including active session/Jitsi overlays. */}
