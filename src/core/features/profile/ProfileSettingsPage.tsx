@@ -19,6 +19,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera,
   AlertCircle, Eye, EyeOff, UserRound, Bell, Shield, Settings as SettingsIcon,
+  Sun, Moon, Zap, Check,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
@@ -29,6 +30,7 @@ import { SkillsEditor } from '../../ui/SkillsEditor';
 import { formatLocation } from '../../../lib/countries';
 import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
 import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
+import { useUIPreferences } from '../../../contexts/UIPreferencesContext';
 import { ProfilePage } from './ProfilePage';
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -411,6 +413,7 @@ function EditTab() {
 function AccountTab() {
   const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const { config, updatePreferences } = useUIPreferences();
   const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -419,8 +422,51 @@ function AccountTab() {
     navigate('/');
   }
 
+  const THEMES = [
+    { id: 'light' as const,    label: 'Light',     Icon: Sun,  disabled: false },
+    { id: 'dark' as const,     label: 'Dark',      Icon: Moon, disabled: false },
+    { id: 'neon-dark' as const,label: 'Neon Dark', Icon: Zap,  disabled: true  },
+  ];
+
   return (
     <div className="space-y-5">
+      {/* ── Appearance ───────────────────────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Appearance</p>
+        <div className="grid grid-cols-3 gap-2">
+          {THEMES.map(({ id, label, Icon, disabled }) => {
+            const isActive = config.appTheme === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={disabled}
+                onClick={() => !disabled && updatePreferences({ appTheme: id })}
+                title={disabled ? 'Coming soon' : label}
+                className={`relative flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl text-xs font-semibold transition-all ${
+                  disabled
+                    ? 'opacity-40 cursor-not-allowed bg-surface-container-low stitch-text-secondary'
+                    : isActive
+                    ? 'bg-primary text-white shadow-sm shadow-primary/25'
+                    : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.97]'
+                }`}
+              >
+                <Icon size={16} />
+                {label}
+                {isActive && !disabled && (
+                  <span className="absolute top-1.5 right-1.5">
+                    <Check size={10} strokeWidth={3} />
+                  </span>
+                )}
+                {disabled && (
+                  <span className="absolute top-1 right-1 text-[8px] font-bold opacity-60 tracking-tight">soon</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </SurfaceCard>
+
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Directory privacy</p>
         <PrivacyToggle
