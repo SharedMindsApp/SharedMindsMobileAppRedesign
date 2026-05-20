@@ -32,6 +32,11 @@ CREATE INDEX IF NOT EXISTS global_chat_messages_user_idx
 
 ALTER TABLE public.global_chat_messages ENABLE ROW LEVEL SECURITY;
 
+-- Drop first so re-running the migration is always safe
+DROP POLICY IF EXISTS "chat_select"     ON public.global_chat_messages;
+DROP POLICY IF EXISTS "chat_insert"     ON public.global_chat_messages;
+DROP POLICY IF EXISTS "chat_delete_own" ON public.global_chat_messages;
+
 -- Any authenticated user can read all messages
 CREATE POLICY "chat_select"
   ON public.global_chat_messages FOR SELECT
