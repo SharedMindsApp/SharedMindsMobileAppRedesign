@@ -201,17 +201,26 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
     <div className="flex flex-col h-full">
 
       {/* Header */}
-      <div className={`flex-shrink-0 flex items-center justify-between border-b border-gray-100 ${compact ? 'px-4 py-2.5' : 'px-5 py-3'}`}>
-        <div className="flex items-center gap-2">
-          <span className={`font-semibold text-gray-900 ${compact ? 'text-sm' : 'text-base'}`}>
-            Community Chat
-          </span>
-          <span className="text-gray-400 text-xs">· global room</span>
+      <div className={`flex-shrink-0 flex items-center justify-between border-b border-gray-100 ${compact ? 'px-4 py-2.5' : 'px-5 py-4'}`}>
+        <div className="flex items-center gap-2.5">
+          {!compact && (
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center shrink-0">
+              <Users className="w-4 h-4 text-white" />
+            </div>
+          )}
+          <div>
+            <span className={`font-bold text-gray-900 block leading-tight ${compact ? 'text-sm' : 'text-base'}`}>
+              Community Chat
+            </span>
+            {!compact && (
+              <span className="text-[11px] text-gray-400">Global room · all SharedMinds members</span>
+            )}
+          </div>
         </div>
         {onlineCount !== null && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-            <span>{onlineCount} online</span>
+          <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            <span className="text-[11px] font-semibold text-emerald-700">{onlineCount} online</span>
           </div>
         )}
       </div>
@@ -227,10 +236,28 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
             <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-8 text-center">
-            <Users className="w-8 h-8 text-gray-300 mb-2" />
-            <p className="text-sm text-gray-500 font-medium">No messages yet</p>
-            <p className="text-xs text-gray-400 mt-1">Be the first to say something 👋</p>
+          <div className="flex flex-col items-center justify-center h-full py-8 text-center px-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-100 to-blue-100 flex items-center justify-center mb-4">
+              <Users className="w-7 h-7 text-cyan-500" />
+            </div>
+            <p className="text-sm font-bold text-gray-800 mb-1.5">Welcome to the community room</p>
+            <p className="text-xs text-gray-500 leading-relaxed max-w-[260px] mx-auto mb-5">
+              This is your virtual coworking common area. Say hi, share what you're working on, or just check in.
+            </p>
+            {!compact && (
+              <div className="flex flex-col gap-2 w-full max-w-[280px]">
+                {['👋 Hey everyone, just joined!', '🎯 Working on my pitch deck today', '☕ Anyone else doing a morning session?'].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => { setDraft(suggestion); inputRef.current?.focus(); }}
+                    className="text-left text-xs text-gray-600 bg-gray-50 hover:bg-cyan-50 border border-gray-100 hover:border-cyan-200 rounded-xl px-4 py-2.5 transition-all"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+            {compact && <p className="text-xs text-gray-400">Be the first to say something 👋</p>}
           </div>
         ) : (
           <>
