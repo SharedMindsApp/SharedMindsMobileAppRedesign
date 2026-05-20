@@ -407,8 +407,11 @@ export function DashboardPage() {
           {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
           <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
 
-          {/* 1b. Weekly intentions — set the three things for this week */}
-          <WeeklyIntentionsCard />
+          {/* 1b. Weekly intentions + today's intention — side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
+            <WeeklyIntentionsCard />
+            <DailyIntentionCard />
+          </div>
 
           {/* 2. Quick-start templates — kills blank-page paralysis */}
           <QuickStartTemplates onPick={openDeclareWithTemplate} />
@@ -434,9 +437,6 @@ export function DashboardPage() {
 
           {/* 6. Onboarding checklist */}
           <OnboardingChecklist stats={stats} connectionsCount={connectionsCount} />
-
-          {/* 7. Daily intention */}
-          <DailyIntentionCard />
         </>
       ) : (
         <>
@@ -452,11 +452,11 @@ export function DashboardPage() {
           {/* 2. Quick-start templates — still valuable for returning users */}
           <QuickStartTemplates onPick={openDeclareWithTemplate} />
 
-          {/* 2b. Weekly intentions */}
-          <WeeklyIntentionsCard />
-
-          {/* 3. Today's intention */}
-          <DailyIntentionCard />
+          {/* 2b. Weekly intentions + today's intention — side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 items-start">
+            <WeeklyIntentionsCard />
+            <DailyIntentionCard />
+          </div>
 
           {/* 4. Community pulse */}
           <CommunityPulseCard

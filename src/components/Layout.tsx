@@ -63,12 +63,20 @@ export function Layout({ children }: LayoutProps) {
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile, user, isAdmin, canAccessPantry } = useAuth();
+  const { profile, user, isAdmin, canAccessPantry, refreshProfile } = useAuth();
   const role = profile?.role || 'free';
   const isViewingAs = false;
   const { clearViewAs } = useViewAs();
   const { config, updatePreferences } = useUIPreferences();
   const { toasts, dismissToast } = useToasts();
+
+  // Ensure we always have the latest profile so isAdmin reflects the DB truth.
+  // The initial auth fetch can return a stale/fallback profile (role: 'free')
+  // if the DB was momentarily unavailable. Fire once whenever user.id settles.
+  useEffect(() => {
+    if (user?.id) refreshProfile().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Unread DM counter for the nav badge — polls on load + subscribes to any
   // new dm_messages insert (RLS filters to ones we can see). Kept simple:

@@ -34,9 +34,59 @@ export interface WeeklyIntention {
   updated_at: string;
 }
 
+// ── Microtasks ───────────────────────────────────────────────────
+
+/** Energy proxy for effort estimation — avoids asking ADHD brains for minutes. */
+export type MicrotaskEnergy = 'deep' | 'medium' | 'quick';
+
+/** Session-cost of each energy level (used to compute ~N sessions estimate). */
+export const ENERGY_SESSION_COST: Record<MicrotaskEnergy, number> = {
+  deep:   1.0,  // full focus block (~90 min)
+  medium: 0.5,  // half block, batch 2 per session (~50 min each)
+  quick:  0.25, // quick admin, batch 4 per session (~25 min each)
+};
+
+export const ENERGY_LABEL: Record<MicrotaskEnergy, string> = {
+  deep:   'Deep',
+  medium: 'Medium',
+  quick:  'Quick',
+};
+
+export const ENERGY_DESCRIPTION: Record<MicrotaskEnergy, string> = {
+  deep:   'Needs full focus — 1 session',
+  medium: 'Requires thought — ½ session',
+  quick:  'Routine / admin — ¼ session',
+};
+
+export interface Microtask {
+  id: string;
+  intention_id: string;
+  user_id: string;
+  title: string;
+  completed_at: string | null;
+  sort_order: number;
+  energy_level: MicrotaskEnergy;
+  created_at: string;
+  updated_at: string;
+}
+
+export type WeeklyIntentionWithMicrotasks = WeeklyIntention & {
+  microtasks: Microtask[];
+};
+
+/** Compute estimated sessions from a set of microtasks. Returns 0 if none. */
+export function estimateSessions(microtasks: Microtask[]): number {
+  if (!microtasks.length) return 0;
+  const raw = microtasks.reduce(
+    (sum, m) => sum + ENERGY_SESSION_COST[m.energy_level ?? 'medium'],
+    0,
+  );
+  return Math.ceil(raw);
+}
+
 export interface ReflectionWithIntentions {
   reflection: WeeklyReflection;
-  intentions: WeeklyIntention[];
+  intentions: WeeklyIntentionWithMicrotasks[];
 }
 
 // ── Week helpers ────────────────────────────────────────────────
@@ -85,14 +135,18 @@ export const ReflectionService = {
 
     const { data: ints, error: intErr } = await supabase
       .from('weekly_intentions')
-      .select('*')
+      .select('*, microtasks:intention_microtasks(* )')
       .eq('reflection_id', ref.id)
       .order('sort_order', { ascending: true });
     if (intErr) throw intErr;
 
     return {
       reflection: ref as WeeklyReflection,
-      intentions: (ints ?? []) as WeeklyIntention[],
+      intentions: ((ints ?? []) as any[]).map((row) => ({
+        ...row,
+        microtasks: ((row.microtasks ?? []) as Microtask[])
+          .sort((a, b) => a.sort_order - b.sort_order),
+      })) as WeeklyIntentionWithMicrotasks[],
     };
   },
 
@@ -195,8 +249,62 @@ export const ReflectionService = {
 
     return (refs ?? []).map((row: any) => ({
       reflection: row as WeeklyReflection,
-      intentions: ((row.weekly_intentions ?? []) as WeeklyIntention[])
+      intentions: ((row.weekly_intentions ?? []) as WeeklyIntentionWithMicrotasks[])
         .sort((a, b) => a.sort_order - b.sort_order),
     }));
+  },
+
+  // ── Microtask CRUD ────────────────────────────────────────────
+
+  async addMicrotask(input: {
+    intentionId: string;
+    title: string;
+    energyLevel?: MicrotaskEnergy;
+    sortOrder?: number;
+  }): Promise<Microtask> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('intention_microtasks')
+      .insert({
+        intention_id: input.intentionId,
+        user_id: user.id,
+        title: input.title.trim(),
+        energy_level: input.energyLevel ?? 'medium',
+        sort_order: input.sortOrder ?? 0,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Microtask;
+  },
+
+  async updateMicrotask(
+    microtaskId: string,
+    patch: Partial<Pick<Microtask, 'title' | 'energy_level' | 'completed_at' | 'sort_order'>>,
+  ): Promise<Microtask> {
+    const { data, error } = await supabase
+      .from('intention_microtasks')
+      .update(patch)
+      .eq('id', microtaskId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Microtask;
+  },
+
+  async deleteMicrotask(microtaskId: string): Promise<void> {
+    const { error } = await supabase
+      .from('intention_microtasks')
+      .delete()
+      .eq('id', microtaskId);
+    if (error) throw error;
+  },
+
+  async toggleMicrotaskComplete(microtask: Microtask): Promise<Microtask> {
+    return ReflectionService.updateMicrotask(microtask.id, {
+      completed_at: microtask.completed_at ? null : new Date().toISOString(),
+    });
   },
 };
