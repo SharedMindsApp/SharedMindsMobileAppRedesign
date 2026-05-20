@@ -89,17 +89,7 @@ BEGIN
       USING ERRCODE = 'P0001';
   END IF;
 
-  -- Enforce dm_privacy (skip check if DM already exists — user already connected)
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.dm_participants p1
-    JOIN public.dm_participants p2 ON p1.conversation_id = p2.conversation_id
-    WHERE p1.user_id = auth.uid()
-      AND p2.user_id = other_user_id
-  ) INTO STRICT v_conversation_id
-  USING (SELECT id FROM public.dm_conversations LIMIT 1); -- dummy; we re-query below
-
-  -- Simpler: try to find existing conversation first
+  -- Find existing conversation first — no privacy gate needed if one already exists
   SELECT p1.conversation_id INTO v_conversation_id
   FROM public.dm_participants p1
   JOIN public.dm_participants p2 ON p1.conversation_id = p2.conversation_id
