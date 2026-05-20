@@ -78,6 +78,50 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
     [activeSession?.id, activeSession?.target_end_time, activeSession?.ended_at]
   );
 
+  // ── Session restoration on mount ─────────────────────────────────────────
+  // When the page is refreshed or the user navigates back from outside the app,
+  // React state is gone but the row in Supabase still has status='active'.
+  // This effect runs once on mount and restores the in-progress session so the
+  // "Back to session" chip appears and the session page is accessible again.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tryRestoreSession() {
+      try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        if (!authSession?.user || cancelled) return;
+
+        const uid = authSession.user.id;
+
+        const { data, error } = await supabase
+          .from('focus_sessions')
+          .select('*, project:projects(id, title, color)')
+          .eq('status', 'active')
+          .is('ended_at', null)
+          .or(`user_id.eq.${uid},partner_user_id.eq.${uid}`)
+          .order('start_time', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('[FocusSessionContext] Could not restore session:', error.message);
+          return;
+        }
+
+        if (data && !cancelled && isMounted()) {
+          console.log('[FocusSessionContext] Restored active session', data.id);
+          handleSetActiveSession(data as FocusSession);
+        }
+      } catch (err) {
+        console.warn('[FocusSessionContext] Session restoration error:', err);
+      }
+    }
+
+    tryRestoreSession();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs once on mount only
+
   const handleSetActiveSession = useCallback((session: FocusSession | null) => {
     setActiveSession(session);
     setSessionGoal(session?.session_goal ?? null);

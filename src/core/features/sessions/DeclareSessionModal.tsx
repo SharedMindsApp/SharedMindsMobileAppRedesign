@@ -51,7 +51,7 @@ interface Props {
 
 export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration }: Props) {
   const navigate = useNavigate();
-  const { state: { tasks, projects, activeProjectId }, addTaskAsync } = useCoreData();
+  const { state: { tasks, projects, activeProjectId }, addTaskAsync, deleteTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
 
   // "when" state — if initialScheduledAt was passed (calendar slot click), pre-fill it.
@@ -293,26 +293,40 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               {openTasks.map((task) => {
                 const isSelected = selectedTask?.id === task.id;
                 return (
-                  <button
-                    key={task.id}
-                    type="button"
-                    onClick={() => setSelectedTask(isSelected ? null : task)}
-                    className={`w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150 ${
-                      isSelected
-                        ? 'bg-primary/8 ring-2 ring-primary/25 shadow-sm'
-                        : 'bg-surface-container-low hover:bg-surface-container active:scale-[0.99]'
-                    }`}
-                  >
-                    <div className={`w-1 self-stretch rounded-full shrink-0 ${ENERGY_COLORS[task.energy]}`} />
-                    <span className="flex-1 text-sm font-medium stitch-text-primary leading-snug">
-                      {task.title}
-                    </span>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                      isSelected ? 'bg-primary' : 'border-2 border-surface-container'
-                    }`}>
-                      {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
-                    </div>
-                  </button>
+                  <div key={task.id} className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTask(isSelected ? null : task)}
+                      className={`w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150 pr-10 ${
+                        isSelected
+                          ? 'bg-primary/8 ring-2 ring-primary/25 shadow-sm'
+                          : 'bg-surface-container-low hover:bg-surface-container active:scale-[0.99]'
+                      }`}
+                    >
+                      <div className={`w-1 self-stretch rounded-full shrink-0 ${ENERGY_COLORS[task.energy]}`} />
+                      <span className="flex-1 text-sm font-medium stitch-text-primary leading-snug">
+                        {task.title}
+                      </span>
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                        isSelected ? 'bg-primary' : 'border-2 border-surface-container'
+                      }`}>
+                        {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
+                      </div>
+                    </button>
+                    {/* Delete button — appears on hover, sits in top-right corner */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selectedTask?.id === task.id) setSelectedTask(null);
+                        deleteTaskAsync(task.id).catch(() => {});
+                      }}
+                      title="Remove task"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity bg-surface-container hover:bg-red-100 hover:text-red-500 stitch-text-secondary"
+                    >
+                      <X size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
                 );
               })}
 

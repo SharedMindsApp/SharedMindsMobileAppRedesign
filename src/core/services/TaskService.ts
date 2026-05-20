@@ -72,6 +72,18 @@ export const TaskService = {
         return data as Task;
     },
 
+    async deleteTask(taskId: string): Promise<void> {
+        const { error } = await supabase
+            .from('tasks')
+            .delete()
+            .eq('id', taskId);
+
+        if (error) {
+            console.error('[TaskService] Failed to delete task:', error);
+            throw error;
+        }
+    },
+
     async updateTask(taskId: string, updates: Partial<Task>): Promise<Task> {
         if (updates.status === 'done' || updates.status === 'dropped') {
             updates.completed_at = new Date().toISOString();

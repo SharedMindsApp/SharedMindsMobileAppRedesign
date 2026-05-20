@@ -7,6 +7,13 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useAuth } from '../core/auth/AuthProvider';
+
+// Opt out of Vite HMR — this module consumes AuthContext directly.
+// If either this file or AuthProvider is hot-reloaded without a full page reload,
+// the context objects can become mismatched and useAuth() will throw.
+if (import.meta.hot) {
+  import.meta.hot.decline();
+}
 import {
   getNotifications,
   getUnreadCount,

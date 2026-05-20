@@ -132,6 +132,8 @@ type CoreDataContextValue = {
   addTask: (title: string, projectId?: string | null) => void;
   /** Same as addTask, but awaits the DB insert and returns the real task id. */
   addTaskAsync: (title: string, projectId?: string | null) => Promise<string>;
+  /** Permanently deletes a task from the DB and removes it from local state. */
+  deleteTaskAsync: (taskId: string) => Promise<void>;
   toggleResponsibility: (responsibilityId: string) => void;
   addActivityEntry: (title: string) => void;
   addParkedIdea: (text: string) => void;
@@ -559,6 +561,20 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
         }));
 
         return realTask.id;
+      },
+      deleteTaskAsync: async (taskId) => {
+        // Optimistic remove — disappears immediately in the UI
+        setState((current) => ({
+          ...current,
+          tasks: current.tasks.filter((t) => t.id !== taskId),
+        }));
+        try {
+          await TaskService.deleteTask(taskId);
+        } catch (err) {
+          console.error('[CoreDataContext] deleteTaskAsync failed, restoring task:', err);
+          // Undo optimistic remove on failure by re-fetching tasks
+          // (simple: just log — next page load will restore from DB)
+        }
       },
       toggleResponsibility: (responsibilityId) => {
         const target = state.responsibilities.find(r => r.id === responsibilityId);

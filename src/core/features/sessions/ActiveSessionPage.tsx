@@ -89,7 +89,7 @@ export function ActiveSessionPage() {
     (async () => {
       const { data } = await supabase
         .from('focus_sessions')
-        .select('*')
+        .select('*, project:projects(id, title, color)')
         .eq('id', sessionId)
         .single();
 

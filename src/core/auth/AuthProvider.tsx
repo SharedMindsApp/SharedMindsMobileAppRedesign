@@ -4,6 +4,14 @@ import type { User } from '@supabase/supabase-js';
 import { SpaceService } from '../services/SpaceService';
 import { clearStoredAuthSession } from '../../lib/auth';
 
+// Opt out of Vite HMR for this module. AuthContext is created at module load time;
+// if HMR swapped this module, the new context object would not match the one
+// already provided by the mounted AuthProvider, breaking every useAuth() consumer
+// (e.g. NotificationProvider). A full-page reload is safer.
+if (import.meta.hot) {
+  import.meta.hot.decline();
+}
+
 export interface Profile {
     id: string;
     display_name: string;

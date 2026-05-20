@@ -76,6 +76,13 @@ export default defineConfig({
       timeout: 30000,
       overlay: true,
     },
+    // Serve Permissions-Policy as an HTTP header so the browser delegates
+    // camera/microphone/display-capture permissions to the JaaS iframe.
+    // (Permissions-Policy is ignored when set via <meta> tag.)
+    headers: {
+      'Permissions-Policy':
+        'camera=(self "https://8x8.vc"), microphone=(self "https://8x8.vc"), display-capture=(self "https://8x8.vc")',
+    },
   },
 
   build: {
