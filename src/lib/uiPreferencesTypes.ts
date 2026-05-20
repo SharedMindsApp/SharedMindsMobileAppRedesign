@@ -96,7 +96,8 @@ export type NavigationTabId =
   | 'people'
   | 'messages'
   | 'profile'
-  | 'settings';
+  | 'settings'
+  | 'admin';
 
 export interface NavigationTab {
   id: NavigationTabId;
@@ -114,6 +115,7 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'tasks', label: 'Tasks', path: '/tasks', icon: 'Target' },
   { id: 'projects', label: 'Projects', path: '/projects', icon: 'Zap' },
   // 'calendar' tab removed — /sessions is the calendar. /calendar redirects to /sessions.
+  { id: 'admin', label: 'Admin', path: '/admin', icon: 'Shield', requiresAdmin: true },
   { id: 'pantry', label: 'Pantry', path: '/pantry', icon: 'Package', requiresAdmin: true },
   { id: 'journal', label: 'Journal', path: '/journal', icon: 'BookOpen', requiresAdmin: true },
   { id: 'connections', label: 'Connections', path: '/connections', icon: 'Link2' },

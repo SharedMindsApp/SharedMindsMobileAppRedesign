@@ -42,24 +42,43 @@ export function AdminRecurringSessions() {
   const [editing, setEditing] = useState<RecurringTemplate | 'new' | null>(null);
   const [upcomingByTemplate, setUpcomingByTemplate] = useState<Record<string, UpcomingMaterializedSession[]>>({});
 
-  async function load() {
+  async function load(opts?: { autoMaterialize?: boolean }) {
     setLoading(true);
     try {
+      // Auto-materialize on mount so the admin's templates always have rows in
+      // focus_sessions waiting to be displayed on /sessions. Idempotent via the
+      // unique index on (recurring_template_id, scheduled_at).
+      if (opts?.autoMaterialize) {
+        try {
+          const count = await RecurringSessionService.materialize(4);
+          if (count > 0) {
+            console.log(`[AdminRecurringSessions] auto-materialized ${count} new session row(s)`);
+          }
+        } catch (matErr) {
+          console.warn('[AdminRecurringSessions] auto-materialize on load failed:', matErr);
+        }
+      }
+
       const list = await RecurringSessionService.list();
       setTemplates(list);
       const previews: Record<string, UpcomingMaterializedSession[]> = {};
       await Promise.all(
         list.map(async (t) => {
-          try { previews[t.id] = await RecurringSessionService.upcomingForTemplate(t.id, 4); } catch { previews[t.id] = []; }
+          try { previews[t.id] = await RecurringSessionService.upcomingForTemplate(t.id, 4); }
+          catch (err) {
+            console.error(`[AdminRecurringSessions] upcomingForTemplate(${t.id}) failed:`, err);
+            previews[t.id] = [];
+          }
         }),
       );
+      console.log('[AdminRecurringSessions] templates loaded:', list.length, '· upcoming rows by template:', previews);
       setUpcomingByTemplate(previews);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load({ autoMaterialize: true }); }, []);
 
   async function handleToggle(t: RecurringTemplate) {
     await RecurringSessionService.update(t.id, { enabled: !t.enabled });
@@ -320,6 +339,14 @@ function TemplateEditorModal({
           quiet_mode: quietMode,
           enabled,
         });
+      }
+      // Auto-materialize the next 4 weeks so the admin sees their session
+      // appear on the calendar immediately. Idempotent — safe to repeat.
+      // Non-fatal if it fails; we still consider the save successful.
+      try {
+        if (enabled) await RecurringSessionService.materialize(4);
+      } catch (matErr) {
+        console.warn('[AdminRecurringSessions] auto-materialize failed:', matErr);
       }
       onSaved();
     } catch (e: any) {

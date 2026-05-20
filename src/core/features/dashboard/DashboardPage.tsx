@@ -7,14 +7,14 @@
  *   1. Greeting
  *   2. DayZeroWelcome hero
  *   3. TodayPlannerCard (hour grid + quick-add + intention)
- *   4. WeekPlannerCard (7-day strip + weekly intentions)
+ *   4. WeeklyIntentionsCard (weekly priorities + microtasks)
  *   5. CommunityPulseCard → UpcomingStrip → Feed → Finishes → Checklist
  *
  *   ──── Returning (≥1 sessions) ───────────────────────────────────
  *   1. Greeting + momentum chips
  *   2. SmartNextCard
  *   3. TodayPlannerCard
- *   4. WeekPlannerCard
+ *   4. WeeklyIntentionsCard
  *   5. CommunityPulseCard → UpcomingStrip → Feed → Finishes → Projects →
  *      Checklist → WeekStrip → Recent finishes
  */
@@ -37,7 +37,7 @@ import { SmartNextCard } from './SmartNextCard';
 import { CommunityPulseCard } from './CommunityPulseCard';
 import { DayZeroWelcome } from './DayZeroWelcome';
 import { TodayPlannerCard } from './TodayPlannerCard';
-import { WeekPlannerCard } from './WeekPlannerCard';
+import { UpcomingSessionCountdown } from './UpcomingSessionCountdown';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel';
 import { OnboardingChecklist } from './OnboardingChecklist';
@@ -403,11 +403,13 @@ export function DashboardPage() {
           {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
           <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
 
+          {/* Countdown banner — shows only when a session is within 24 h */}
+          <UpcomingSessionCountdown />
+
           {/* 2. Today — hour grid + one-liner intention + quick-add templates */}
           <TodayPlannerCard onStartSession={openDeclareWithTemplate} />
 
-          {/* 3. This week — 7-day strip + weekly intentions + microtasks */}
-          <WeekPlannerCard />
+          {/* (Weekly intentions are now integrated into TodayPlannerCard as a sidebar) */}
 
           {/* 4. Community pulse — the room is alive (or "be the first") */}
           <CommunityPulseCard
@@ -442,11 +444,13 @@ export function DashboardPage() {
             onSchedule={() => setShowSchedule(true)}
           />
 
+          {/* Countdown banner — shows only when a session is within 24 h */}
+          <UpcomingSessionCountdown />
+
           {/* 2. Today — hour grid + one-liner intention + quick-add templates */}
           <TodayPlannerCard onStartSession={openDeclareWithTemplate} />
 
-          {/* 3. This week — 7-day strip + weekly intentions + microtasks */}
-          <WeekPlannerCard />
+          {/* (Weekly intentions are now integrated into TodayPlannerCard as a sidebar) */}
 
           {/* 4. Community pulse */}
           <CommunityPulseCard

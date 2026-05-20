@@ -7,12 +7,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Flag } from 'lucide-react';
 import {
   fetchMessages, sendMessage, subscribeToMessages, markConversationRead,
   fetchConversations, type DmMessage, type DmConversation,
 } from '../../services/MessageService';
 import { useAuth } from '../../auth/AuthProvider';
+import { ReportModal } from '../moderation/ReportModal';
+
+interface ReportTarget { id: string; userId: string; content: string; }
 
 const AVATAR_GRAD = [
   'from-violet-400 to-fuchsia-500',
@@ -58,6 +61,7 @@ export function MessageThreadPage() {
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Resolve the conversation metadata (we already have the list cached server-side)
@@ -188,7 +192,18 @@ export function MessageThreadPage() {
                     </span>
                   </div>
                 )}
-                <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                <div className={`group flex items-end gap-1.5 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  {/* Flag button — only on others' messages, revealed on hover */}
+                  {!isMine && (
+                    <button
+                      type="button"
+                      title="Report message"
+                      onClick={() => setReportTarget({ id: m.id, userId: m.sender_id, content: m.content })}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity mb-1 w-6 h-6 rounded-full bg-surface-container hover:bg-red-50 flex items-center justify-center shrink-0"
+                    >
+                      <Flag size={10} className="stitch-text-secondary hover:text-red-500" />
+                    </button>
+                  )}
                   <div className={`max-w-[78%] rounded-2xl px-3.5 py-2 ${
                     isMine
                       ? 'stitch-btn--primary text-white rounded-br-sm'
@@ -237,6 +252,17 @@ export function MessageThreadPage() {
           Press Enter to send · Shift+Enter for new line
         </p>
       </div>
+
+      {/* Report modal */}
+      {reportTarget && (
+        <ReportModal
+          contentType="dm"
+          contentId={reportTarget.id}
+          flaggedUserId={reportTarget.userId}
+          contentSnapshot={reportTarget.content}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,29 +1,34 @@
 /**
  * ProjectsPage — list view for the Projects MVP.
  *
- * A project is the macro goal a session chips at. Show all projects the
- * user can see (own + shared), each as a card with: color dot, title,
- * one-line description, member avatars, task/session counts, and a
- * "Make active" toggle. Tapping a card navigates to ProjectDetailPage.
+ * Each project card is visually rich: colored accent band, task-completion
+ * progress bar, session tally, member avatar stack, active pin badge.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Target, CheckCircle2, Pin } from 'lucide-react';
+import { Plus, Users, Target, CheckCircle2, Pin, Play, Archive, Zap } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreProject } from '../../data/CoreDataContext';
-import { SurfaceCard, PageGreeting, GradientButton } from '../../ui/CorePage';
+import { PageGreeting, GradientButton } from '../../ui/CorePage';
 import { ProjectEditorModal } from './ProjectEditorModal';
 
 // ── Color tokens (match the editor modal swatches) ───────────────
 
-export const PROJECT_COLORS: Record<string, { hex: string; soft: string; ring: string }> = {
-  cyan:    { hex: '#22d3ee', soft: 'bg-cyan-100 text-cyan-800',     ring: 'ring-cyan-500/40' },
-  blue:    { hex: '#3b82f6', soft: 'bg-blue-100 text-blue-800',     ring: 'ring-blue-500/40' },
-  violet:  { hex: '#8b5cf6', soft: 'bg-violet-100 text-violet-800', ring: 'ring-violet-500/40' },
-  emerald: { hex: '#10b981', soft: 'bg-emerald-100 text-emerald-800', ring: 'ring-emerald-500/40' },
-  amber:   { hex: '#f59e0b', soft: 'bg-amber-100 text-amber-800',   ring: 'ring-amber-500/40' },
-  rose:    { hex: '#f43f5e', soft: 'bg-rose-100 text-rose-800',     ring: 'ring-rose-500/40' },
+export const PROJECT_COLORS: Record<string, {
+  hex: string;
+  soft: string;
+  ring: string;
+  gradient: string;
+  textDark: string;
+  bar: string;
+}> = {
+  cyan:    { hex: '#22d3ee', soft: 'bg-cyan-50',    ring: 'ring-cyan-400/40',    gradient: 'from-cyan-500 to-teal-500',      textDark: 'text-cyan-700',    bar: 'bg-cyan-500' },
+  blue:    { hex: '#3b82f6', soft: 'bg-blue-50',    ring: 'ring-blue-400/40',    gradient: 'from-blue-500 to-indigo-500',    textDark: 'text-blue-700',    bar: 'bg-blue-500' },
+  violet:  { hex: '#8b5cf6', soft: 'bg-violet-50',  ring: 'ring-violet-400/40',  gradient: 'from-violet-500 to-purple-600',  textDark: 'text-violet-700',  bar: 'bg-violet-500' },
+  emerald: { hex: '#10b981', soft: 'bg-emerald-50', ring: 'ring-emerald-400/40', gradient: 'from-emerald-500 to-teal-600',   textDark: 'text-emerald-700', bar: 'bg-emerald-500' },
+  amber:   { hex: '#f59e0b', soft: 'bg-amber-50',   ring: 'ring-amber-400/40',   gradient: 'from-amber-400 to-orange-500',   textDark: 'text-amber-700',   bar: 'bg-amber-500' },
+  rose:    { hex: '#f43f5e', soft: 'bg-rose-50',    ring: 'ring-rose-400/40',    gradient: 'from-rose-500 to-pink-600',      textDark: 'text-rose-700',    bar: 'bg-rose-500' },
 };
 
 export function projectColorMeta(token: string | null) {
@@ -41,23 +46,26 @@ export function ProjectsPage() {
   } = useCoreData();
   const [editorOpen, setEditorOpen] = useState(false);
 
-  // refresh on mount to pick up newly accepted shared projects
   useEffect(() => { refreshProjects(); /* eslint-disable-next-line */ }, []);
 
   // Task counts by project
   const taskCounts = useMemo(() => {
-    const map = new Map<string, { open: number; done: number }>();
+    const map = new Map<string, { open: number; done: number; total: number }>();
     for (const t of tasks) {
       if (!t.projectId) continue;
-      const c = map.get(t.projectId) ?? { open: 0, done: 0 };
+      const c = map.get(t.projectId) ?? { open: 0, done: 0, total: 0 };
+      c.total += 1;
       if (t.done) c.done += 1; else c.open += 1;
       map.set(t.projectId, c);
     }
     return map;
   }, [tasks]);
 
+  const activeProjects = projects.filter((p) => p.status === 'active');
+  const archivedProjects = projects.filter((p) => p.status !== 'active');
+
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-6">
       <PageGreeting
         greeting="Projects"
         subtitle="The macro goals your sessions are chipping at."
@@ -74,19 +82,34 @@ export function ProjectsPage() {
       {projects.length === 0 ? (
         <EmptyState onCreate={() => setEditorOpen(true)} />
       ) : (
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-          {projects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              isActive={project.id === activeProjectId}
-              taskCounts={taskCounts.get(project.id) ?? { open: 0, done: 0 }}
-              onOpen={() => navigate(`/projects/${project.id}`)}
-              onTogglePin={() =>
-                setActiveProject(project.id === activeProjectId ? null : project.id)
-              }
+        <div className="space-y-6">
+          {/* Active projects */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {activeProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                isActive={project.id === activeProjectId}
+                taskCounts={taskCounts.get(project.id) ?? { open: 0, done: 0, total: 0 }}
+                onOpen={() => navigate(`/projects/${project.id}`)}
+                onStartSession={() => navigate(`/projects/${project.id}`)}
+                onTogglePin={() =>
+                  setActiveProject(project.id === activeProjectId ? null : project.id)
+                }
+              />
+            ))}
+          </div>
+
+          {/* Archived — collapsed section */}
+          {archivedProjects.length > 0 && (
+            <ArchivedSection
+              projects={archivedProjects}
+              taskCounts={taskCounts}
+              activeProjectId={activeProjectId}
+              onOpen={(id) => navigate(`/projects/${id}`)}
+              onTogglePin={(id) => setActiveProject(id === activeProjectId ? null : id)}
             />
-          ))}
+          )}
         </div>
       )}
 
@@ -114,70 +137,189 @@ function ProjectCard({
 }: {
   project: CoreProject;
   isActive: boolean;
-  taskCounts: { open: number; done: number };
+  taskCounts: { open: number; done: number; total: number };
   onOpen: () => void;
+  onStartSession: () => void;
   onTogglePin: () => void;
 }) {
   const color = projectColorMeta(project.color);
-  const sharedBadge = project.scope === 'shared';
+  const progress = taskCounts.total > 0
+    ? Math.round((taskCounts.done / taskCounts.total) * 100)
+    : 0;
+  const isShared = project.scope === 'shared';
 
   return (
-    <SurfaceCard variant={isActive ? 'highlight' : 'default'} padding="md">
-      <div className="flex items-start gap-3 cursor-pointer" onClick={onOpen}>
-        {/* Color dot */}
-        <span
-          className="mt-1 w-3.5 h-3.5 rounded-full shrink-0 ring-2 ring-white shadow"
-          style={{ backgroundColor: color.hex }}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <h3 className="text-base font-extrabold stitch-text-primary truncate">
-              {project.name}
-            </h3>
-            {sharedBadge && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 uppercase tracking-wider shrink-0">
-                <Users size={9} /> {project.memberCount}
+    <div
+      className={`group relative bg-surface rounded-2xl overflow-hidden shadow-sm ring-1 transition-all duration-200 cursor-pointer
+        hover:shadow-md hover:-translate-y-0.5
+        ${isActive ? 'ring-2 ' + color.ring : 'ring-surface-container/80 hover:' + color.ring}`}
+      onClick={onOpen}
+    >
+      {/* Color accent band */}
+      <div className={`h-1.5 w-full bg-gradient-to-r ${color.gradient}`} />
+
+      <div className="p-4 space-y-3.5">
+        {/* Top row: title + badges */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+            {/* Color dot */}
+            <span
+              className="mt-0.5 w-3 h-3 rounded-full shrink-0 shadow-sm"
+              style={{ backgroundColor: color.hex }}
+            />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-extrabold stitch-text-primary truncate leading-snug">
+                {project.name}
+              </h3>
+              {project.description && (
+                <p className="text-xs stitch-text-secondary leading-snug mt-0.5 line-clamp-2">
+                  {project.description}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Badges */}
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {isActive && (
+              <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${color.soft} ${color.textDark}`}>
+                <Pin size={7} fill="currentColor" /> Active
               </span>
             )}
-          </div>
-          <p className="text-sm stitch-text-secondary leading-snug line-clamp-2 mb-3">
-            {project.description || 'No description yet.'}
-          </p>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold stitch-text-secondary">
-              <Target size={11} />
-              {taskCounts.open} open
-            </span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold stitch-text-secondary">
-              <CheckCircle2 size={11} />
-              {taskCounts.done} done
-            </span>
-            {project.status !== 'active' && (
-              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-surface-container stitch-text-secondary">
-                {project.status}
+            {isShared && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 uppercase tracking-wider">
+                <Users size={8} /> {project.memberCount ?? 2}
               </span>
             )}
           </div>
         </div>
-      </div>
 
-      {/* Pin toggle (separate click target, doesn't bubble to onOpen) */}
-      <div className="mt-3 pt-3 border-t border-surface-container/50">
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
-          className={`w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-bold transition-colors ${
-            isActive
-              ? 'bg-primary/10 text-primary'
-              : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
-          }`}
-        >
-          <Pin size={11} fill={isActive ? 'currentColor' : 'none'} />
-          {isActive ? 'Pinned as active' : 'Pin as active'}
-        </button>
+        {/* Progress bar (only when there are tasks) */}
+        {taskCounts.total > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">
+                Progress
+              </span>
+              <span className={`text-[10px] font-extrabold tabular-nums ${color.textDark}`}>
+                {progress}%
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-surface-container-low rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${color.bar}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {taskCounts.total > 0 ? (
+            <>
+              <StatChip
+                icon={<CheckCircle2 size={10} />}
+                label={`${taskCounts.done}/${taskCounts.total} tasks`}
+              />
+              {taskCounts.open > 0 && (
+                <StatChip
+                  icon={<Target size={10} />}
+                  label={`${taskCounts.open} remaining`}
+                />
+              )}
+            </>
+          ) : (
+            <span className="text-[11px] stitch-text-secondary italic">No tasks yet</span>
+          )}
+          {project.status !== 'active' && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-surface-container stitch-text-secondary">
+              <Archive size={8} /> {project.status}
+            </span>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="h-px bg-surface-container/60" />
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-between">
+          {/* Pin toggle */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 transition-colors ${
+              isActive
+                ? `${color.soft} ${color.textDark}`
+                : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
+            }`}
+          >
+            <Pin size={10} fill={isActive ? 'currentColor' : 'none'} />
+            {isActive ? 'Pinned' : 'Pin'}
+          </button>
+
+          {/* Open arrow */}
+          <span className={`text-[11px] font-bold ${color.textDark} opacity-0 group-hover:opacity-100 transition-opacity`}>
+            Open →
+          </span>
+        </div>
       </div>
-    </SurfaceCard>
+    </div>
+  );
+}
+
+function StatChip({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold stitch-text-secondary">
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+// ── Archived section ─────────────────────────────────────────────
+
+function ArchivedSection({
+  projects, taskCounts, activeProjectId, onOpen, onTogglePin,
+}: {
+  projects: CoreProject[];
+  taskCounts: Map<string, { open: number; done: number; total: number }>;
+  activeProjectId: string | null;
+  onOpen: (id: string) => void;
+  onTogglePin: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 text-xs font-bold stitch-text-secondary uppercase tracking-widest mb-3 hover:stitch-text-primary transition-colors"
+      >
+        <Archive size={12} />
+        Archived ({projects.length})
+        <span className="text-[10px] font-normal normal-case tracking-normal">
+          {open ? '▲ hide' : '▼ show'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="grid gap-3 sm:grid-cols-2 opacity-70">
+          {projects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              isActive={project.id === activeProjectId}
+              taskCounts={taskCounts.get(project.id) ?? { open: 0, done: 0, total: 0 }}
+              onOpen={() => onOpen(project.id)}
+              onStartSession={() => onOpen(project.id)}
+              onTogglePin={() => onTogglePin(project.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -185,25 +327,23 @@ function ProjectCard({
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <SurfaceCard>
-      <div className="flex flex-col items-center text-center py-10 px-6">
-        <div className="w-16 h-16 rounded-[1.5rem] bg-primary/8 flex items-center justify-center mb-5">
-          <Target size={26} className="text-primary/60" />
-        </div>
-        <p className="text-base font-bold stitch-text-primary mb-1.5">
-          No projects yet
-        </p>
-        <p className="text-sm stitch-text-secondary max-w-[300px] leading-relaxed mb-6">
-          A project is a macro goal — the bigger thing your sessions are chipping
-          at. Capture one to give your work a home.
-        </p>
-        <GradientButton onClick={onCreate}>
-          <span className="inline-flex items-center gap-1.5">
-            <Plus size={14} strokeWidth={3} />
-            Create your first project
-          </span>
-        </GradientButton>
+    <div className="flex flex-col items-center text-center py-14 px-6 bg-surface rounded-2xl ring-1 ring-surface-container/80 shadow-sm">
+      <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-violet-100 to-blue-100 flex items-center justify-center mb-5 shadow-inner">
+        <Zap size={28} className="text-violet-500" />
       </div>
-    </SurfaceCard>
+      <p className="text-base font-extrabold stitch-text-primary mb-1.5">
+        What are you building?
+      </p>
+      <p className="text-sm stitch-text-secondary max-w-[300px] leading-relaxed mb-6">
+        A project is a macro goal — the bigger thing your sessions are chipping
+        at. Give your work a home and watch the progress stack up.
+      </p>
+      <GradientButton onClick={onCreate}>
+        <span className="inline-flex items-center gap-1.5">
+          <Plus size={14} strokeWidth={3} />
+          Create your first project
+        </span>
+      </GradientButton>
+    </div>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw } from 'lucide-react';
+import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw, Flame } from 'lucide-react';
 import { getFocusSessionSummary, endFocusSession } from '../../lib/sessions/focus';
 import { endCommunitySession } from '../../core/services/SessionService';
+import { supabase } from '../../lib/supabase';
 import type { FocusSessionSummary, SessionOutcome } from '../../lib/sessions/focusTypes';
 
 const OUTCOME_OPTIONS: { value: SessionOutcome; label: string; icon: any; description: string }[] = [
@@ -320,6 +321,38 @@ const OUTCOME_DISPLAY: Record<string, {
   },
 };
 
+/** Fetch count of completed sessions this week (Mon 00:00 → now) for the current user. */
+async function fetchWeekSessionCount(): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  // Start of the current ISO week (Monday)
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sun
+  const daysFromMon = (day === 0 ? 6 : day - 1);
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - daysFromMon);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const { count } = await supabase
+    .from('focus_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('status', 'completed')
+    .gte('end_time', weekStart.toISOString());
+
+  return count ?? 0;
+}
+
+function streakMessage(count: number): string {
+  if (count === 1) return "First session done this week — nice start! 🌱";
+  if (count === 2) return "Two sessions this week. The momentum is building! ⚡";
+  if (count === 3) return "That's your 3rd session this week — you're on fire! 🔥";
+  if (count === 4) return "Four sessions this week. Seriously impressive! 💪";
+  if (count === 5) return "Five sessions this week — that's a full working week! 🏆";
+  return `${count} sessions this week. You're on an absolute tear! 🚀`;
+}
+
 function CommunitySummary({
   summary,
   onNewSession,
@@ -335,12 +368,20 @@ function CommunitySummary({
     ?? summary.session.intended_duration_minutes
     ?? 0;
 
+  const [weekCount, setWeekCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchWeekSessionCount().then(setWeekCount).catch(() => setWeekCount(null));
+  }, []);
+
+  const isFinished = outcome === 'finished';
+
   return (
     <div className="min-h-screen bg-surface flex flex-col">
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 space-y-8 max-w-md mx-auto w-full">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 space-y-6 max-w-md mx-auto w-full">
 
         {/* Outcome emoji + heading */}
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-2">
           <div className="text-6xl mb-2">{display.emoji}</div>
           <h1 className="stitch-headline text-2xl font-extrabold tracking-tight">
             {display.heading}
@@ -365,6 +406,45 @@ function CommunitySummary({
             </p>
           )}
         </div>
+
+        {/* ── Streak celebration (only when finished + we have data) ── */}
+        {isFinished && weekCount !== null && weekCount > 0 && (
+          <div className="w-full rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 ring-1 ring-violet-200/60 p-5 flex items-start gap-4">
+            {/* Flame icon with count badge */}
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-rose-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
+                <Flame size={24} className="text-white" fill="currentColor" />
+              </div>
+              {weekCount >= 3 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow">
+                  {weekCount}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-violet-800 leading-snug">
+                {streakMessage(weekCount)}
+              </p>
+              <div className="mt-2 flex gap-1">
+                {Array.from({ length: Math.min(weekCount, 7) }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-1.5 flex-1 rounded-full bg-gradient-to-r from-violet-400 to-indigo-400"
+                  />
+                ))}
+                {Array.from({ length: Math.max(0, 5 - weekCount) }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="h-1.5 flex-1 rounded-full bg-violet-100"
+                  />
+                ))}
+              </div>
+              <p className="text-[11px] text-violet-500 mt-1 font-medium">
+                {weekCount} of 5 sessions this week
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Next actions */}
         <div className="w-full space-y-3">

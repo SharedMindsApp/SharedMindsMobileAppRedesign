@@ -13,10 +13,13 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Users, Loader2 } from 'lucide-react';
+import { Send, Users, Loader2, Flag } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
 import { Avatar } from '../../ui/Avatar';
+import { ReportModal } from '../moderation/ReportModal';
+
+interface ReportTarget { id: string; userId: string; content: string; }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,6 +73,7 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
   const listRef   = useRef<HTMLDivElement>(null);
@@ -262,11 +266,11 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
         ) : (
           <>
             {messages.map((msg, i) => {
-              const isOwn     = msg.user_id === user?.id;
-              const showHead  = shouldShowHeader(messages, i);
+              const isOwn    = msg.user_id === user?.id;
+              const showHead = shouldShowHeader(messages, i);
 
               return (
-                <div key={msg.id} className={showHead ? 'mt-3 first:mt-0' : 'mt-0.5'}>
+                <div key={msg.id} className={`group ${showHead ? 'mt-3 first:mt-0' : 'mt-0.5'}`}>
                   {showHead && (
                     <div className="flex items-center gap-2 mb-1">
                       <Avatar
@@ -282,10 +286,21 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
                       <span className="text-[11px] text-gray-400">{formatTime(msg.created_at)}</span>
                     </div>
                   )}
-                  <div className={showHead ? 'ml-9' : 'ml-9'}>
-                    <p className={`text-sm leading-relaxed text-gray-800 break-words whitespace-pre-wrap`}>
+                  <div className="ml-9 flex items-start gap-1">
+                    <p className="flex-1 text-sm leading-relaxed text-gray-800 break-words whitespace-pre-wrap">
                       {msg.content}
                     </p>
+                    {/* Report button — only on other users' messages, revealed on hover */}
+                    {!isOwn && (
+                      <button
+                        type="button"
+                        title="Report message"
+                        onClick={() => setReportTarget({ id: msg.id, userId: msg.user_id, content: msg.content })}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 hover:bg-red-50 flex items-center justify-center mt-0.5"
+                      >
+                        <Flag size={10} className="text-gray-400 hover:text-red-500" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -325,6 +340,17 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
           {draft.length}/500 · Enter to send
         </p>
       </div>
+
+      {/* Report modal */}
+      {reportTarget && (
+        <ReportModal
+          contentType="chat"
+          contentId={reportTarget.id}
+          flaggedUserId={reportTarget.userId}
+          contentSnapshot={reportTarget.content}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -12,11 +12,14 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, ChevronLeft, ChevronRight, Calendar as CalIcon,
   Users, UserPlus, User, MicOff, Loader2, X, Clock, StopCircle, Plus,
+  CalendarPlus,
 } from 'lucide-react';
+import { downloadIcs } from '../../../lib/sessions/icsExport';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useAuth } from '../../auth/AuthProvider';
 import { DeclareSessionModal } from './DeclareSessionModal';
@@ -177,6 +180,18 @@ export function CalendarView() {
   const [detail, setDetail] = useState<GridSession | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
 
+  // Type filter chips — toggle which session modes / booking status are visible.
+  // All on by default. The user can narrow to just solo, just 1-on-1, booked
+  // sessions they've joined as partner, etc.
+  const [filter, setFilter] = useState<{
+    solo: boolean; oneOnOne: boolean; group: boolean; booked: boolean;
+  }>({
+    solo: true,
+    oneOnOne: true,
+    group: true,
+    booked: true,
+  });
+
   // tick "now" every minute for the red current-time line
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -190,10 +205,16 @@ export function CalendarView() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  // load scheduled
+  // load scheduled — scoped to "my sessions" (mine + admin-curated community sessions)
   useEffect(() => {
-    fetchUpcomingScheduledSessions().then(setScheduled).catch(() => {});
-  }, [modalState.kind]);
+    fetchUpcomingScheduledSessions(user?.id)
+      .then((rows) => {
+        setScheduled(rows);
+      })
+      .catch((err) => {
+        console.error('[CalendarView] failed to fetch scheduled sessions:', err);
+      });
+  }, [modalState.kind, user?.id]);
 
   // visible day window
   const days = useMemo(
@@ -201,14 +222,44 @@ export function CalendarView() {
     [anchor, dayCount]
   );
 
-  // sessions for the visible window
+  // sessions for the visible window — apply the type filter chips here so the
+  // user can narrow the calendar to just solo blocks, just 1-on-1s, booked
+  // sessions, etc. Solo sessions belonging to OTHER users are always hidden.
   const sessionsByDay = useMemo(() => {
+    /**
+     * @param mode        — session_mode value from the DB row
+     * @param isMine      — user_id === me (I'm hosting)
+     * @param isBooked    — partner_user_id === me (I've joined as partner)
+     */
+    function passesFilter(
+      mode: string | undefined | null,
+      isMine: boolean,
+      isBooked: boolean,
+    ): boolean {
+      // Solo sessions are always private — never show another user's solo block
+      if (mode === 'solo') return filter.solo && isMine;
+
+      // Sessions where the current user is the booked partner
+      if (isBooked) return filter.booked;
+
+      // Regular mode-based filtering for unbooked sessions I'm not hosting
+      if (mode === 'one_on_one') return filter.oneOnOne;
+      return filter.group; // 'group' or null/unknown
+    }
     const all: GridSession[] = [
-      ...active.filter((s) => s.session_mode !== 'solo').map(toGridSession),
-      ...scheduled.filter((s) => (s as any).session_mode !== 'solo').map(toGridScheduled),
+      ...active
+        .filter((s) =>
+          passesFilter(s.session_mode, s.user_id === user?.id, (s as any).partner_user_id === user?.id)
+        )
+        .map(toGridSession),
+      ...scheduled
+        .filter((s: any) =>
+          passesFilter(s.session_mode, s.user_id === user?.id, s.partner_user_id === user?.id)
+        )
+        .map(toGridScheduled),
     ];
     return days.map((day) => all.filter((s) => sameDay(s.startsAt, day)));
-  }, [active, scheduled, days]);
+  }, [active, scheduled, days, filter, user?.id]);
 
   // auto-scroll grid to current hour on mount
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -234,8 +285,10 @@ export function CalendarView() {
     const at = new Date(day);
     at.setHours(START_HOUR, 0, 0, 0);
     at.setMinutes(slotIndex * SLOT_MINUTES);
-    // Past slots → ignore (or could start now). For simplicity: refuse past.
+    // Past slots → ignore
     if (at.getTime() < Date.now() - 60_000) return;
+    // Slots more than 4 weeks ahead → ignore (too far out to be useful)
+    if (at.getTime() > Date.now() + 28 * 24 * 60 * 60 * 1000) return;
     setModalState({ kind: 'schedule', at: snapToSlot(at) });
   }
 
@@ -296,6 +349,47 @@ export function CalendarView() {
           <User size={14} />
           Solo session
         </button>
+
+        {/* Type filter — scope the calendar to just solo / 1-on-1 / group */}
+        <div className="rounded-2xl bg-surface-container-low/60 ring-1 ring-surface-container/60 px-3 py-3">
+          <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-2">
+            Show
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              { key: 'solo',     label: 'Solo',    Icon: User,     onCls: 'bg-rose-100 text-rose-700 ring-rose-200' },
+              { key: 'oneOnOne', label: '1-on-1',  Icon: UserPlus, onCls: 'bg-violet-100 text-violet-700 ring-violet-200' },
+              { key: 'group',    label: 'Group',   Icon: Users,    onCls: 'bg-blue-100 text-blue-700 ring-blue-200' },
+              { key: 'booked',   label: 'Booked',  Icon: CalIcon,  onCls: 'bg-emerald-100 text-emerald-700 ring-emerald-200' },
+            ] as const).map(({ key, label, Icon, onCls }) => {
+              const isOn = filter[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilter((prev) => ({ ...prev, [key]: !prev[key] }))}
+                  className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-full ring-1 transition-all ${
+                    isOn
+                      ? onCls
+                      : 'bg-transparent text-slate-400 ring-surface-container hover:text-slate-600 line-through decoration-1'
+                  }`}
+                >
+                  <Icon size={11} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {!filter.solo && !filter.oneOnOne && !filter.group && !filter.booked && (
+            <button
+              type="button"
+              onClick={() => setFilter({ solo: true, oneOnOne: true, group: true, booked: true })}
+              className="mt-2 text-[10px] font-bold text-primary hover:opacity-70 transition-opacity"
+            >
+              Show all
+            </button>
+          )}
+        </div>
 
         {/* Live activity strip */}
         <div className="rounded-2xl bg-surface-container-low px-4 py-3">
@@ -417,21 +511,23 @@ export function CalendarView() {
                     slotDate.setHours(START_HOUR, 0, 0, 0);
                     slotDate.setMinutes(slotIdx * SLOT_MINUTES);
                     const isPast = slotDate.getTime() < Date.now() - 60_000;
+                    const isTooFar = slotDate.getTime() > Date.now() + 28 * 24 * 60 * 60 * 1000;
+                    const isDisabled = isPast || isTooFar;
                     return (
                       <button
                         key={slotIdx}
                         type="button"
-                        disabled={isPast}
+                        disabled={isDisabled}
                         onClick={() => handleSlotClick(day, slotIdx)}
                         style={{ height: SLOT_PX }}
                         className={`block w-full border-b border-surface-container/40 text-left group transition-colors ${
-                          isPast
+                          isDisabled
                             ? 'cursor-default'
                             : 'cursor-pointer hover:bg-primary/5'
                         }`}
                         aria-label={`Book session at ${slotDate.toLocaleString()}`}
                       >
-                        {!isPast && (
+                        {!isDisabled && (
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 pt-0.5 text-[10px] font-bold text-primary">
                             <Plus size={10} /> Book
                           </span>
@@ -533,64 +629,198 @@ function SessionBlock({
 
   const mineRing = isMine ? 'ring-2 ring-primary/50' : '';
 
+  // Pretty time range (e.g. "10:00 – 10:50")
+  const endTime = new Date(session.startsAt.getTime() + session.intended_duration_minutes * 60_000);
+  const fmtTime = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const timeRange = `${fmtTime(session.startsAt)} – ${fmtTime(endTime)}`;
+
+  // Hover-popover placement: flip above the block when there's not enough
+  // room below the viewport. Measured on mouseenter so it tracks the user's
+  // current scroll position.
+  const blockRef = useRef<HTMLDivElement | null>(null);
+  const [popoverPlacement, setPopoverPlacement] = useState<'below' | 'above'>('below');
+  const POPOVER_HEIGHT_PX = 230; // approx — see hover card body below
+
+  function updatePlacement() {
+    if (!blockRef.current) return;
+    const rect = blockRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    if (spaceBelow < POPOVER_HEIGHT_PX && spaceAbove > spaceBelow) {
+      setPopoverPlacement('above');
+    } else {
+      setPopoverPlacement('below');
+    }
+  }
+
+  function handleIcsClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    const url = typeof window !== 'undefined'
+      ? `${window.location.origin}/session/${session.id}`
+      : null;
+    downloadIcs({
+      id: session.id,
+      title: session.session_title ?? session.session_goal ?? 'SharedMinds session',
+      description: [
+        session.session_goal,
+        session.project_title ? `Project: ${session.project_title}` : null,
+        url ? `Join: ${url}` : null,
+      ].filter(Boolean).join('\n') || null,
+      startsAt: session.startsAt,
+      durationMins: session.intended_duration_minutes,
+      url,
+    });
+  }
+
   return (
-    <button
-      type="button"
+    // Outer div acts as a button — avoids nested-<button> HTML-spec violation
+    // while still allowing an inner <button> for the ICS download icon.
+    <div
+      ref={blockRef}
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`absolute left-0.5 right-0.5 rounded-lg border ${baseBg} ${mineRing} px-1.5 py-1 text-left overflow-hidden transition-colors active:scale-[0.99] z-20`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(e as any); }}
+      onMouseEnter={updatePlacement}
+      onFocus={updatePlacement}
+      className={`group absolute left-0.5 right-0.5 rounded-lg border ${baseBg} ${mineRing} px-1.5 py-1 text-left overflow-visible transition-all active:scale-[0.99] z-20 hover:z-40 hover:shadow-xl hover:scale-[1.04] hover:border-primary/60 origin-center cursor-pointer select-none`}
       style={{ top, height }}
     >
-      <div className="flex items-center gap-1.5 mb-0.5">
-        {session.avatar_url ? (
-          <img src={session.avatar_url} alt={session.display_name} className="w-4 h-4 rounded-md object-cover shrink-0" />
-        ) : (
-          <div className={`w-4 h-4 rounded-md bg-gradient-to-br ${avatarHashClass(session.display_name)} flex items-center justify-center text-[8px] font-bold text-white shrink-0`}>
-            {session.display_name.charAt(0).toUpperCase()}
+      {/* Compact body — always visible */}
+      <div className="overflow-hidden h-full">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          {session.avatar_url ? (
+            <img src={session.avatar_url} alt={session.display_name} className="w-4 h-4 rounded-md object-cover shrink-0" />
+          ) : (
+            <div className={`w-4 h-4 rounded-md bg-gradient-to-br ${avatarHashClass(session.display_name)} flex items-center justify-center text-[8px] font-bold text-white shrink-0`}>
+              {session.display_name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <span className="text-[10px] font-bold stitch-text-primary truncate flex-1 min-w-0">
+            {session.display_name}
+          </span>
+          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+        </div>
+        <p className="text-[10px] stitch-text-secondary leading-tight line-clamp-2">
+          {session.session_goal ?? session.session_title ?? 'Working on something'}
+        </p>
+        {session.project_title && height > 40 && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ backgroundColor: projectDot(session.project_color) }}
+            />
+            <span className="text-[9px] font-bold uppercase tracking-wider stitch-text-secondary truncate">
+              {session.project_title}
+            </span>
           </div>
         )}
-        <span className="text-[10px] font-bold stitch-text-primary truncate flex-1 min-w-0">
-          {session.display_name}
-        </span>
-        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+        {height > 50 && (
+          <div className="flex items-center gap-1 mt-1 flex-wrap">
+            {isOneOnOne ? (
+              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider text-violet-700">
+                <UserPlus size={8} />1-on-1
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider stitch-text-secondary">
+                <Users size={8} />Group
+              </span>
+            )}
+            {session.quiet_mode && (
+              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider stitch-text-secondary">
+                <MicOff size={8} />Quiet
+              </span>
+            )}
+            {partnerOpen && (
+              <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-600">
+                Slot open
+              </span>
+            )}
+          </div>
+        )}
       </div>
-      <p className="text-[10px] stitch-text-secondary leading-tight line-clamp-2">
-        {session.session_goal ?? session.session_title ?? 'Working on something'}
-      </p>
-      {session.project_title && height > 40 && (
-        <div className="flex items-center gap-1 mt-0.5">
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ backgroundColor: projectDot(session.project_color) }}
-          />
-          <span className="text-[9px] font-bold uppercase tracking-wider stitch-text-secondary truncate">
-            {session.project_title}
-          </span>
-        </div>
-      )}
-      {height > 50 && (
-        <div className="flex items-center gap-1 mt-1 flex-wrap">
-          {isOneOnOne ? (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider text-violet-700">
-              <UserPlus size={8} />1-on-1
-            </span>
+
+      {/* Rich hover popover — flips above when the block is near the bottom of the viewport */}
+      <div
+        className={`hidden group-hover:block absolute left-1/2 -translate-x-1/2 w-64 rounded-xl bg-white shadow-2xl ring-1 ring-black/5 p-3 z-50 pointer-events-none ${
+          popoverPlacement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'
+        }`}
+      >
+        {/* Triangle pointer — sits on the side closest to the block */}
+        <span
+          className={`absolute left-1/2 -translate-x-1/2 w-3 h-3 bg-white rotate-45 ring-1 ring-black/5 ${
+            popoverPlacement === 'above' ? '-bottom-1.5' : '-top-1.5'
+          }`}
+        />
+
+        <div className="relative flex items-center gap-2 mb-2">
+          {session.avatar_url ? (
+            <img src={session.avatar_url} alt={session.display_name} className="w-8 h-8 rounded-full object-cover shrink-0" />
           ) : (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider stitch-text-secondary">
-              <Users size={8} />Group
-            </span>
+            <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${avatarHashClass(session.display_name)} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
+              {session.display_name.charAt(0).toUpperCase()}
+            </div>
           )}
-          {session.quiet_mode && (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider stitch-text-secondary">
-              <MicOff size={8} />Quiet
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold stitch-text-primary truncate">{session.display_name}</p>
+            <p className="text-[10px] stitch-text-secondary">
+              {isActive ? 'Live now' : 'Scheduled'}
+            </p>
+          </div>
+        </div>
+
+        <p className="relative text-xs font-semibold stitch-text-primary leading-snug mb-2 line-clamp-3">
+          {session.session_goal ?? session.session_title ?? 'Working on something'}
+        </p>
+
+        <div className="relative text-[11px] stitch-text-secondary space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">When</span>
+            <span className="tabular-nums font-semibold stitch-text-primary">{timeRange}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Duration</span>
+            <span className="tabular-nums font-semibold stitch-text-primary">{session.intended_duration_minutes} min</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Mode</span>
+            <span className="font-semibold stitch-text-primary inline-flex items-center gap-1">
+              {isOneOnOne ? <><UserPlus size={10} /> 1-on-1</> : <><Users size={10} /> Group</>}
+              {session.quiet_mode && <span className="inline-flex items-center gap-0.5 ml-1"><MicOff size={10} /> Quiet</span>}
             </span>
+          </div>
+          {session.project_title && (
+            <div className="flex items-center justify-between">
+              <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Project</span>
+              <span className="font-semibold stitch-text-primary inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: projectDot(session.project_color) }} />
+                {session.project_title}
+              </span>
+            </div>
           )}
           {partnerOpen && (
-            <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-600">
-              Slot open
-            </span>
+            <div className="mt-2 pt-2 border-t border-surface-container/60 text-emerald-700 font-bold uppercase tracking-wider text-[9px]">
+              1-on-1 slot open — click to join
+            </div>
           )}
+          <div className="mt-2 pt-2 border-t border-surface-container/60 text-primary font-bold text-[10px] text-center">
+            Click for details →
+          </div>
         </div>
+      </div>
+
+      {/* "Add to calendar" icon — top-right corner, visible on hover */}
+      {session.status === 'scheduled' && (
+        <button
+          type="button"
+          title="Add to calendar"
+          onClick={handleIcsClick}
+          className="absolute top-1 right-1 w-5 h-5 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 hover:bg-white text-slate-600 hover:text-primary shadow-sm z-50 pointer-events-auto"
+        >
+          <CalendarPlus size={11} />
+        </button>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -679,10 +909,38 @@ function SessionDetailSheet({
     onClose();
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40" onClick={onClose}>
+  function handleAddToCalendar() {
+    const url = typeof window !== 'undefined'
+      ? `${window.location.origin}/session/${session.id}`
+      : null;
+    downloadIcs({
+      id: session.id,
+      title: session.session_title ?? session.session_goal ?? 'SharedMinds session',
+      description: [
+        session.session_goal,
+        session.project_title ? `Project: ${session.project_title}` : null,
+        url ? `Join: ${url}` : null,
+      ].filter(Boolean).join('\n') || null,
+      startsAt: session.startsAt,
+      durationMins: session.intended_duration_minutes,
+      url,
+    });
+  }
+
+  // Lock body scroll while open so the page underneath can't shift.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] sm:pt-[12vh] px-4 sm:px-6 pb-6 bg-black/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl"
+        className="w-full max-w-md bg-surface rounded-3xl p-6 shadow-2xl ring-1 ring-black/5 my-auto animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 mb-4">
@@ -778,14 +1036,23 @@ function SessionDetailSheet({
           )}
           <button
             type="button"
+            onClick={handleAddToCalendar}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
+          >
+            <CalendarPlus size={14} />
+            Add to calendar
+          </button>
+          <button
+            type="button"
             onClick={onClose}
-            className="w-full py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container"
+            className="w-full py-3 rounded-xl text-sm font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
           >
             Close
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

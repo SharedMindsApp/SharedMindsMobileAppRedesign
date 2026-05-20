@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -67,6 +67,10 @@ export function ActiveSessionPage() {
   const [ending, setEnding] = useState(false);
   const [session, setSession] = useState<FocusSession | null>(activeSession);
   const [loadingSession, setLoadingSession] = useState(!activeSession);
+  const [partnerJoined, setPartnerJoined] = useState<boolean>(
+    (activeSession?.partner_user_id ?? null) !== null,
+  );
+  const [showNoShowBanner, setShowNoShowBanner] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Load session if not in context (e.g. hard refresh)
@@ -103,6 +107,48 @@ export function ActiveSessionPage() {
       // Give a moment for the user to see "Time up" before redirecting
     }
   }, [timerSecondsRemaining, session, ending]);
+
+  // 1-on-1: subscribe to session row so we know when the partner claims the slot
+  useEffect(() => {
+    if (!session || session.session_mode !== 'one_on_one') return;
+
+    // Initialise from loaded session data
+    setPartnerJoined((session.partner_user_id ?? null) !== null);
+
+    const channel = supabase
+      .channel(`session-partner-watch:${session.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'focus_sessions',
+          filter: `id=eq.${session.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as FocusSession;
+          if (updated.partner_user_id) {
+            setPartnerJoined(true);
+            setShowNoShowBanner(false); // partner is here — dismiss any warning
+          }
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.id, session?.session_mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 1-on-1: show "partner hasn't joined" banner after 5 minutes if still no partner
+  useEffect(() => {
+    if (!session || session.session_mode !== 'one_on_one' || partnerJoined) return;
+
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    const id = setTimeout(() => {
+      if (!partnerJoined) setShowNoShowBanner(true);
+    }, FIVE_MINUTES);
+
+    return () => clearTimeout(id);
+  }, [session?.id, session?.session_mode, partnerJoined]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEnd = useCallback(() => {
     if (!session || ending) return;
@@ -205,6 +251,24 @@ export function ActiveSessionPage() {
           style={{ width: `${progress * 100}%` }}
         />
       </div>
+
+      {/* ── Partner no-show banner (1-on-1 only) ────────────── */}
+      {showNoShowBanner && (
+        <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 bg-amber-500/20 border-b border-amber-400/30">
+          <AlertTriangle size={15} className="text-amber-400 shrink-0" />
+          <p className="flex-1 text-xs text-amber-200 leading-snug">
+            Your partner hasn't joined yet — you can keep going solo or end early.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowNoShowBanner(false)}
+            className="shrink-0 text-amber-400/70 hover:text-amber-300 transition-colors"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* ── Body: Jitsi for group/1-on-1, focused view for solo ── */}
       {isSolo ? (

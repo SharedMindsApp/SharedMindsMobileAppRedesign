@@ -65,6 +65,10 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { profile, user, isAdmin, canAccessPantry, refreshProfile } = useAuth();
   const role = profile?.role || 'free';
+  // showAdmin: use isAdmin (profile.role) OR fall back to checking the JWT email
+  // directly so the admin panel is visible even if the cached profile has stale role.
+  const ADMIN_EMAILS = ['matthew@leonardfilming.com'];
+  const showAdmin = isAdmin || ADMIN_EMAILS.includes(user?.email ?? '');
   const isViewingAs = false;
   const { clearViewAs } = useViewAs();
   const { config, updatePreferences } = useUIPreferences();
@@ -221,13 +225,17 @@ export function Layout({ children }: LayoutProps) {
   const favouriteNavTabs = config.favouriteNavTabs || DEFAULT_FAVOURITE_NAV_TABS;
 
   const availableTabs = ALL_NAVIGATION_TABS.filter((tab) => {
-    if (tab.requiresAdmin && !isAdmin) return false;
+    if (tab.requiresAdmin && !showAdmin) return false;
     if (tab.requiresPantryAccess && !canAccessPantry) return false;
     return true;
   });
 
+  // Admins always see the Admin tab in the favourites bar, regardless of
+  // whatever favouriteNavTabs they've configured. Without this auto-pin the
+  // tab would only show up for users who manually added 'admin' to favourites
+  // (which is impossible since the tab didn't exist when their config was saved).
   const favouriteTabs = availableTabs.filter((tab) =>
-    favouriteNavTabs.includes(tab.id)
+    favouriteNavTabs.includes(tab.id) || (tab.id === 'admin' && showAdmin)
   );
 
   const moreTabs = availableTabs.filter((tab) =>
@@ -491,7 +499,7 @@ export function Layout({ children }: LayoutProps) {
                               )}
 
                               {/* ── Admin section ── */}
-                              {isAdmin && (
+                              {showAdmin && (
                                 <>
                                   <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
                                   <p className={`px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>

@@ -11,6 +11,7 @@ import {
   fetchFeed, createPost, subscribeToFeed,
   type CommunityPost, type CommunityPostType,
 } from '../../services/CommunityService';
+import { getBlockedUserIds } from '../../services/ModerationService';
 import { PageGreeting, SurfaceCard } from '../../ui/CorePage';
 import { PostCard } from './PostCard';
 
@@ -36,6 +37,12 @@ export function CommunityFeedPage() {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterId>('all');
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+
+  // Fetch blocked user IDs once on mount so their posts are hidden
+  useEffect(() => {
+    getBlockedUserIds().then(setBlockedIds).catch(() => {});
+  }, []);
 
   async function refresh() {
     const filterDef = FILTERS.find((f) => f.id === filter);
@@ -58,7 +65,11 @@ export function CommunityFeedPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  const filteredPosts = useMemo(() => posts, [posts]);
+  // Filter out posts from blocked users
+  const filteredPosts = useMemo(
+    () => posts.filter((p) => !blockedIds.includes(p.author_id)),
+    [posts, blockedIds],
+  );
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto">

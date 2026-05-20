@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -73,6 +73,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [saveAsTask, setSaveAsTask] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After a future session is scheduled, show a 2.5s confirmation before closing
+  const [scheduledConfirm, setScheduledConfirm] = useState(false);
 
   const openTasks = tasks.filter((t) => !t.done);
   const resolvedGoal = tab === 'pick' ? (selectedTask?.title ?? '') : goalText.trim();
@@ -98,14 +100,15 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
       }
 
       if (isScheduling && initialScheduledAt) {
-        // Future slot → create scheduled session, do not navigate into it
+        // Future slot → create scheduled session, show reminder confirmation then close
         await createScheduledSession({
           title: resolvedGoal,
           scheduledAt: initialScheduledAt,
           durationMinutes: duration,
           projectId: selectedProjectId ?? undefined,
         });
-        onClose();
+        setScheduledConfirm(true);
+        setTimeout(onClose, 2500);
         return;
       }
       const session = await startCommunitySession({
@@ -178,6 +181,26 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         <div className="sm:hidden flex justify-center pt-2 pb-1 shrink-0">
           <span className="w-10 h-1 rounded-full bg-surface-container-high" />
         </div>
+
+        {/* ── Scheduled confirmation overlay ───────────────── */}
+        {scheduledConfirm && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-surface rounded-3xl px-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+              <Bell size={28} className="text-emerald-600" strokeWidth={2} />
+            </div>
+            <div>
+              <p className="text-xl font-extrabold stitch-text-primary mb-1">Session scheduled!</p>
+              <p className="text-sm stitch-text-secondary leading-relaxed">
+                We'll remind you <span className="font-bold text-primary">15 minutes before</span> it starts
+                — via in-app notification and email.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs stitch-text-secondary">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Closing in a moment…
+            </div>
+          </div>
+        )}
 
         {/* ── Header ───────────────────────────────────────── */}
         <div className="shrink-0 flex items-center justify-between px-5 pt-3 sm:pt-4 pb-3">

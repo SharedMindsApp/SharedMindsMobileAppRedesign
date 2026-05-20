@@ -12,7 +12,10 @@ import {
   Menu,
   X,
   CalendarRange,
+  ShieldCheck,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { getOpenFlagCount } from '../../core/services/ModerationService';
 import { useAuth } from '../../core/auth/AuthProvider';
 import { useUIPreferences } from '../../contexts/UIPreferencesContext';
 import { ViewAsSelector } from './ViewAsSelector';
@@ -33,6 +36,15 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   }, [refreshProfile]);
   const { config } = useUIPreferences();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openFlagCount, setOpenFlagCount] = useState(0);
+
+  useEffect(() => {
+    getOpenFlagCount().then(setOpenFlagCount).catch(() => {});
+    const interval = setInterval(() => {
+      getOpenFlagCount().then(setOpenFlagCount).catch(() => {});
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -40,12 +52,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   const navItems = [
-    { path: '/admin',                     icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/admin/users',               icon: Users,           label: 'Users' },
-    { path: '/admin/recurring-sessions',  icon: CalendarRange,   label: 'Recurring Sessions' },
-    { path: '/admin/analytics',           icon: BarChart3,       label: 'Analytics' },
-    { path: '/admin/logs',                icon: ScrollText,      label: 'Activity Logs' },
-    { path: '/admin/settings',            icon: Settings,        label: 'Settings' },
+    { path: '/admin',                     icon: LayoutDashboard, label: 'Dashboard',          badge: 0 },
+    { path: '/admin/users',               icon: Users,           label: 'Users',              badge: 0 },
+    { path: '/admin/moderation',          icon: ShieldCheck,     label: 'Moderation',         badge: openFlagCount },
+    { path: '/admin/recurring-sessions',  icon: CalendarRange,   label: 'Recurring Sessions', badge: 0 },
+    { path: '/admin/analytics',           icon: BarChart3,       label: 'Analytics',          badge: 0 },
+    { path: '/admin/logs',                icon: ScrollText,      label: 'Activity Logs',      badge: 0 },
+    { path: '/admin/settings',            icon: Settings,        label: 'Settings',           badge: 0 },
   ];
 
   return (
@@ -118,7 +131,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 `}
               >
                 <Icon size={20} />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}

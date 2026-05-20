@@ -1,162 +1,182 @@
+/**
+ * AdminAnalytics — high-level usage dashboard for SharedMinds admins.
+ *
+ * Shows the metrics that actually exist in the current product:
+ *   • Users (role split + signups today/week)
+ *   • Sessions (active now, today, week, total + completion outcomes)
+ *   • Connections (accepted + pending)
+ *
+ * All numbers come from `getAnalytics()` in lib/admin.ts which queries
+ * profiles / focus_sessions / connections directly.
+ */
+
 import { useEffect, useState } from 'react';
-import { BarChart3, TrendingUp, AlertCircle } from 'lucide-react';
+import { Users, Activity, Link2, AlertCircle, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { getAnalytics } from '../../lib/admin';
+import type { AnalyticsSummary } from '../../lib/admin';
 
 export function AdminAnalytics() {
-  const [analytics, setAnalytics] = useState<any>(null);
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
-    loadAnalytics();
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getAnalytics()
+      .then((res) => { if (!cancelled) setSummary(res.summary); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load analytics'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
-
-  const loadAnalytics = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await getAnalytics();
-      setAnalytics(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load analytics');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Loading analytics...</div>
-        </div>
+        <div className="flex items-center justify-center h-64 text-gray-500">Loading analytics…</div>
       </AdminLayout>
     );
   }
 
-  if (error) {
+  if (error || !summary) {
     return (
       <AdminLayout>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="text-red-600" size={24} />
           <div>
             <h3 className="font-semibold text-red-900">Error</h3>
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700">{error ?? 'No data'}</p>
           </div>
         </div>
       </AdminLayout>
     );
   }
 
-  const eventTypes = analytics?.eventsByType || {};
-  const eventEntries = Object.entries(eventTypes).sort((a: any, b: any) => b[1] - a[1]);
-
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Analytics & Insights</h1>
-          <p className="text-gray-600">Monitor user activity and system usage</p>
+          <p className="text-gray-600">Monitor user activity and session engagement</p>
         </div>
 
+        {/* ── Three top stat cards ──────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Users */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">Total Users</h3>
-              <TrendingUp className="text-blue-600" size={24} />
+              <Users className="text-blue-600" size={22} />
             </div>
-            <p className="text-3xl font-bold text-gray-900">{analytics?.summary?.totalUsers || 0}</p>
-            <div className="mt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Free</span>
-                <span className="font-semibold">{analytics?.summary?.freeUsers || 0}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Premium</span>
-                <span className="font-semibold">{analytics?.summary?.premiumUsers || 0}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Admin</span>
-                <span className="font-semibold">{analytics?.summary?.adminUsers || 0}</span>
-              </div>
+            <p className="text-3xl font-bold text-gray-900 tabular-nums">{summary.totalUsers}</p>
+            <div className="mt-4 space-y-1.5 text-sm">
+              <Row label="Free"        value={summary.freeUsers} />
+              <Row label="Premium"     value={summary.premiumUsers} />
+              <Row label="Admin"       value={summary.adminUsers} />
+              <div className="border-t border-gray-100 my-2" />
+              <Row label="New today"   value={summary.newSignupsToday} muted />
+              <Row label="New this week" value={summary.newSignupsWeek} muted />
             </div>
           </div>
 
+          {/* Sessions */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Households</h3>
-              <BarChart3 className="text-teal-600" size={24} />
+              <h3 className="font-semibold text-gray-900">Sessions</h3>
+              <Activity className="text-emerald-600" size={22} />
             </div>
-            <p className="text-3xl font-bold text-gray-900">{analytics?.summary?.totalHouseholds || 0}</p>
-            <p className="text-sm text-gray-600 mt-2">Active households</p>
+            <p className="text-3xl font-bold text-gray-900 tabular-nums">{summary.totalSessions}</p>
+            <div className="mt-4 space-y-1.5 text-sm">
+              <Row label="Live now"    value={summary.activeSessionsNow} highlight={summary.activeSessionsNow > 0} />
+              <Row label="Today"       value={summary.sessionsToday} />
+              <Row label="This week"   value={summary.sessionsThisWeek} />
+              <div className="border-t border-gray-100 my-2" />
+              <Row label="Completion rate" value={`${summary.completionRate}%`} muted />
+            </div>
           </div>
 
+          {/* Connections */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">AI Reports</h3>
-              <BarChart3 className="text-amber-600" size={24} />
+              <h3 className="font-semibold text-gray-900">Connections</h3>
+              <Link2 className="text-violet-600" size={22} />
             </div>
-            <p className="text-3xl font-bold text-gray-900">{analytics?.summary?.totalReports || 0}</p>
-            <p className="text-sm text-gray-600 mt-2">Generated reports</p>
+            <p className="text-3xl font-bold text-gray-900 tabular-nums">{summary.totalConnections}</p>
+            <div className="mt-4 space-y-1.5 text-sm">
+              <Row label="Accepted"  value={summary.totalConnections} />
+              <Row label="Pending"   value={summary.pendingConnections} muted />
+            </div>
           </div>
         </div>
 
+        {/* ── Session outcome breakdown ─────────────────────────── */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Event Activity</h2>
-
-          {eventEntries.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No events recorded yet</div>
-          ) : (
-            <div className="space-y-3">
-              {eventEntries.map(([eventType, count]: [string, any]) => {
-                const maxCount = Math.max(...Object.values(eventTypes) as number[]);
-                const percentage = (count / maxCount) * 100;
-
-                return (
-                  <div key={eventType} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">{eventType}</span>
-                      <span className="text-sm font-bold text-gray-900">{count}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-teal-500 h-2 rounded-full transition-all"
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-50 to-teal-50 rounded-xl border border-blue-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Analytics Dashboard</h2>
-          <p className="text-gray-700 mb-4">
-            Advanced charts and visualizations coming soon. This section will include:
-          </p>
-          <ul className="space-y-2 text-gray-700">
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Daily active users timeline
-            </li>
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-teal-500 rounded-full"></div>
-              Questionnaire completion rates
-            </li>
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-              Report generation trends
-            </li>
-            <li className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
-              User retention metrics
-            </li>
-          </ul>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Session Outcomes</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <OutcomeTile
+              Icon={CheckCircle2}
+              iconCls="text-emerald-600 bg-emerald-50"
+              label="Finished"
+              count={summary.finishedSessions}
+            />
+            <OutcomeTile
+              Icon={Clock}
+              iconCls="text-amber-600 bg-amber-50"
+              label="Partially finished"
+              count={summary.partiallyFinished}
+            />
+            <OutcomeTile
+              Icon={XCircle}
+              iconCls="text-rose-600 bg-rose-50"
+              label="Something came up"
+              count={summary.somethingCameUp}
+            />
+          </div>
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function Row({
+  label, value, muted = false, highlight = false,
+}: {
+  label: string;
+  value: number | string;
+  muted?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex justify-between">
+      <span className={muted ? 'text-gray-500' : 'text-gray-600'}>{label}</span>
+      <span className={`font-semibold tabular-nums ${highlight ? 'text-emerald-600' : 'text-gray-900'}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function OutcomeTile({
+  Icon, iconCls, label, count,
+}: {
+  Icon: React.ElementType;
+  iconCls: string;
+  label: string;
+  count: number;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-100 p-4 flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconCls}`}>
+        <Icon size={20} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">{count}</p>
+        <p className="text-xs text-gray-500 mt-1">{label}</p>
+      </div>
+    </div>
   );
 }

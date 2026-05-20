@@ -12,8 +12,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Sparkles, MessageCircle, Send, Loader2, MoreHorizontal, Trash2,
-  CheckCircle2, HelpCircle, Hand, Lightbulb, Zap, FolderPlus, UserPlus2,
+  CheckCircle2, HelpCircle, Hand, Lightbulb, Zap, FolderPlus, UserPlus2, Flag,
 } from 'lucide-react';
+import { ReportModal } from '../moderation/ReportModal';
 import { useAuth } from '../../auth/AuthProvider';
 import {
   REACTION_OPTIONS,
@@ -75,6 +76,7 @@ export function PostCard({
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [sendingReply, setSendingReply] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Local mirror of reactions so toggling feels instant
   const [reactions, setReactions] = useState(post.reactions);
@@ -188,18 +190,18 @@ export function PostCard({
             </p>
           )}
         </div>
-        {isMine && (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="w-7 h-7 rounded-full hover:bg-surface-container flex items-center justify-center stitch-text-secondary"
-              aria-label="Post options"
-            >
-              <MoreHorizontal size={14} />
-            </button>
-            {menuOpen && (
-              <div className="absolute top-8 right-0 bg-surface rounded-xl shadow-lg ring-1 ring-surface-container/60 py-1 z-10 min-w-[120px]">
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="w-7 h-7 rounded-full hover:bg-surface-container flex items-center justify-center stitch-text-secondary"
+            aria-label="Post options"
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          {menuOpen && (
+            <div className="absolute top-8 right-0 bg-surface rounded-xl shadow-lg ring-1 ring-surface-container/60 py-1 z-10 min-w-[130px]">
+              {isMine && (
                 <button
                   type="button"
                   onClick={() => { setMenuOpen(false); handleDelete(); }}
@@ -207,10 +209,19 @@ export function PostCard({
                 >
                   <Trash2 size={11} /> Delete
                 </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+              {!isMine && (
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); setReportOpen(true); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold stitch-text-secondary hover:bg-surface-container transition-colors"
+                >
+                  <Flag size={11} /> Report
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Content */}
@@ -283,6 +294,17 @@ export function PostCard({
           </div>
         </div>
       )}
+
+      {/* Report modal */}
+      {reportOpen && (
+        <ReportModal
+          contentType="post"
+          contentId={post.id}
+          flaggedUserId={post.author_id}
+          contentSnapshot={post.content}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
     </article>
   );
 }
@@ -334,9 +356,13 @@ function ReactionPicker({
 // ── Reply row ───────────────────────────────────────────────────
 
 function ReplyRow({ reply }: { reply: CommunityReply }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [reportOpen, setReportOpen] = useState(false);
+  const isOwn = user?.id === reply.author_id;
+
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="group flex items-start gap-2.5">
       <button
         type="button"
         onClick={() => navigate(`/profile/${reply.author_id}`)}
@@ -357,6 +383,26 @@ function ReplyRow({ reply }: { reply: CommunityReply }) {
         </div>
         <p className="text-[10px] stitch-text-secondary mt-0.5 px-2">{formatTimeAgo(reply.created_at)}</p>
       </div>
+      {/* Flag — only on others' replies, revealed on hover */}
+      {!isOwn && (
+        <button
+          type="button"
+          title="Report reply"
+          onClick={() => setReportOpen(true)}
+          className="opacity-0 group-hover:opacity-100 transition-opacity mt-1 w-6 h-6 rounded-full bg-surface-container hover:bg-red-50 flex items-center justify-center shrink-0"
+        >
+          <Flag size={10} className="stitch-text-secondary hover:text-red-500" />
+        </button>
+      )}
+      {reportOpen && (
+        <ReportModal
+          contentType="post"
+          contentId={reply.id}
+          flaggedUserId={reply.author_id}
+          contentSnapshot={reply.content}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -24,7 +24,12 @@ export type NotificationType =
   | 'connection_request'
   | 'connection_accepted'
   | 'project_invite'
-  | 'stuck_help_offered';
+  | 'stuck_help_offered'
+  // Session lifecycle
+  | 'partner_joined'
+  | 'session_now'
+  | 'partner_no_show'
+  | 'session_completed';
 
 export interface Notification {
   id: string;
@@ -38,6 +43,8 @@ export interface Notification {
   email_sent_at: string | null;
   email_status: 'queued' | 'sent' | 'failed' | 'skipped' | 'digest_queued' | null;
   push_sent_at: string | null;
+  /** Structured payload attached by DB triggers (e.g. streak counts, partner names). */
+  data: Record<string, unknown> | null;
   created_at: string;
 }
 

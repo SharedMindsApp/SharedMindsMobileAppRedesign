@@ -188,28 +188,100 @@ export async function startScheduledSession(sessionId: string): Promise<FocusSes
   return data as FocusSession;
 }
 
-export async function fetchUpcomingScheduledSessions(): Promise<ScheduledSessionWithProfile[]> {
+/**
+ * Fetch upcoming scheduled sessions for the calendar.
+ *
+ * When `myUserId` is provided, the result is filtered to sessions relevant to
+ * that user:
+ *   - sessions they host (`user_id = myUserId`)
+ *   - sessions they've been booked into (`partner_user_id = myUserId`)
+ *   - admin-curated community sessions (`session_purpose IS NOT NULL`),
+ *     since those are intended for the whole community to see.
+ *
+ * Random other users' personal scheduled sessions are excluded — those live in
+ * the "Find sessions" sheet, not on your private calendar.
+ *
+ * When `myUserId` is omitted, every upcoming scheduled session is returned
+ * (used by FindSessionsSheet for the discovery view).
+ */
+export async function fetchUpcomingScheduledSessions(myUserId?: string): Promise<ScheduledSessionWithProfile[]> {
+  // profiles!user_id disambiguates the FK — focus_sessions has both user_id
+  // and partner_user_id pointing at profiles; PostgREST otherwise throws PGRST201.
+  // Fetch up to 4 weeks ahead so organised users can see their full horizon.
+  const fourWeeksAhead = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
+    .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'scheduled')
     .eq('session_type', 'scheduled')
+    .lte('scheduled_at', fourWeeksAhead)
     .order('scheduled_at', { ascending: true })
-    .limit(10);
+    .limit(200);
 
-  if (error) throw error;
+  if (error) {
+    console.error('[fetchUpcomingScheduledSessions] query failed:', error);
+    throw error;
+  }
 
-  return (data ?? []).map((row: any) => ({
+  let rows = data ?? [];
+
+  if (myUserId) {
+    rows = rows.filter((row: any) =>
+      row.user_id === myUserId ||
+      row.partner_user_id === myUserId ||
+      row.session_purpose != null
+    );
+  }
+
+  return rows.map((row: any) => ({
     ...row,
     display_name: row.profiles?.display_name ?? 'Someone',
     avatar_url: row.profiles?.avatar_url ?? null,
   })) as ScheduledSessionWithProfile[];
 }
 
+/**
+ * Fetch all scheduled non-solo sessions in [fromIso, toIso). Used by the
+ * "Find Sessions" sheet to populate the week-grouped list.
+ */
+export async function fetchScheduledSessionsInRange(
+  fromIso: string,
+  toIso: string,
+): Promise<ScheduledSessionWithProfile[]> {
+  // NOTE: `profiles!user_id` disambiguates the FK — focus_sessions has both
+  // user_id and partner_user_id pointing at profiles, and PostgREST refuses
+  // the embed unless we name which relationship to follow.
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
+    .eq('status', 'scheduled')
+    .eq('session_type', 'scheduled')
+    .gte('scheduled_at', fromIso)
+    .lt('scheduled_at', toIso)
+    .order('scheduled_at', { ascending: true });
+
+  if (error) {
+    console.error('[fetchScheduledSessionsInRange] query failed:', error);
+    throw error;
+  }
+
+  // Filter solo sessions client-side. We can't use `.neq('session_mode', 'solo')`
+  // because in PostgreSQL `NULL != 'solo'` evaluates to NULL (not TRUE), which
+  // would silently drop legacy rows that have a NULL session_mode.
+  return (data ?? [])
+    .filter((row: any) => row.session_mode !== 'solo')
+    .map((row: any) => ({
+      ...row,
+      display_name: row.profiles?.display_name ?? 'Someone',
+      avatar_url: row.profiles?.avatar_url ?? null,
+    })) as ScheduledSessionWithProfile[];
+}
+
 export async function fetchSessionByJoinCode(joinCode: string): Promise<ScheduledSessionWithProfile | null> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
+    .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('join_code', joinCode)
     .single();
 
@@ -228,7 +300,7 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
 
   let query = supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
+    .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'completed')
     .gt('ended_at', since)
     .order('ended_at', { ascending: false })
@@ -251,7 +323,7 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
 export async function fetchActiveCommunitySessionsWithProfiles(): Promise<CommunitySession[]> {
   const { data, error } = await supabase
     .from('focus_sessions')
-    .select('*, profiles(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
+    .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'active')
     .neq('session_mode', 'solo') // Solo sessions are private — never in community feed
     .order('start_time', { ascending: true });

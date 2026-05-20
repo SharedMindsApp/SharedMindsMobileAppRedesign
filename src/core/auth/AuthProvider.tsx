@@ -255,7 +255,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         setUser(session?.user ?? null);
                         setLoading(false);
                         if (session?.user) {
-                            if (profileRef.current?.id !== session.user.id) {
+                            // Always re-fetch on SIGNED_IN (catches role changes mid-session).
+                            // For other events only re-fetch if the user ID changed.
+                            if (event === 'SIGNED_IN' || profileRef.current?.id !== session.user.id) {
                                 await fetchProfile(session.user.id);
                             }
                         } else {
@@ -266,9 +268,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         );
 
+        // Re-fetch the profile whenever the window regains focus so that
+        // DB changes (e.g. admin role promotion) are picked up without a full
+        // page reload.
+        const handleWindowFocus = () => {
+            const uid = profileRef.current?.id;
+            if (uid) {
+                fetchProfile(uid).catch(() => {});
+            }
+        };
+        window.addEventListener('focus', handleWindowFocus);
         return () => {
             mounted = false;
             subscription.unsubscribe();
+            window.removeEventListener('focus', handleWindowFocus);
             if (timeoutId) {
                 clearTimeout(timeoutId);
             }

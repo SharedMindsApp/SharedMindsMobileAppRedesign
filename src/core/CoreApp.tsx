@@ -33,6 +33,7 @@ import { AdminAnalytics } from '../components/admin/AdminAnalytics';
 import { AdminLogs } from '../components/admin/AdminLogs';
 import { AdminSettings } from '../components/admin/AdminSettings';
 import { AdminRecurringSessions } from '../components/admin/AdminRecurringSessions';
+import { AdminModerationQueue } from '../components/admin/AdminModerationQueue';
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
 import { ViewAsProvider } from '../contexts/ViewAsContext';
 import { ActiveDataProvider } from '../contexts/ActiveDataContext';
@@ -58,23 +59,22 @@ function RoutePersistence() {
 
   useEffect(() => {
     const currentRoute = `${location.pathname}${location.search}${location.hash}`;
-    const isGenericEntryRoute =
-      location.pathname === '/' ||
-      location.pathname === '/home' ||
-      location.pathname === '/dashboard' ||
-      location.pathname === '/today' ||
-      location.pathname === '/progress' ||
-      location.pathname === '/sessions' ||
-      location.pathname.startsWith('/join/');
 
-    // Attempt to restore a stored route if we've landed on a generic page
-    // within a short window after mount (handles auth redirects on refresh)
+    // "Generic entry" = the *initial* landing path that the router redirects
+    // away from on its own (e.g. `/` -> Navigate to /home). Only on these do
+    // we attempt to restore the previously-stored route, so a refresh on any
+    // real page (/sessions, /admin, /profile/xyz, etc.) preserves that page
+    // instead of bouncing the user back to a different last-visited page.
+    const isGenericEntryRoute = location.pathname === '/';
+
+    // Restore the stored route only if we just mounted on `/` AND we haven't
+    // already done so this session.
     if (!hasRestoredRef.current && isGenericEntryRoute) {
       const elapsed = Date.now() - mountTimeRef.current;
 
       if (elapsed < ROUTE_RESTORE_WINDOW_MS) {
         const storedRoute = getStoredCoreRoute();
-        if (storedRoute && storedRoute !== currentRoute) {
+        if (storedRoute && storedRoute !== currentRoute && storedRoute !== '/') {
           hasRestoredRef.current = true;
           navigate(storedRoute, { replace: true });
           return;
@@ -82,10 +82,10 @@ function RoutePersistence() {
       }
     }
 
-    // Store the current route (skip generic entry routes to avoid overwriting
-    // the real last page with a redirect destination)
+    // Store every non-root route the user visits — this is the route we'll
+    // restore on the next initial load.
     if (!isGenericEntryRoute) {
-      hasRestoredRef.current = true; // We're on a real page, stop trying to restore
+      hasRestoredRef.current = true;
       window.localStorage.setItem(LAST_ROUTE_STORAGE_KEY, currentRoute);
     }
   }, [location.pathname, location.search, location.hash, navigate]);
@@ -174,6 +174,7 @@ function AppContent() {
                 <Routes>
                   <Route index element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
+                  <Route path="moderation" element={<AdminModerationQueue />} />
                   <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
                   <Route path="analytics" element={<AdminAnalytics />} />
                   <Route path="logs" element={<AdminLogs />} />
