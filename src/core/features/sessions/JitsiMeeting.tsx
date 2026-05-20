@@ -1,20 +1,30 @@
 /**
- * JitsiMeeting — proper Jitsi External API integration
+ * JitsiMeeting — JaaS (8x8 Jitsi as a Service) integration
  *
- * Replaces the raw <iframe src="https://meet.jit.si/..."> with the real
- * Jitsi iFrame API. Benefits over the raw iframe:
- *   • Loading overlay — spinner until the conference is actually joined
- *   • Error state — "Try again" button if connection fails
- *   • Participant events — callbacks for partner join/leave
- *   • Hangup event — onHangup fires when user clicks End in Jitsi toolbar
- *   • Clean teardown — api.dispose() on unmount prevents memory leaks
+ * Upgrades from the public meet.jit.si server to JaaS so that:
+ *   • The session creator is always the moderator (JWT moderator:true)
+ *   • Participants sit in the lobby until the host admits them
+ *   • Emoji reactions, participants pane, and room security controls are enabled
+ *   • Tokens are signed server-side (private key never reaches the browser)
  *
- * The external API script is loaded lazily on first render and cached on
- * window.JitsiMeetExternalAPI — subsequent mounts are instant.
+ * Flow:
+ *   1. Fetch a signed JaaS JWT from the `get-jaas-token` Edge Function
+ *   2. Load the 8x8.vc external_api.js script (cached singleton)
+ *   3. Mount JitsiMeetExternalAPI on the container div
+ *   4. Wire events → React state + parent callbacks
+ *   5. Dispose on unmount
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, WifiOff, Users, RefreshCw } from 'lucide-react';
+import { supabase } from '../../../lib/supabase';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const JAAS_APP_ID = (import.meta.env.VITE_JAAS_APP_ID as string | undefined)
+  ?? 'vpaas-magic-cookie-7bdbb65dfc884656b9832f9662e6046e';
+
+const JAAS_DOMAIN = '8x8.vc';
 
 // ── Jitsi External API type shim ─────────────────────────────────────────────
 
@@ -51,13 +61,15 @@ type ConnectionState = 'loading' | 'connected' | 'error';
 export interface JitsiMeetingProps {
   roomName: string;
   displayName: string;
+  /** True for the session creator — grants moderator role + enables lobby management */
+  isModerator?: boolean;
   startAudioMuted?: boolean;
   startVideoMuted?: boolean;
-  /** Called whenever the participant count changes (your count + others) */
+  /** Called whenever the participant count changes */
   onParticipantCountChanged?: (count: number) => void;
-  /** Called when a NEW participant joins (count > 1 means partner arrived) */
+  /** Called when a NEW participant joins */
   onParticipantJoined?: () => void;
-  /** Called when the user clicks End / hangs up from inside Jitsi */
+  /** Called when the user clicks End / hangs up */
   onHangup?: () => void;
 }
 
@@ -70,22 +82,37 @@ function loadJitsiScript(): Promise<void> {
   if (scriptPromise) return scriptPromise;
 
   scriptPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector('script[src*="meet.jit.si/external_api.js"]');
+    const existing = document.querySelector(`script[src*="${JAAS_DOMAIN}/external_api.js"]`);
     if (existing) {
-      // Script tag exists but hasn't fired onload yet — wait
       existing.addEventListener('load', () => resolve());
       existing.addEventListener('error', () => reject(new Error('Jitsi script failed')));
       return;
     }
     const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
+    script.src = `https://${JAAS_DOMAIN}/external_api.js`;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Jitsi External API'));
+    script.onerror = () => reject(new Error('Failed to load JaaS External API'));
     document.head.appendChild(script);
   });
 
   return scriptPromise;
+}
+
+// ── JWT fetcher ───────────────────────────────────────────────────────────────
+
+async function fetchJaasToken(
+  roomName: string,
+  displayName: string,
+  isModerator: boolean,
+): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('get-jaas-token', {
+    body: { roomName, displayName, isModerator },
+  });
+  if (error || !data?.token) {
+    throw new Error(error?.message ?? 'Failed to get JaaS token');
+  }
+  return data.token as string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -93,6 +120,7 @@ function loadJitsiScript(): Promise<void> {
 export function JitsiMeeting({
   roomName,
   displayName,
+  isModerator = false,
   startAudioMuted = false,
   startVideoMuted = false,
   onParticipantCountChanged,
@@ -105,7 +133,7 @@ export function JitsiMeeting({
   const [participantCount, setParticipantCount] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
 
-  // Stable refs for callbacks so we don't restart the effect on re-render
+  // Stable refs for callbacks — avoids restarting the effect on every render
   const onParticipantCountChangedRef = useRef(onParticipantCountChanged);
   const onParticipantJoinedRef = useRef(onParticipantJoined);
   const onHangupRef = useRef(onHangup);
@@ -119,12 +147,20 @@ export function JitsiMeeting({
     let cancelled = false;
     setConnectionState('loading');
 
-    loadJitsiScript()
-      .then(() => {
+    // Fetch JWT + load script in parallel for fastest startup
+    Promise.all([
+      fetchJaasToken(roomName, displayName, isModerator),
+      loadJitsiScript(),
+    ])
+      .then(([jwt]) => {
         if (cancelled || !containerRef.current || !window.JitsiMeetExternalAPI) return;
 
-        const api = new window.JitsiMeetExternalAPI('meet.jit.si', {
-          roomName,
+        // JaaS room names are namespaced under the app ID
+        const jaasRoom = `${JAAS_APP_ID}/${roomName}`;
+
+        const api = new window.JitsiMeetExternalAPI(JAAS_DOMAIN, {
+          roomName: jaasRoom,
+          jwt,
           parentNode: containerRef.current,
           width: '100%',
           height: '100%',
@@ -135,6 +171,9 @@ export function JitsiMeeting({
             disableDeepLinking: true,
             disableInviteFunctions: true,
             enableWelcomePage: false,
+            // Lobby: enabled so participants wait until the host admits them.
+            // Moderators see the "Admit / Deny" controls automatically.
+            lobbyModeEnabled: true,
           },
           interfaceConfigOverwrite: {
             SHOW_JITSI_WATERMARK: false,
@@ -142,8 +181,14 @@ export function JitsiMeeting({
             MOBILE_APP_PROMO: false,
             HIDE_INVITE_MORE_HEADER: true,
             TOOLBAR_BUTTONS: [
+              // Core A/V
               'microphone', 'camera', 'desktop', 'hangup',
-              'chat', 'raisehand', 'tileview', 'select-background', 'shortcuts',
+              // Collaboration
+              'chat', 'raisehand', 'reactions',
+              // Room management (host gets extra controls here)
+              'participants-pane', 'security',
+              // View + misc
+              'tileview', 'select-background', 'shortcuts',
             ],
           },
           userInfo: { displayName },
@@ -191,7 +236,8 @@ export function JitsiMeeting({
           },
         });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[JitsiMeeting] init failed:', err);
         if (!cancelled) setConnectionState('error');
       });
 
@@ -202,9 +248,9 @@ export function JitsiMeeting({
         apiRef.current = null;
       }
     };
-  // retryKey triggers a full remount on user-initiated retry
+  // retryKey forces a full remount on user-initiated retry
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomName, retryKey]);
+  }, [roomName, isModerator, retryKey]);
 
   function handleRetry() {
     if (apiRef.current) {
@@ -226,7 +272,9 @@ export function JitsiMeeting({
           <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center">
             <Loader2 size={28} className="animate-spin text-primary" />
           </div>
-          <p className="text-sm text-white/50">Connecting to room…</p>
+          <p className="text-sm text-white/50">
+            {isModerator ? 'Setting up your room…' : 'Waiting for host to admit you…'}
+          </p>
         </div>
       )}
 

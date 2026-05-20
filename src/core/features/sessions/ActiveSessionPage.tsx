@@ -63,7 +63,7 @@ function avatarClass(name: string): string {
 export function ActiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession } = useFocusSession();
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
@@ -175,6 +175,9 @@ export function ActiveSessionPage() {
     ? (isOneOnOne ? oneOnOneRoomName(session.id) : dailyRoomName())
     : dailyRoomName();
 
+  // Session creator is always the moderator; they can admit/mute/remove others
+  const isModerator = !!(session && user && session.user_id === user.id);
+
   const modeBadgeLabel = isSolo ? 'Solo' : isOneOnOne ? '1-on-1' : 'Group';
 
   if (loadingSession) {
@@ -282,6 +285,7 @@ export function ActiveSessionPage() {
           <JitsiMeeting
             roomName={roomName}
             displayName={profile?.display_name ?? 'Member'}
+            isModerator={isModerator}
             startAudioMuted={isQuiet}
             startVideoMuted={false}
             onParticipantJoined={() => {
