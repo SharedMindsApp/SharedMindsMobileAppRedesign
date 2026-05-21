@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
@@ -63,22 +63,36 @@ function avatarClass(name: string): string {
 export function ActiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile, user } = useAuth();
   const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession } = useFocusSession();
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
   const [ending, setEnding] = useState(false);
-  const [session, setSession] = useState<FocusSession | null>(activeSession);
-  const [loadingSession, setLoadingSession] = useState(!activeSession);
+
+  // Prefer router state (passed by DeclareSessionModal) → context → null.
+  // Router state is synchronously available on first render and avoids the
+  // React 18 batching race where context flushes after the component mounts.
+  const routerSession = (location.state as { session?: FocusSession } | null)?.session ?? null;
+  const [session, setSession] = useState<FocusSession | null>(activeSession ?? routerSession);
+  const [loadingSession, setLoadingSession] = useState(!(activeSession ?? routerSession));
   const [partnerJoined, setPartnerJoined] = useState<boolean>(
     (activeSession?.partner_user_id ?? null) !== null,
   );
   const [showNoShowBanner, setShowNoShowBanner] = useState(false);
 
-  // Load session if not in context (e.g. hard refresh)
+  // Load session if not in context (e.g. hard refresh).
+  // activeSession wins over routerSession; both skip the Supabase fetch.
   useEffect(() => {
     if (activeSession) {
       setSession(activeSession);
+      setLoadingSession(false);
+      return;
+    }
+    if (routerSession) {
+      // Context hasn't flushed yet — use router state; sync to context too.
+      setSession(routerSession);
+      setActiveSession(routerSession);
       setLoadingSession(false);
       return;
     }
@@ -101,7 +115,7 @@ export function ActiveSessionPage() {
       setSession(data);
       setLoadingSession(false);
     })();
-  }, [sessionId, activeSession, navigate, setActiveSession]);
+  }, [sessionId, activeSession, routerSession, navigate, setActiveSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirect to summary when time is up
   useEffect(() => {
@@ -182,13 +196,20 @@ export function ActiveSessionPage() {
 
   if (loadingSession) {
     return (
-      <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-surface flex items-center justify-center z-[55]">
-        <Loader2 size={32} className="animate-spin text-primary" />
+      <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-[#1a1a2e] flex items-center justify-center z-[55]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 size={32} className="animate-spin text-primary" />
+          <p className="text-sm text-white/50">Loading session…</p>
+        </div>
       </div>
     );
   }
 
-  if (!session) return null;
+  if (!session) {
+    // Should rarely hit this — belt-and-suspenders redirect
+    navigate('/sessions', { replace: true });
+    return null;
+  }
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-[#1a1a2e] flex flex-col z-[55] overflow-hidden">

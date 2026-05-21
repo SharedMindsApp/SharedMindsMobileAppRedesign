@@ -151,6 +151,15 @@ export function JitsiMeeting({
     let cancelled = false;
     setConnectionState('loading');
 
+    // Safety-net: if videoConferenceJoined doesn't fire within 12 s
+    // (e.g. no camera/mic causes JaaS to stall on device-check), force
+    // the iframe visible anyway so the user isn't stuck on a dark spinner.
+    const fallbackTimer = setTimeout(() => {
+      if (!cancelled) {
+        setConnectionState((prev) => prev === 'loading' ? 'connected' : prev);
+      }
+    }, 12_000);
+
     // Fetch JWT + load script in parallel for fastest startup
     Promise.all([
       fetchJaasToken(roomName, displayName, isModerator),
@@ -259,6 +268,7 @@ export function JitsiMeeting({
 
     return () => {
       cancelled = true;
+      clearTimeout(fallbackTimer);
       if (apiRef.current) {
         try { apiRef.current.dispose(); } catch { /* ignore dispose errors */ }
         apiRef.current = null;

@@ -158,7 +158,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
       });
       setActiveSession(session);
       onClose();
-      navigate(`/session/${session.id}`);
+      // Pass the session object in router state so ActiveSessionPage has it
+      // immediately on first render — the context update may flush async in
+      // React 18 batching, causing a blank-loading-state flash otherwise.
+      navigate(`/session/${session.id}`, { state: { session } });
     } catch (err: any) {
       setError(err?.message ?? 'Something went wrong. Please try again.');
       setSubmitting(false);
