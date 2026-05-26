@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, LockOpen, Crown } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -9,7 +9,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners } from '../../services/SessionService';
 import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
@@ -88,9 +88,11 @@ export function ActiveSessionPage() {
   // this without the user having to open the player.
   const musicCategory: MusicCategory = 'flow';
 
-  // Host = the user_id on the focus_sessions row. In group sessions the
-  // host controls the music; everyone else can only mute locally.
-  const isMusicHost = !!user && !!activeSession && activeSession.user_id === user.id;
+  // Host = the user_id on the focus_sessions row, OR the promoted co-host.
+  // In group sessions either can control music + wizards + extend + lock.
+  const isPrimaryHost = !!user && !!activeSession && activeSession.user_id === user.id;
+  const isCoHost = !!user && !!activeSession && activeSession.co_host_user_id === user.id;
+  const isMusicHost = isPrimaryHost || isCoHost;
   const isMusicGroupSession = activeSession?.session_mode === 'group';
 
   // Session wizards (breathing, intentions, etc.) — host launches, all
@@ -109,12 +111,37 @@ export function ActiveSessionPage() {
     setExtending(true);
     try {
       const updated = await extendSession(activeSession.id, addMinutes);
-      // Optimistically reflect locally; realtime subscription will also fire.
       setActiveSession({ ...activeSession, ...updated });
     } catch (e) {
       console.error('[ActiveSession] extend failed', e);
     } finally {
       setExtending(false);
+    }
+  }
+
+  // Lock / unlock joins — only meaningful for group + 1-on-1 sessions where
+  // someone else could potentially join. Solo sessions never expose it.
+  async function handleToggleLock() {
+    if (!activeSession) return;
+    const next = !(activeSession.accept_joiners ?? true);
+    try {
+      const updated = await setAcceptJoiners(activeSession.id, next);
+      setActiveSession({ ...activeSession, ...updated });
+    } catch (e) {
+      console.error('[ActiveSession] toggle lock failed', e);
+    }
+  }
+
+  // Promote / demote co-host. Surfaced from the participant strip when
+  // present; this handler just wraps the service call so the strip can
+  // be dumb. Only the primary host can promote (RLS enforces).
+  async function handleSetCoHost(userId: string | null) {
+    if (!activeSession || !isPrimaryHost) return;
+    try {
+      const updated = await promoteCoHost(activeSession.id, userId);
+      setActiveSession({ ...activeSession, ...updated });
+    } catch (e) {
+      console.error('[ActiveSession] promote co-host failed', e);
     }
   }
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
@@ -422,6 +449,23 @@ export function ActiveSessionPage() {
                 <Plus size={11} />
                 30
               </button>
+              {/* Lock/unlock joins — only meaningful for sessions where
+                  someone else could potentially join (not solo). */}
+              {activeSession?.session_mode !== 'solo' && (
+                <button
+                  type="button"
+                  onClick={handleToggleLock}
+                  className={`w-7 h-7 rounded-full grid place-items-center transition-colors ${
+                    activeSession?.accept_joiners === false
+                      ? 'bg-amber-500/30 text-amber-200 hover:bg-amber-500/40'
+                      : 'bg-white/10 text-white hover:bg-white/15'
+                  }`}
+                  title={activeSession?.accept_joiners === false ? 'Joins locked — click to allow new joiners' : 'Lock joins — no new participants'}
+                  aria-pressed={activeSession?.accept_joiners === false}
+                >
+                  {activeSession?.accept_joiners === false ? <Lock size={11} /> : <LockOpen size={11} />}
+                </button>
+              )}
             </div>
           )}
 
@@ -623,13 +667,43 @@ export function ActiveSessionPage() {
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-white/80 truncate">
+                    <p className="text-[11px] font-bold text-white/80 truncate flex items-center gap-1">
                       {p.display_name}
+                      {activeSession?.co_host_user_id === p.user_id && (
+                        <span title="Co-host">
+                          <Crown size={10} className="text-amber-300 shrink-0" />
+                        </span>
+                      )}
                     </p>
                     <p className="text-[10px] text-white/50 truncate">
                       {p.session_goal ?? 'Working on something'}
                     </p>
                   </div>
+                  {/* Primary host can promote / demote any participant.
+                      Co-host themselves can't reshuffle to avoid coups. */}
+                  {isPrimaryHost && p.user_id !== user?.id && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSetCoHost(
+                          activeSession?.co_host_user_id === p.user_id ? null : p.user_id,
+                        )
+                      }
+                      className={`w-7 h-7 rounded-full grid place-items-center transition-colors ${
+                        activeSession?.co_host_user_id === p.user_id
+                          ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                          : 'bg-white/10 text-white/70 hover:bg-white/15'
+                      }`}
+                      title={
+                        activeSession?.co_host_user_id === p.user_id
+                          ? 'Remove co-host'
+                          : 'Make co-host'
+                      }
+                      aria-label="Toggle co-host"
+                    >
+                      <Crown size={11} />
+                    </button>
+                  )}
                   <ConnectButton otherUserId={p.user_id} variant="dark" />
                 </div>
               ))}

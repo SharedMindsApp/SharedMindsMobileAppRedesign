@@ -56,6 +56,13 @@ export interface FocusSession {
   session_mode?: SessionMode;
   quiet_mode?: boolean;
   partner_user_id?: string | null;
+  /** Single trusted person promoted by the host. Same control surface as
+   *  the host: extend, end, launch wizards, change music, lock joins.
+   *  Doesn't bypass the public-hosting gate (still keyed off auth.uid()). */
+  co_host_user_id?: string | null;
+  /** When false, no new participants can join this session. Host or co-host
+   *  toggles this mid-session. Existing joiners are unaffected. */
+  accept_joiners?: boolean;
   // Project pin — optional macro-goal context (joined via Supabase select)
   project?: { id: string; title: string; color: string | null } | null;
   // Admin-curated cadence (weekly review / community / workshop)

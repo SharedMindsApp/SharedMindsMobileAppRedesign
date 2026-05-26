@@ -90,6 +90,7 @@ export async function joinOneOnOneSession(sessionId: string): Promise<FocusSessi
     .eq('id', sessionId)
     .eq('session_mode', 'one_on_one')
     .eq('status', 'active')
+    .eq('accept_joiners', true)        // host hasn't locked the room
     .is('partner_user_id', null)
     .neq('user_id', user.id) // can't partner your own session
     .select()
@@ -176,6 +177,47 @@ export async function extendSession(
       target_end_time: newTarget,
       intended_duration_minutes: newDuration,
     })
+    .eq('id', sessionId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FocusSession;
+}
+
+/**
+ * Promote a participant to co-host. Sets focus_sessions.co_host_user_id;
+ * RLS guarantees only the actual host can do this (the WITH CHECK clause
+ * inherited from the update policy + the explicit caller-side check below
+ * — UPDATE only succeeds when user_id = auth.uid()).
+ */
+export async function promoteCoHost(
+  sessionId: string,
+  userId: string | null,
+): Promise<FocusSession> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .update({ co_host_user_id: userId })
+    .eq('id', sessionId)
+    .eq('user_id', user.id)            // only the host can promote/demote
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FocusSession;
+}
+
+/**
+ * Flip accept_joiners. When false, the joinOneOnOneSession + group-session
+ * entry paths refuse new participants. Existing joiners stay.
+ */
+export async function setAcceptJoiners(
+  sessionId: string,
+  accept: boolean,
+): Promise<FocusSession> {
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .update({ accept_joiners: accept })
     .eq('id', sessionId)
     .select()
     .single();
