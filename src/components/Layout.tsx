@@ -232,12 +232,12 @@ export function Layout({ children }: LayoutProps) {
     return true;
   });
 
-  // Admins always see the Admin tab in the favourites bar, regardless of
-  // whatever favouriteNavTabs they've configured. Without this auto-pin the
-  // tab would only show up for users who manually added 'admin' to favourites
-  // (which is impossible since the tab didn't exist when their config was saved).
+  // The header now showcases Projects + the rest of the default tab set.
+  // Admin is no longer auto-pinned — admins can still reach /admin via the
+  // avatar dropdown's Admin section, or by URL directly. Keeping the
+  // header focused on user-facing surfaces.
   const favouriteTabs = availableTabs.filter((tab) =>
-    favouriteNavTabs.includes(tab.id) || (tab.id === 'admin' && showAdmin)
+    favouriteNavTabs.includes(tab.id)
   );
 
   const moreTabs = availableTabs.filter((tab) =>

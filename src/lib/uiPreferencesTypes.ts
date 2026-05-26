@@ -129,8 +129,9 @@ export const ALL_NAVIGATION_TABS: NavigationTab[] = [
 export const DEFAULT_FAVOURITE_NAV_TABS: NavigationTabId[] = [
   'home',
   'sessions',
-  'messages',
+  'projects',
   'people',
+  'messages',
 ];
 
 export interface UIPreferencesConfig {
