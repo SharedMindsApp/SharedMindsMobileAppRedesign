@@ -1370,14 +1370,16 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       }
     }
 
-    // 3. Create tasks
+    // 3. Create tasks. Schema uses created_by (not user_id) and requires
+    //    space_id (NOT NULL) inherited from the project's space.
     const filledTasks = taskInputs.filter((t) => t.trim());
     for (const title of filledTasks) {
       await TaskService.createTask({
-        title: title.trim(),
+        title:      title.trim(),
+        space_id:   personalSpace.id,
         project_id: project.id,
-        user_id: user.id,
-      });
+        created_by: user.id,
+      } as any);
     }
 
     // 4. Stamp wizard complete
