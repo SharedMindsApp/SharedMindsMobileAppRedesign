@@ -38,6 +38,7 @@ import { fetchHomeDashboard } from '../../services/HomeDashboardService';
 // fetchHomeDashboard RPC. The types are still imported below.
 import { SurfaceCard } from '../../ui/CorePage';
 import { HomeHero } from './HomeHero';
+import { QuickTimerButton } from './QuickTimerButton';
 import { SmartNextCard } from './SmartNextCard';
 import { CommunityPulseCard } from './CommunityPulseCard';
 import { DayZeroWelcome } from './DayZeroWelcome';
@@ -486,6 +487,14 @@ export function DashboardPage() {
         onStart={() => openDeclare()}
         onFind={() => navigate('/sessions')}
       />
+
+      {/* Quick Timer — single-tap entry for "I just want to focus
+          right now, no ceremony." Sits below the hero so it's the
+          first thing in reach without competing with the primary
+          Start/Find CTAs above. */}
+      <div className="flex justify-end -mt-2">
+        <QuickTimerButton />
+      </div>
 
       {/* Progressive render — sections paint as their data arrives. The
           hero above is always-on, and the day-zero branch waits only for

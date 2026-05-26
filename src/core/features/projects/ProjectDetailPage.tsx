@@ -29,10 +29,12 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectEditorModal } from './ProjectEditorModal';
 import { ShareForAccountabilitySheet } from './ShareForAccountabilitySheet';
+import { ProjectActionChooser } from './ProjectActionChooser';
 import { ShareChooserSheet } from './ShareChooserSheet';
 import { InviteCollaboratorSheet } from './InviteCollaboratorSheet';
 import { CoverImage } from './CoverImage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
+import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { projectColorMeta } from './ProjectsPage';
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
@@ -92,6 +94,8 @@ export function ProjectDetailPage() {
   const [shareChooserOpen, setShareChooserOpen] = useState(false);
   const [coworkerInviteOpen, setCoworkerInviteOpen] = useState(false);
   const [declareOpen, setDeclareOpen] = useState(false);
+  const [actionChooserOpen, setActionChooserOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [taskSubmitting, setTaskSubmitting] = useState(false);
 
@@ -588,7 +592,7 @@ export function ProjectDetailPage() {
           <div className="px-4 pb-4 pt-2 flex items-center gap-2 border-t border-surface-container/40">
             <button
               type="button"
-              onClick={() => setDeclareOpen(true)}
+              onClick={() => setActionChooserOpen(true)}
               className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-extrabold transition-all active:scale-[0.98] bg-gradient-to-r ${color.gradient} whitespace-nowrap`}
               style={{ boxShadow: `0 4px 14px ${color.hex}40` }}
             >
@@ -754,10 +758,25 @@ export function ProjectDetailPage() {
           onArchived={() => navigate('/projects')}
         />
       )}
+      {actionChooserOpen && (
+        <ProjectActionChooser
+          projectTitle={project.title}
+          onStartNow={() => setDeclareOpen(true)}
+          onBlockTime={() => setScheduleOpen(true)}
+          onFindOne={() => navigate('/sessions')}
+          onClose={() => setActionChooserOpen(false)}
+        />
+      )}
       {declareOpen && (
         <DeclareSessionModal
           onClose={() => setDeclareOpen(false)}
           initialProjectId={project.id}
+        />
+      )}
+      {scheduleOpen && (
+        <ScheduleSessionModal
+          onClose={() => setScheduleOpen(false)}
+          onCreated={() => setScheduleOpen(false)}
         />
       )}
       {shareOpen && (

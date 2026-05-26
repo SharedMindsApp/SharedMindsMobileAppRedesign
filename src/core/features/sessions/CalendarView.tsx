@@ -20,6 +20,7 @@ import {
   CalendarPlus, List as ListIcon, LayoutGrid,
 } from 'lucide-react';
 import { SessionsListView, type ListSession } from './SessionsListView';
+import { QuickTimerButton } from '../dashboard/QuickTimerButton';
 import { SessionTagPills } from './SessionTagPills';
 import { downloadIcs } from '../../../lib/sessions/icsExport';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -397,6 +398,14 @@ export function CalendarView() {
           <User size={14} />
           Solo session
         </button>
+
+        {/* Quick Timer — lightest-weight focus entry. One tap → 25min
+            solo session, no goal, no video. Still logs for momentum. */}
+        {!activeSession && (
+          <div className="w-full flex justify-center">
+            <QuickTimerButton />
+          </div>
+        )}
 
         {/* Type filter — scope the calendar to just solo / 1-on-1 / group */}
         <div className="rounded-2xl bg-surface-container-low/60 ring-1 ring-surface-container/60 px-3 py-3">
