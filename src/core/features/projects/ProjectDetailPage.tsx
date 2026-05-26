@@ -228,12 +228,18 @@ export function ProjectDetailPage() {
   }
 
   const isArchived = project.status !== 'active';
-  // Hero text colour. Default white. Dark only when the project has a
-  // cover image AND the user explicitly picked dark (e.g. for light bg).
-  const heroTextDark = !!project.cover_image_url && project.cover_text_color === 'dark';
-  const titleClass = heroTextDark ? 'text-stitch-text-primary' : 'text-white';
-  const titleSubtleClass = heroTextDark ? 'text-stitch-text-primary/80' : 'text-white/95';
-  const titleMutedClass = heroTextDark ? 'text-stitch-text-secondary' : 'text-white/80';
+  // Text colour for the title block. With a cover image the block sits
+  // on the surface tone (clean white) so we always use the standard dark
+  // text. Without a cover, the block sits on the colour gradient so we
+  // keep white. The cover_text_color setting is kept for forward-compat
+  // but doesn't affect the layout anymore (image and text don't overlap).
+  const hasCover = !!project.cover_image_url;
+  const titleClass = hasCover ? 'text-stitch-text-primary' : 'text-white';
+  const titleSubtleClass = hasCover ? 'text-stitch-text-primary/85' : 'text-white/95';
+  const titleMutedClass = hasCover ? 'text-stitch-text-secondary' : 'text-white/80';
+  // Used by the "Read more" button which now sits on the surface tone
+  // (cover) or on the gradient (no cover).
+  const heroTextDark = hasCover;
 
   return (
     <div className="space-y-0">
@@ -259,44 +265,36 @@ export function ProjectDetailPage() {
             project's colour gradient. Dark overlay is always present so
             the white title/description text stays legible regardless of
             what photograph the user uploaded. */}
+        {/* Cover image banner — fixed-height when present, so the image
+            stays consistent regardless of description length. Image and
+            text are now STACKED (image on top, text below) instead of
+            overlapping — no more legibility tension at any length. */}
+        {project.cover_image_url && (
+          <div className="relative h-[240px]">
+            <CoverImage
+              url={project.cover_image_url}
+              x={project.cover_x}
+              y={project.cover_y}
+              zoom={project.cover_zoom}
+              fit={project.cover_fit}
+              bgColor={project.cover_bg_color}
+              className="absolute inset-0"
+            />
+          </div>
+        )}
+
+        {/* Title + description block. Cover-image projects: sits below
+            the banner on the chosen surface tone with the user-picked
+            text colour. No-cover projects: sits over the colour
+            gradient with the existing white text. */}
         <div
-          className={`relative px-5 pb-6 ${
+          className={`relative px-5 pb-6 pt-5 ${
             project.cover_image_url
-              // Cover image present: give the hero enough vertical room
-              // for the image to breathe above the title, and flex the
-              // content so the title block sits at the bottom.
-              ? 'pt-3 min-h-[300px] flex flex-col'
-              : `pt-5 bg-gradient-to-br ${color.gradient}`
+              ? 'bg-surface'
+              : `bg-gradient-to-br ${color.gradient}`
           }`}
         >
-          {project.cover_image_url && (
-            <>
-              <CoverImage
-                url={project.cover_image_url}
-                x={project.cover_x}
-                y={project.cover_y}
-                zoom={project.cover_zoom}
-                fit={project.cover_fit}
-                bgColor={project.cover_bg_color}
-                className="absolute inset-0"
-              />
-              {/* Legibility overlay — flips light/dark with the user's
-                  chosen text colour. Eases off in contain mode so the
-                  user's bg colour shows through. */}
-              {/* Soft atmospheric fade. Heavy contrast is no longer the
-                  gradient's job — the backdrop-blur title panel below
-                  handles that. The gradient just adds depth and softens
-                  the transition from image into the panel. */}
-              <div
-                className={`absolute inset-0 pointer-events-none bg-gradient-to-t ${
-                  project.cover_text_color === 'dark'
-                    ? 'from-white/40 via-white/10 to-transparent'
-                    : 'from-black/40 via-black/10 to-transparent'
-                }`}
-              />
-            </>
-          )}
-          <div className="relative z-10 flex flex-col flex-1 min-h-0">
+          <div className="relative z-10">
 
           {/* Top bar: archived badge + edit */}
           <div className="flex items-center justify-between mb-3">
@@ -317,27 +315,8 @@ export function ProjectDetailPage() {
             </button>
           </div>
 
-          {/* Spacer — when there's a cover image we want the title block
-              to sit at the bottom of the hero. mt-auto pushes it down
-              within the flex column. */}
-          {project.cover_image_url && <div className="flex-1 min-h-[80px]" />}
-
-          {/* Title + description container. With a cover image, we wrap
-              in a backdrop-blur panel constrained to ~half the hero width
-              so the image stays visible on the right while the text
-              remains readable on the left. Translucent enough that the
-              image bleeds through gently. */}
-          <div
-            className={
-              project.cover_image_url
-                ? `relative rounded-2xl px-4 py-3 backdrop-blur-md max-w-xl mr-auto ${
-                    heroTextDark
-                      ? 'bg-white/70 ring-1 ring-black/5'
-                      : 'bg-black/45 ring-1 ring-white/10'
-                  }`
-                : ''
-            }
-          >
+          {/* Title sits cleanly on the surface tone below the cover
+              image banner (or on the colour gradient when no cover). */}
           <h1 className={`text-2xl sm:text-3xl font-extrabold ${titleClass} leading-tight mb-1 ${project.cover_image_url ? '' : 'drop-shadow-sm'}`}>
             {project.title}
           </h1>
@@ -394,7 +373,6 @@ export function ProjectDetailPage() {
               </div>
             );
           })()}
-          </div>{/* close text-panel wrapper */}
           </div>{/* close .relative.z-10 inner wrapper */}
         </div>
 
