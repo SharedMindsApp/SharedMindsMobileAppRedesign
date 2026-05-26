@@ -252,14 +252,13 @@ Deno.serve(async (req: Request) => {
   // OpenRouter model picks (verified slugs at https://openrouter.ai/models):
   //   • openai/gpt-5.4-nano — primary. Lightweight, cost-efficient GPT-5.4
   //     variant with vision + structured-output support.
-  //   • anthropic/claude-haiku-latest — router slug that always resolves
-  //     to the newest Haiku, used as the first fallback.
-  //   • google/gemini-2.5-flash — second fallback (different provider).
-  //   • openai/gpt-4o-mini — final safety net.
+  //   • anthropic/claude-haiku-latest — first fallback (router slug,
+  //     always resolves to the newest Haiku).
+  //   • google/gemini-3.5-flash — second fallback (different provider, so
+  //     we still serve users if OpenAI + Anthropic both have an outage).
   //
-  // Note: claude-haiku-4.5 as a fixed slug does NOT resolve on OpenRouter
-  // — the router-latest tag is the supported way to reach the current
-  // Haiku without pinning a version that may not exist.
+  // Three providers is plenty of redundancy; gpt-4o-mini as a fourth
+  // fallback was overkill and adds another model name to keep current.
   let result: RoadmapResponse | PhasesResponse | TasksResponse | null = null;
   let lastErr: unknown = null;
 
@@ -268,8 +267,7 @@ Deno.serve(async (req: Request) => {
       model: 'openai/gpt-5.4-nano',
       fallbacks: [
         'anthropic/claude-haiku-latest',
-        'google/gemini-2.5-flash',
-        'openai/gpt-4o-mini',
+        'google/gemini-3.5-flash',
       ],
       jsonMode: true,
       temperature: 0.5,
