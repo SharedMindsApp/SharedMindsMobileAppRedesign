@@ -13,13 +13,14 @@
  */
 
 import { useRef, useState } from 'react';
-import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle, Trash2, ImageIcon, Upload } from 'lucide-react';
+import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle, Trash2, ImageIcon, Upload, Link2 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectService, type Project, type ProjectMemberWithProfile } from '../../services/ProjectService';
 import { InputWell } from '../../ui/CorePage';
 import { PROJECT_COLORS } from './ProjectsPage';
 import { InviteCollaboratorSheet } from './InviteCollaboratorSheet';
+import { ShareForAccountabilitySheet } from './ShareForAccountabilitySheet';
 import { CoverPositioner } from './CoverPositioner';
 import { DeleteProjectConfirm } from './DeleteProjectConfirm';
 
@@ -106,6 +107,7 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
     }
   }
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const canSubmit = title.trim().length > 0 && !submitting;
 
@@ -441,6 +443,28 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
             </section>
           )}
 
+          {/* 3b. Share for accountability (existing projects only) — generate a
+              read-only public link recipients can view without an account. */}
+          {!isNew && (
+            <section className="rounded-2xl ring-1 ring-violet-100 bg-violet-50/40 p-4">
+              <SectionHeading icon={<Link2 size={11} className="text-violet-600" />} label="Share for accountability" />
+              <div className="flex items-center justify-between gap-3 mt-3">
+                <p className="text-[11px] stitch-text-secondary leading-snug min-w-0">
+                  Give a partner, friend, or family member a read-only view of
+                  your progress — no account needed.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShareOpen(true)}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-violet-600 text-white text-xs font-bold hover:bg-violet-700 transition-colors"
+                >
+                  <Link2 size={12} />
+                  Manage links
+                </button>
+              </div>
+            </section>
+          )}
+
           {/* 4. Danger zone (existing projects only) — clearly separated by
               ring colour + label. Archive = soft delete (recoverable from
               backend), Delete = permanent cascade through milestones, phases,
@@ -531,6 +555,14 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
       <InviteCollaboratorSheet
         project={project}
         onClose={() => setInviteOpen(false)}
+      />
+    )}
+
+    {shareOpen && project && (
+      <ShareForAccountabilitySheet
+        projectId={project.id}
+        projectTitle={project.title}
+        onClose={() => setShareOpen(false)}
       />
     )}
 

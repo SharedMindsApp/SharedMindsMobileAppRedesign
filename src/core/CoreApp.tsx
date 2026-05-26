@@ -19,6 +19,7 @@ import { TasksPage } from './features/tasks/TasksPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
 import { ProjectDetailPage } from './features/projects/ProjectDetailPage';
 import { AcceptInvitePage } from './features/projects/AcceptInvitePage';
+import { SharedProjectPage } from './features/projects/SharedProjectPage';
 import { ReflectionPage } from './features/reflection/ReflectionPage';
 // CalendarPage was removed — /sessions is now the calendar surface.
 import { PantryPage } from './features/pantry/PantryPage';
@@ -95,8 +96,27 @@ function RoutePersistence() {
   return null;
 }
 
+/** Detect the public /shared/:token path without depending on react-router.
+ *  Returns the token (everything after /shared/) or null. We run this
+ *  before the auth gate so unauthenticated recipients can land on the
+ *  accountability view without seeing the AuthPage first. */
+function getPublicShareToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname;
+  const m = /^\/shared\/([^/?#]+)/.exec(path);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 function AppContent() {
   const { user, loading, profileReady, isAdmin, profile, refreshProfile } = useAuth();
+
+  // Public share view bypasses everything — no auth, no onboarding, no
+  // Layout. The page is self-contained and reads its own data via the
+  // SECURITY DEFINER RPC.
+  const shareToken = getPublicShareToken();
+  if (shareToken) {
+    return <SharedProjectPage token={shareToken} />;
+  }
 
   if (loading) {
     return (
