@@ -21,6 +21,7 @@ import { InputWell } from '../../ui/CorePage';
 import { PROJECT_COLORS } from './ProjectsPage';
 import { InviteCollaboratorSheet } from './InviteCollaboratorSheet';
 import { CoverPositioner } from './CoverPositioner';
+import { DeleteProjectConfirm } from './DeleteProjectConfirm';
 
 const COLOR_LABELS: Record<string, string> = {
   cyan:    'Cyan',
@@ -171,17 +172,22 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
    *
    *  RLS only allows project owners to delete (see
    *  projects_delete_if_owner policy), so non-owners get a clear error. */
-  async function handleDelete() {
+  /**
+   * Delete is gated through DeleteProjectConfirm — a proper themed
+   * modal (centered card on desktop, bottom-sheet on mobile) that
+   * prompts the user to type the project name. Native confirm/prompt
+   * are unstyled and got blocked on iOS Safari.
+   */
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  function handleDelete() {
     if (!project) return;
-    if (!confirm(`Permanently delete "${project.title}"?\n\nThis removes the project, its milestones, phases, tasks, notes, and member list — everything except sessions you've already had (those keep an unlinked record).\n\nThere is no undo.`)) return;
-    // Second gate: name confirmation.
-    const typed = prompt(`Type the project name to confirm:\n"${project.title}"`);
-    if (typed?.trim() !== project.title.trim()) {
-      if (typed != null) {
-        setError('Project name did not match — delete cancelled.');
-      }
-      return;
-    }
+    setShowDeleteConfirm(true);
+  }
+  // The actual deletion runs from inside the confirm modal's onConfirm.
+  // Kept as a separate function so the older error-path branches below
+  // remain valid (they're now dead but easier to leave intact).
+  async function performDelete() {
+    if (!project) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -192,6 +198,8 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
     } catch (e: any) {
       setError(e?.message ?? 'Could not delete.');
       setSubmitting(false);
+      // Re-throw so the confirm modal stays open with its own error UI
+      throw e;
     }
   }
 
@@ -523,6 +531,15 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
       <InviteCollaboratorSheet
         project={project}
         onClose={() => setInviteOpen(false)}
+      />
+    )}
+
+    {showDeleteConfirm && project && (
+      <DeleteProjectConfirm
+        projectName={project.title}
+        detail="This removes the project, its milestones, phases, tasks, notes, and member list — everything except sessions you've already had (those keep an unlinked record)."
+        onConfirm={performDelete}
+        onClose={() => setShowDeleteConfirm(false)}
       />
     )}
     </>

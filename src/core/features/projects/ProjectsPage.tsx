@@ -14,6 +14,7 @@ import type { CoreProject } from '../../data/CoreDataContext';
 import { PageGreeting, GradientButton } from '../../ui/CorePage';
 import { ProjectEditorModal } from './ProjectEditorModal';
 import { CoverImage } from './CoverImage';
+import { DeleteProjectConfirm } from './DeleteProjectConfirm';
 
 // ── Color tokens (match the editor modal swatches) ───────────────
 
@@ -78,19 +79,13 @@ export function ProjectsPage() {
       alert(`Could not archive: ${e?.message ?? 'unknown error'}`);
     }
   }
-  async function handleDelete(project: CoreProject) {
-    if (!confirm(`Permanently delete "${project.name}"?\n\nThis removes the project, its milestones, phases, tasks, notes, and members.\n\nThere is no undo.`)) return;
-    const typed = prompt(`Type the project name to confirm:\n"${project.name}"`);
-    if (typed?.trim() !== project.name.trim()) {
-      if (typed != null) alert('Project name did not match — delete cancelled.');
-      return;
-    }
-    try {
-      await ProjectService.deleteProject(project.id);
-      await refreshProjects();
-    } catch (e: any) {
-      alert(`Could not delete: ${e?.message ?? 'unknown error'}`);
-    }
+  // Delete is gated through DeleteProjectConfirm — a proper themed modal
+  // / bottom-sheet that prompts the user to type the project name. Native
+  // window.prompt() was unstyled, broken on mobile, and got blocked by
+  // some browsers.
+  const [pendingDelete, setPendingDelete] = useState<CoreProject | null>(null);
+  function handleDelete(project: CoreProject) {
+    setPendingDelete(project);
   }
 
   return (
@@ -153,6 +148,18 @@ export function ProjectsPage() {
             setEditorOpen(false);
             refreshProjects().then(() => navigate(`/projects/${p.id}`));
           }}
+        />
+      )}
+
+      {pendingDelete && (
+        <DeleteProjectConfirm
+          projectName={pendingDelete.name}
+          detail="This removes the project, its milestones, phases, tasks, notes, and members."
+          onConfirm={async () => {
+            await ProjectService.deleteProject(pendingDelete.id);
+            await refreshProjects();
+          }}
+          onClose={() => setPendingDelete(null)}
         />
       )}
     </div>
