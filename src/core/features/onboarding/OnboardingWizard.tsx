@@ -882,14 +882,36 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const [showAiPromptHelper, setShowAiPromptHelper] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
 
-  // ── Goals (phases with weights + done flags) ───────────────────
-  // Each phase contributes weight_pct to overall project completion.
-  // already_done is the "reality check" — set by the user OR pre-checked
-  // by the AI based on the brain dump + stated completion %.
+  // ── Roadmap: milestones with nested phases ─────────────────────
+  // Two-tier structure:
+  //   • Milestones are destinations (Beta launch · 100 paying users · …).
+  //     weight_pct = % of the whole project this milestone represents.
+  //   • Phases are work units within a milestone.
+  //     weight_pct = % within the milestone (sum ~= 100 per milestone).
+  // already_done is the reality-check toggle on either level.
   type PhaseInput = { title: string; weight_pct: number; already_done: boolean };
-  const [goalInputs, setGoalInputs] = useState<PhaseInput[]>([
-    { title: '', weight_pct: 50, already_done: false },
-    { title: '', weight_pct: 50, already_done: false },
+  type MilestoneInput = {
+    title: string;
+    weight_pct: number;
+    already_done: boolean;
+    phases: PhaseInput[];
+  };
+  const [milestoneInputs, setMilestoneInputs] = useState<MilestoneInput[]>([
+    {
+      title: '',
+      weight_pct: 50,
+      already_done: false,
+      phases: [
+        { title: '', weight_pct: 50, already_done: false },
+        { title: '', weight_pct: 50, already_done: false },
+      ],
+    },
+    {
+      title: '',
+      weight_pct: 50,
+      already_done: false,
+      phases: [{ title: '', weight_pct: 100, already_done: false }],
+    },
   ]);
 
   // ── Tasks ──────────────────────────────────────────────────────
@@ -955,28 +977,78 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     });
   }
 
-  function updateGoal(i: number, val: string) {
-    setGoalInputs((cur) => cur.map((g, idx) => (idx === i ? { ...g, title: val } : g)));
+  // ── Milestone + phase mutation helpers ─────────────────────────
+  // All helpers go through `setMilestoneInputs` with immutable updates.
+  // The `mi` index always refers to milestone position; `pi` to phase
+  // position within that milestone.
+
+  function clampPct(val: number): number {
+    return Math.max(0, Math.min(100, Math.round(val)));
   }
 
-  function updateGoalWeight(i: number, val: number) {
-    const clamped = Math.max(0, Math.min(100, Math.round(val)));
-    setGoalInputs((cur) => cur.map((g, idx) => (idx === i ? { ...g, weight_pct: clamped } : g)));
+  function updateMilestone(mi: number, patch: Partial<Omit<MilestoneInput, 'phases'>>) {
+    setMilestoneInputs((cur) =>
+      cur.map((m, i) => (i === mi ? { ...m, ...patch } : m)),
+    );
   }
-
-  function toggleGoalDone(i: number) {
-    setGoalInputs((cur) => cur.map((g, idx) => (idx === i ? { ...g, already_done: !g.already_done } : g)));
+  function toggleMilestoneDone(mi: number) {
+    setMilestoneInputs((cur) =>
+      cur.map((m, i) => (i === mi ? { ...m, already_done: !m.already_done } : m)),
+    );
   }
-
-  function addGoalRow() {
-    if (goalInputs.length < 6) {
-      setGoalInputs((cur) => [...cur, { title: '', weight_pct: 20, already_done: false }]);
+  function addMilestoneRow() {
+    if (milestoneInputs.length < 6) {
+      setMilestoneInputs((cur) => [
+        ...cur,
+        {
+          title: '',
+          weight_pct: 20,
+          already_done: false,
+          phases: [{ title: '', weight_pct: 100, already_done: false }],
+        },
+      ]);
     }
   }
+  function removeMilestoneRow(mi: number) {
+    if (milestoneInputs.length <= 1) return;
+    setMilestoneInputs((cur) => cur.filter((_, i) => i !== mi));
+  }
 
-  function removeGoalRow(i: number) {
-    if (goalInputs.length <= 1) return;
-    setGoalInputs((cur) => cur.filter((_, idx) => idx !== i));
+  function updatePhase(mi: number, pi: number, patch: Partial<PhaseInput>) {
+    setMilestoneInputs((cur) =>
+      cur.map((m, i) =>
+        i === mi
+          ? { ...m, phases: m.phases.map((p, j) => (j === pi ? { ...p, ...patch } : p)) }
+          : m,
+      ),
+    );
+  }
+  function togglePhaseDone(mi: number, pi: number) {
+    setMilestoneInputs((cur) =>
+      cur.map((m, i) =>
+        i === mi
+          ? { ...m, phases: m.phases.map((p, j) => (j === pi ? { ...p, already_done: !p.already_done } : p)) }
+          : m,
+      ),
+    );
+  }
+  function addPhaseRow(mi: number) {
+    setMilestoneInputs((cur) =>
+      cur.map((m, i) => {
+        if (i !== mi) return m;
+        if (m.phases.length >= 6) return m;
+        return { ...m, phases: [...m.phases, { title: '', weight_pct: 20, already_done: false }] };
+      }),
+    );
+  }
+  function removePhaseRow(mi: number, pi: number) {
+    setMilestoneInputs((cur) =>
+      cur.map((m, i) => {
+        if (i !== mi) return m;
+        if (m.phases.length <= 1) return m;
+        return { ...m, phases: m.phases.filter((_, j) => j !== pi) };
+      }),
+    );
   }
 
   function updateTask(i: number, val: string) {
@@ -1066,14 +1138,16 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   // the rows as-is and surface a small error — the user can still type
   // manually and proceed.
 
-  const suggestPhases = useCallback(async () => {
+  /** Call the edge function in hierarchical mode and unpack milestones+phases
+   *  into the nested wizard state. Replaces the older flat-phases path. */
+  const suggestRoadmap = useCallback(async () => {
     if (suggestingPhases) return;
     setSuggestingPhases(true);
     setAiError(null);
     try {
       const { data, error } = await supabase.functions.invoke('suggest-project-roadmap', {
         body: {
-          mode: 'phases',
+          mode: 'roadmap',
           project: {
             title: projectTitle,
             brain_dump: projectBrainDump || null,
@@ -1091,31 +1165,56 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         },
       });
       if (error) throw error;
-      const raw: Array<{ title?: string; weight_pct?: number; already_done?: boolean }> =
-        data?.phases ?? [];
-      const phases: PhaseInput[] = raw
-        .filter((p) => p.title && p.title.trim().length > 0)
-        .map((p) => ({
-          title: p.title!.trim(),
-          weight_pct: typeof p.weight_pct === 'number'
-            ? Math.max(0, Math.min(100, Math.round(p.weight_pct)))
-            : Math.round(100 / Math.max(raw.length, 1)),
-          already_done: Boolean(p.already_done),
-        }));
-      if (phases.length > 0) {
-        setGoalInputs(phases);
+
+      type RawPhase = { title?: string; weight_pct?: number; already_done?: boolean };
+      type RawMilestone = {
+        title?: string;
+        weight_pct?: number;
+        already_done?: boolean;
+        phases?: RawPhase[];
+      };
+      const raw: RawMilestone[] = data?.milestones ?? [];
+      const milestones: MilestoneInput[] = raw
+        .filter((m) => m.title && m.title.trim().length > 0)
+        .map((m) => {
+          // Build phases first so we can fall back to "milestone is just one
+          // implicit phase" if the model didn't return any.
+          const rawPhases = Array.isArray(m.phases) ? m.phases : [];
+          const phases: PhaseInput[] = rawPhases
+            .filter((p) => p.title && p.title.trim().length > 0)
+            .map((p) => ({
+              title: p.title!.trim(),
+              weight_pct: typeof p.weight_pct === 'number'
+                ? clampPct(p.weight_pct)
+                : Math.round(100 / Math.max(rawPhases.length, 1)),
+              already_done: Boolean(p.already_done),
+            }));
+          return {
+            title: m.title!.trim(),
+            weight_pct: typeof m.weight_pct === 'number'
+              ? clampPct(m.weight_pct)
+              : Math.round(100 / Math.max(raw.length, 1)),
+            already_done: Boolean(m.already_done),
+            phases: phases.length > 0
+              ? phases
+              : [{ title: '', weight_pct: 100, already_done: Boolean(m.already_done) }],
+          };
+        });
+
+      if (milestones.length > 0) {
+        setMilestoneInputs(milestones);
       } else {
         setAiError('No suggestions returned — try filling out a bit more about the project.');
       }
     } catch (e: any) {
-      console.error('[suggestPhases]', e);
-      setAiError('Suggestion service unavailable — fill phases manually.');
+      console.error('[suggestRoadmap]', e);
+      setAiError('Suggestion service unavailable — fill the roadmap manually.');
     } finally {
       setSuggestingPhases(false);
     }
   }, [suggestingPhases, projectTitle, projectBrainDump, projectType, projectStartedStatus,
       projectCompletionPct, projectTargetDate, projectDeadlineFlex,
-      workTypes, industries, skills, goalInputs.length]);
+      workTypes, industries, skills]);
 
   const suggestTasks = useCallback(async () => {
     if (suggestingTasks) return;
@@ -1134,7 +1233,11 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             target_date: projectTargetDate || null,
             deadline_flexibility: projectTargetDate ? projectDeadlineFlex : null,
           },
-          phases: goalInputs.map((g) => g.title).filter((t) => t.trim()),
+          // Flatten across all milestones — the model gets the full list of
+          // phase titles so it can pick the first one not yet shipped.
+          phases: milestoneInputs
+            .flatMap((m) => m.phases.map((p) => p.title))
+            .filter((t) => t.trim()),
           user_context: {
             work_types: workTypes,
             industries: industries,
@@ -1158,7 +1261,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     }
   }, [suggestingTasks, projectTitle, projectBrainDump, projectType, projectStartedStatus,
       projectCompletionPct, projectTargetDate, projectDeadlineFlex,
-      goalInputs, workTypes, industries, skills, taskInputs.length]);
+      milestoneInputs, workTypes, industries, skills, taskInputs.length]);
 
   /** Create project + goals + tasks, then stamp wizard complete. */
   const saveProjectAndComplete = useCallback(async () => {
@@ -1179,19 +1282,31 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       deadline_flexibility: projectTargetDate ? projectDeadlineFlex : null,
     } as any);
 
-    // 2. Create goals (phases with weights + done flags)
-    const filledGoals = goalInputs.filter((g) => g.title.trim());
-    for (let i = 0; i < filledGoals.length; i++) {
-      const g = filledGoals[i];
-      await ProjectService.createMilestone({
+    // 2. Create milestones + their nested phases.
+    //    Two passes so we have milestone IDs before creating phases.
+    const filledMilestones = milestoneInputs.filter((m) => m.title.trim());
+    for (let mi = 0; mi < filledMilestones.length; mi++) {
+      const m = filledMilestones[mi];
+      const milestone = await ProjectService.createMilestone({
         project_id: project.id,
-        title: g.title.trim(),
-        sort_order: i,
-        // Cast through any — weight_pct/completed_at aren't yet in the
-        // ProjectService.createMilestone type; the column accepts them.
-        ...(g.weight_pct != null ? { weight_pct: g.weight_pct } : {}),
-        ...(g.already_done ? { completed_at: new Date().toISOString() } : {}),
-      } as any);
+        title: m.title.trim(),
+        weight_pct: m.weight_pct,
+        sort_order: mi,
+        completed_at: m.already_done ? new Date().toISOString() : null,
+      });
+
+      const filledPhases = m.phases.filter((p) => p.title.trim());
+      for (let pi = 0; pi < filledPhases.length; pi++) {
+        const p = filledPhases[pi];
+        await ProjectService.createPhase({
+          project_id:   project.id,
+          milestone_id: milestone.id,
+          title:        p.title.trim(),
+          weight_pct:   p.weight_pct,
+          sort_order:   pi,
+          completed_at: p.already_done ? new Date().toISOString() : null,
+        });
+      }
     }
 
     // 3. Create tasks
@@ -1208,7 +1323,9 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     await supabase.from('profiles').update({
       wizard_v2_completed_at: new Date().toISOString(),
     }).eq('id', user.id);
-  }, [projectTitle, projectBrainDump, projectColour, goalInputs, taskInputs]);
+  }, [projectTitle, projectBrainDump, projectColour, projectStartedStatus,
+      projectCompletionPct, projectType, projectTargetDate, projectDeadlineFlex,
+      milestoneInputs, taskInputs]);
 
   // ── Step transitions ───────────────────────────────────────────
 
@@ -2309,37 +2426,54 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     );
   }
 
-  // ── 8. Project goals ──────────────────────────────────────────
+  // ── 8. Roadmap — milestones with nested phases ────────────────
   if (step === 'goals') {
-    const filledGoals = goalInputs.filter((g) => g.title.trim());
-    // ── Live completion math ──
-    // Sum of weights across ALL non-empty phases (target = ~100)
-    // Sum of weights on COMPLETED phases (= true current completion)
-    // Compared against the gut estimate from step 7.
-    const weightSum = filledGoals.reduce((s, g) => s + g.weight_pct, 0);
-    const completedSum = filledGoals
-      .filter((g) => g.already_done)
-      .reduce((s, g) => s + g.weight_pct, 0);
+    const filledMilestones = milestoneInputs.filter((m) => m.title.trim());
+
+    // Milestone weights should sum to ~100 across the whole project.
+    const milestoneWeightSum = filledMilestones.reduce((s, m) => s + m.weight_pct, 0);
+
+    // Per-milestone done %: sum of done phase weights / sum of phase weights
+    // (or 100 if `already_done` toggled at the milestone level with no phases).
+    const milestoneDonePct = (m: MilestoneInput): number => {
+      const filledPhases = m.phases.filter((p) => p.title.trim());
+      if (filledPhases.length === 0) return m.already_done ? 100 : 0;
+      const phaseWeightSum = filledPhases.reduce((s, p) => s + p.weight_pct, 0);
+      if (phaseWeightSum === 0) return m.already_done ? 100 : 0;
+      const doneWeightSum = filledPhases
+        .filter((p) => p.already_done)
+        .reduce((s, p) => s + p.weight_pct, 0);
+      return Math.round((doneWeightSum / phaseWeightSum) * 100);
+    };
+
+    // Project completion = Σ (milestone_weight × milestone_done / 100)
+    const projectDonePct = filledMilestones.reduce(
+      (s, m) => s + (m.weight_pct * milestoneDonePct(m)) / 100,
+      0,
+    );
+    const projectDoneRounded = Math.round(projectDonePct);
+
     const gutEstimate = projectStartedStatus === 'in_progress' ? projectCompletionPct : 0;
-    const gutDelta = filledGoals.length > 0 ? Math.abs(completedSum - gutEstimate) : 0;
+    const gutDelta = filledMilestones.length > 0 ? Math.abs(projectDoneRounded - gutEstimate) : 0;
+
     return (
       <StepShell step="goals" canGoBack={stepHistory.length > 0} onBack={goBack}>
         <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center mb-4">
           <Flag size={18} className="text-violet-600" />
         </div>
         <h2 className="stitch-headline text-2xl font-extrabold tracking-tight mb-2">
-          Break it into phases
+          Roadmap to done
         </h2>
         <p className="text-sm stitch-text-secondary mb-4">
-          Each phase is a checkpoint that contributes a <strong>weight</strong> toward
-          completion. Tick the ones you've already done — the numbers below become your
-          project's true progress.
+          <strong>Milestones</strong> are your destinations (Beta launch · 100 users · …).
+          <strong> Phases</strong> are the work between them. Tick what you've already shipped —
+          the number below becomes your true progress.
         </p>
 
         {/* ── AI Suggest button ── */}
         <button
           type="button"
-          onClick={suggestPhases}
+          onClick={suggestRoadmap}
           disabled={suggestingPhases || !projectTitle.trim()}
           className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] mb-4 ${
             suggestingPhases
@@ -2349,7 +2483,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         >
           {suggestingPhases
             ? <><Loader2 size={16} className="animate-spin" /> Thinking…</>
-            : <><Wand2 size={14} /> Suggest phases for me</>
+            : <><Wand2 size={14} /> Suggest milestones + phases</>
           }
         </button>
 
@@ -2359,112 +2493,220 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           </p>
         )}
 
-        <div className="space-y-2.5">
-          {goalInputs.map((g, i) => (
-            <div
-              key={i}
-              className={`rounded-xl p-2.5 transition-all ${
-                g.already_done
-                  ? 'bg-emerald-50 ring-1 ring-emerald-200'
-                  : 'bg-surface-container-low'
-              }`}
-              style={{ animation: `wizFadeUp 350ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 70}ms both` }}
-            >
-              {/* Row 1: title + remove */}
-              <div className="flex items-center gap-2">
-                <Flag size={14} className={`shrink-0 ${g.already_done ? 'text-emerald-500' : 'text-violet-500'}`} />
-                <input
-                  type="text"
-                  value={g.title}
-                  onChange={(e) => updateGoal(i, e.target.value)}
-                  placeholder={[
-                    'e.g. Research and outline complete',
-                    'e.g. First draft done',
-                    'e.g. Reviewed and signed off',
-                    'e.g. Published or shipped',
-                    'e.g. Follow-up complete',
-                  ][i] ?? `Phase ${i + 1}`}
-                  maxLength={120}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all ${
-                    g.already_done
-                      ? 'bg-white/60 stitch-text-primary line-through opacity-80'
-                      : 'bg-white stitch-text-primary'
-                  }`}
-                />
-                {goalInputs.length > 1 && (
+        {/* ── Milestone list ─────────────────────────────────── */}
+        <div className="space-y-3">
+          {milestoneInputs.map((m, mi) => {
+            const mDone = milestoneDonePct(m);
+            const mAllPhasesDone = mDone >= 100;
+            const phaseWeightSum = m.phases
+              .filter((p) => p.title.trim())
+              .reduce((s, p) => s + p.weight_pct, 0);
+            return (
+              <div
+                key={mi}
+                className={`rounded-2xl p-3 transition-all ${
+                  mAllPhasesDone || m.already_done
+                    ? 'bg-emerald-50 ring-1 ring-emerald-300'
+                    : 'bg-violet-50/50 ring-1 ring-violet-200'
+                }`}
+                style={{ animation: `wizFadeUp 350ms cubic-bezier(0.16, 1, 0.3, 1) ${mi * 80}ms both` }}
+              >
+                {/* Milestone header */}
+                <div className="flex items-center gap-2">
+                  <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                    mAllPhasesDone || m.already_done
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-violet-500 text-white'
+                  }`}>
+                    M{mi + 1}
+                  </div>
+                  <input
+                    type="text"
+                    value={m.title}
+                    onChange={(e) => updateMilestone(mi, { title: e.target.value })}
+                    placeholder={[
+                      'e.g. Beta launch',
+                      'e.g. Public launch',
+                      'e.g. 100 active users',
+                      'e.g. 100 paying users',
+                      'e.g. Feature complete',
+                      'e.g. Sustainable revenue',
+                    ][mi] ?? `Milestone ${mi + 1}`}
+                    maxLength={80}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-bold placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all ${
+                      mAllPhasesDone || m.already_done
+                        ? 'bg-white/60 stitch-text-primary line-through opacity-80'
+                        : 'bg-white stitch-text-primary'
+                    }`}
+                  />
+                  {milestoneInputs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeMilestoneRow(mi)}
+                      className="shrink-0 w-7 h-7 rounded-full bg-white/70 hover:bg-white flex items-center justify-center transition-colors"
+                      aria-label="Remove milestone"
+                    >
+                      <X size={12} className="stitch-text-secondary" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Milestone weight + done toggle */}
+                <div className="flex items-center gap-3 mt-2 ml-9">
+                  <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider w-14">
+                    of project
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={m.weight_pct}
+                    onChange={(e) => updateMilestone(mi, { weight_pct: clampPct(Number(e.target.value)) })}
+                    className="flex-1 accent-violet-600 h-1"
+                  />
+                  <span className="text-[11px] font-bold tabular-nums w-9 text-right text-violet-700">
+                    {m.weight_pct}%
+                  </span>
                   <button
                     type="button"
-                    onClick={() => removeGoalRow(i)}
-                    className="shrink-0 w-7 h-7 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center transition-colors"
-                    aria-label="Remove phase"
+                    onClick={() => toggleMilestoneDone(mi)}
+                    title="Mark the whole milestone as done"
+                    className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95 ${
+                      m.already_done
+                        ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                        : 'bg-white/70 stitch-text-secondary hover:bg-white'
+                    }`}
                   >
-                    <X size={12} className="stitch-text-secondary" />
+                    {m.already_done ? <><Check size={10} strokeWidth={3} /> Hit</> : 'Hit?'}
                   </button>
-                )}
-              </div>
+                </div>
 
-              {/* Row 2: weight slider + done toggle */}
-              <div className="flex items-center gap-3 mt-2 ml-5">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={g.weight_pct}
-                  onChange={(e) => updateGoalWeight(i, Number(e.target.value))}
-                  className="flex-1 accent-violet-500 h-1"
-                  aria-label="Phase weight"
-                />
-                <span className="text-[11px] font-bold tabular-nums w-9 text-right text-violet-700">
-                  {g.weight_pct}%
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggleGoalDone(i)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95 ${
-                    g.already_done
-                      ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                      : 'bg-surface-container stitch-text-secondary hover:bg-surface-container-high'
-                  }`}
-                >
-                  {g.already_done ? <><Check size={10} strokeWidth={3} /> Done</> : 'Mark done'}
-                </button>
+                {/* Phases nested under the milestone */}
+                <div className="mt-2.5 ml-3 space-y-1.5 border-l-2 border-violet-200 pl-3">
+                  {m.phases.map((p, pi) => (
+                    <div
+                      key={pi}
+                      className={`rounded-lg p-2 transition-all ${
+                        p.already_done
+                          ? 'bg-emerald-100/60'
+                          : 'bg-white/70'
+                      }`}
+                    >
+                      {/* Phase title */}
+                      <div className="flex items-center gap-2">
+                        <Flag size={12} className={`shrink-0 ${p.already_done ? 'text-emerald-500' : 'text-violet-400'}`} />
+                        <input
+                          type="text"
+                          value={p.title}
+                          onChange={(e) => updatePhase(mi, pi, { title: e.target.value })}
+                          placeholder={`Phase ${pi + 1}`}
+                          maxLength={120}
+                          className={`flex-1 px-2 py-1.5 rounded text-xs font-medium placeholder:stitch-text-secondary bg-transparent border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all ${
+                            p.already_done ? 'line-through opacity-80' : ''
+                          }`}
+                        />
+                        {m.phases.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removePhaseRow(mi, pi)}
+                            className="shrink-0 w-6 h-6 rounded-full hover:bg-surface-container flex items-center justify-center transition-colors"
+                            aria-label="Remove phase"
+                          >
+                            <X size={11} className="stitch-text-secondary" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Phase weight + done */}
+                      <div className="flex items-center gap-2 mt-1 ml-4">
+                        <span className="text-[9px] font-bold stitch-text-secondary uppercase tracking-wider w-12">
+                          of milestone
+                        </span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={p.weight_pct}
+                          onChange={(e) => updatePhase(mi, pi, { weight_pct: clampPct(Number(e.target.value)) })}
+                          className="flex-1 accent-violet-400 h-1"
+                        />
+                        <span className="text-[10px] font-bold tabular-nums w-8 text-right text-violet-600">
+                          {p.weight_pct}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => togglePhaseDone(mi, pi)}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all active:scale-95 ${
+                            p.already_done
+                              ? 'bg-emerald-500 text-white shadow-sm'
+                              : 'bg-surface-container stitch-text-secondary hover:bg-surface-container-high'
+                          }`}
+                        >
+                          {p.already_done ? <><Check size={8} strokeWidth={3} /> Done</> : 'Mark'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {m.phases.length < 6 && (
+                    <button
+                      type="button"
+                      onClick={() => addPhaseRow(mi)}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 hover:opacity-70 transition-opacity pl-1"
+                    >
+                      <Plus size={11} /> Add phase
+                    </button>
+                  )}
+                </div>
+
+                {/* Per-milestone progress + weight-sum hint */}
+                <div className="flex items-center justify-between mt-2.5 ml-9 text-[10px]">
+                  <span className={`stitch-text-secondary ${phaseWeightSum !== 100 && m.phases.some((p) => p.title.trim()) ? 'text-amber-700 font-semibold' : ''}`}>
+                    Phase weights: {phaseWeightSum}%
+                    {phaseWeightSum !== 100 && m.phases.some((p) => p.title.trim()) && ' — aim for 100'}
+                  </span>
+                  <span className="font-bold text-emerald-700 tabular-nums">
+                    {mDone}% to milestone
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {goalInputs.length < 6 && (
+        {milestoneInputs.length < 6 && (
           <button
             type="button"
-            onClick={addGoalRow}
+            onClick={addMilestoneRow}
             className="mt-3 flex items-center gap-2 text-xs font-semibold text-primary hover:opacity-70 transition-opacity"
           >
-            <Plus size={14} /> Add another phase
+            <Plus size={14} /> Add another milestone
           </button>
         )}
 
-        {/* ── Live completion summary ── */}
-        {filledGoals.length > 0 && (
+        {/* ── Live project-completion summary ── */}
+        {filledMilestones.length > 0 && (
           <div className="mt-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-violet-50 ring-1 ring-violet-100 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
                 Real progress
               </span>
               <span className="text-2xl font-extrabold text-emerald-600 tabular-nums">
-                {completedSum}<span className="text-sm stitch-text-secondary">%</span>
+                {projectDoneRounded}<span className="text-sm stitch-text-secondary">%</span>
               </span>
             </div>
             <div className="w-full h-2 rounded-full bg-white/70 overflow-hidden mb-2">
               <div
                 className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500"
-                style={{ width: `${Math.min(100, completedSum)}%` }}
+                style={{ width: `${Math.min(100, projectDoneRounded)}%` }}
               />
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className={`stitch-text-secondary ${weightSum !== 100 ? 'text-amber-700 font-semibold' : ''}`}>
-                Phase weights sum to {weightSum}%
-                {weightSum !== 100 && filledGoals.length > 0 && ' — aim for 100'}
+              <span className={`stitch-text-secondary ${milestoneWeightSum !== 100 ? 'text-amber-700 font-semibold' : ''}`}>
+                Milestone weights sum to {milestoneWeightSum}%
+                {milestoneWeightSum !== 100 && ' — aim for 100'}
               </span>
               {projectStartedStatus === 'in_progress' && gutDelta >= 15 && (
                 <span className="text-amber-700 font-semibold">
@@ -2478,7 +2720,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 mt-4">{error}</p>}
 
         <PrimaryBtn
-          label={filledGoals.length > 0 ? 'Next' : 'Skip phases for now'}
+          label={filledMilestones.length > 0 ? 'Next' : 'Skip roadmap for now'}
           onClick={() => navigateForward('tasks')}
         />
       </StepShell>
