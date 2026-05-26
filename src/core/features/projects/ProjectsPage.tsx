@@ -207,8 +207,18 @@ function ProjectCard({
         ${isActive ? 'ring-2 ' + color.ring : 'ring-surface-container/80 hover:' + color.ring}`}
       onClick={onOpen}
     >
-      {/* Color accent band */}
-      <div className={`h-1.5 w-full bg-gradient-to-r ${color.gradient}`} />
+      {/* Top band — cover image as a slim banner when set, else the
+          color gradient stripe. h-16 with a cover image makes the project
+          identity immediately visible without dominating the card. */}
+      {project.coverImageUrl ? (
+        <div
+          className="h-16 w-full bg-cover bg-center"
+          style={{ backgroundImage: `url(${project.coverImageUrl})` }}
+          aria-hidden="true"
+        />
+      ) : (
+        <div className={`h-1.5 w-full bg-gradient-to-r ${color.gradient}`} />
+      )}
 
       <div className="p-4 space-y-3.5">
         {/* Top row: title + badges */}

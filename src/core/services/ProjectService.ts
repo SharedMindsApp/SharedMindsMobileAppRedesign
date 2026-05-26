@@ -14,6 +14,8 @@ export interface Project {
     starts_on: string | null;
     target_date: string | null;
     completed_at: string | null;
+    /** Public URL of the project cover image. NULL = use the color gradient. */
+    cover_image_url: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -181,6 +183,57 @@ export const ProjectService = {
         if (!data || data.length === 0) {
             throw new Error('Project delete returned 0 rows — likely an RLS denial (only owners can delete).');
         }
+    },
+
+    /**
+     * Upload a project cover image to the `project-covers` storage bucket
+     * and persist its public URL to `projects.cover_image_url`. Storage
+     * RLS gates writes to project owners only (see migration
+     * 20260526000007_project_covers.sql).
+     *
+     * Path convention: <project_id>/<random>.<ext>
+     * The first folder segment encoding the project_id is what the RLS
+     * policy uses to confirm ownership.
+     */
+    async uploadProjectCover(projectId: string, file: File): Promise<string> {
+        // Cheap client-side validation before incurring an upload.
+        if (file.size > 4 * 1024 * 1024) {
+            throw new Error('Cover image too large — keep under 4 MB.');
+        }
+        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowed.includes(file.type)) {
+            throw new Error('Cover must be a JPEG, PNG, or WebP image.');
+        }
+
+        const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase();
+        const filename = `${crypto.randomUUID()}.${ext}`;
+        const path = `${projectId}/${filename}`;
+
+        const { error: uploadErr } = await supabase.storage
+            .from('project-covers')
+            .upload(path, file, {
+                cacheControl: '31536000', // 1 year — filename includes a UUID so updates land at a new URL anyway
+                contentType: file.type,
+                upsert: false,
+            });
+        if (uploadErr) {
+            console.error('[ProjectService] cover upload failed:', uploadErr);
+            throw uploadErr;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('project-covers')
+            .getPublicUrl(path);
+
+        await this.updateProject(projectId, { cover_image_url: publicUrl });
+        return publicUrl;
+    },
+
+    /** Clear the cover image URL on the project. Doesn't delete the
+     *  file from storage to keep the operation idempotent and cheap;
+     *  orphan covers can be GC'd in a future maintenance pass. */
+    async removeProjectCover(projectId: string): Promise<void> {
+        await this.updateProject(projectId, { cover_image_url: null });
     },
 
     // ── Members ───────────────────────────────────────────────────────

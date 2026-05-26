@@ -201,8 +201,22 @@ export function ProjectDetailPage() {
           stat value invisible. */}
       <div className="rounded-2xl overflow-hidden mb-5 shadow-md bg-surface ring-1 ring-surface-container/60">
 
-        {/* Gradient banner */}
-        <div className={`bg-gradient-to-br ${color.gradient} px-5 pt-5 pb-6`}>
+        {/* Hero banner — cover image with dark overlay if set, else the
+            project's colour gradient. Dark overlay is always present so
+            the white title/description text stays legible regardless of
+            what photograph the user uploaded. */}
+        <div
+          className={`relative px-5 pt-5 pb-6 ${project.cover_image_url ? '' : `bg-gradient-to-br ${color.gradient}`}`}
+          style={
+            project.cover_image_url
+              ? { backgroundImage: `url(${project.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : undefined
+          }
+        >
+          {project.cover_image_url && (
+            <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/40 to-black/60 pointer-events-none" />
+          )}
+          <div className="relative z-10">
 
           {/* Top bar: archived badge + edit */}
           <div className="flex items-center justify-between mb-3">
@@ -231,26 +245,52 @@ export function ProjectDetailPage() {
             const desc = project.description.trim();
             const PREVIEW_CHARS = 150;
             const needsTruncate = desc.length > PREVIEW_CHARS;
-            const shown = !needsTruncate || descExpanded
+
+            // Split on blank lines so we can render real paragraphs with
+            // meaningful spacing — pre-wrap collapses these into one
+            // visually-undifferentiated wall. Falling back to a single
+            // paragraph when the user wrote one block.
+            const collapsedText = !needsTruncate || descExpanded
               ? desc
               : desc.slice(0, PREVIEW_CHARS).replace(/\s+\S*$/, '') + '…';
+            const paragraphs = collapsedText
+              .split(/\n\s*\n/)
+              .map((p) => p.trim())
+              .filter(Boolean);
+
             return (
-              <div className="max-w-lg">
-                <p className="text-sm text-white/75 leading-snug whitespace-pre-wrap">
-                  {shown}
-                </p>
+              // max-w-[60ch] keeps line length in the readable 50-75ch
+              // window. mt-3 distances the prose from the title.
+              <div className="max-w-[60ch] mt-3">
+                <div className="space-y-3">
+                  {paragraphs.map((para, i) => (
+                    <p
+                      key={i}
+                      className={
+                        // First paragraph: slightly larger + brighter so
+                        // it reads as a "lead" — the rest tapers down.
+                        i === 0
+                          ? 'text-[15px] text-white/95 leading-relaxed font-medium'
+                          : 'text-sm text-white/80 leading-relaxed'
+                      }
+                    >
+                      {para}
+                    </p>
+                  ))}
+                </div>
                 {needsTruncate && (
                   <button
                     type="button"
                     onClick={() => setDescExpanded((v) => !v)}
-                    className="mt-1.5 text-xs font-bold text-white/90 hover:text-white underline-offset-2 hover:underline transition-colors"
+                    className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full backdrop-blur-sm transition-colors"
                   >
-                    {descExpanded ? 'Show less' : 'Read more'}
+                    {descExpanded ? '↑ Show less' : '↓ Read more'}
                   </button>
                 )}
               </div>
             );
           })()}
+          </div>{/* close .relative.z-10 inner wrapper */}
         </div>
 
         {/* ── Stats band (below the banner, inside the same card) ─

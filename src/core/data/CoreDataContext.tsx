@@ -38,6 +38,7 @@ export type CoreProject = {
   targetDate: string | null;  // ISO date
   memberCount: number;        // 1 = solo, >1 = shared
   spaceId: string;            // needed for task scoping when creating tasks
+  coverImageUrl: string | null; // optional banner image; falls back to color gradient
 };
 
 export type CoreTask = {
@@ -376,6 +377,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           targetDate: p.target_date,
           memberCount: count,
           spaceId: p.space_id,
+          coverImageUrl: p.cover_image_url ?? null,
         };
       });
 

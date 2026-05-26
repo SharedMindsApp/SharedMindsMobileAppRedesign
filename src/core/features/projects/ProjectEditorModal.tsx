@@ -12,8 +12,8 @@
  * heaviest action (archive) is clearly separated from the save flow.
  */
 
-import { useState } from 'react';
-import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle, Trash2, ImageIcon, Upload } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectService, type Project, type ProjectMemberWithProfile } from '../../services/ProjectService';
@@ -52,8 +52,49 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
   const [title, setTitle] = useState(project?.title ?? '');
   const [description, setDescription] = useState(project?.description ?? '');
   const [color, setColor] = useState<string>(project?.color ?? 'blue');
+  /** Live cover URL — starts from the project's stored value, updates
+   *  on successful upload or remove. Drives the in-modal preview AND
+   *  what the hero/cards render after save. */
+  const [coverUrl, setCoverUrl] = useState<string | null>(project?.cover_image_url ?? null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** Upload only works for existing projects (we need the id for the
+   *  storage path and the RLS policy). For new projects, the user can
+   *  save first and then come back to add a cover. */
+  async function handleCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so the same file can be re-picked
+    if (!file || !project) return;
+    setCoverUploading(true);
+    setError(null);
+    try {
+      const url = await ProjectService.uploadProjectCover(project.id, file);
+      setCoverUrl(url);
+      await refreshProjects();
+    } catch (err: any) {
+      setError(err?.message ?? 'Could not upload cover.');
+    } finally {
+      setCoverUploading(false);
+    }
+  }
+
+  async function handleRemoveCover() {
+    if (!project) return;
+    setCoverUploading(true);
+    setError(null);
+    try {
+      await ProjectService.removeProjectCover(project.id);
+      setCoverUrl(null);
+      await refreshProjects();
+    } catch (err: any) {
+      setError(err?.message ?? 'Could not remove cover.');
+    } finally {
+      setCoverUploading(false);
+    }
+  }
   const [inviteOpen, setInviteOpen] = useState(false);
 
   const canSubmit = title.trim().length > 0 && !submitting;
@@ -210,6 +251,76 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
 
           {/* 2. Colour — bigger swatches in a 6-up grid, label below each,
               a check mark on the selected one for unambiguous state. */}
+          {/* ── Cover image (existing projects only — upload needs an id) ── */}
+          {!isNew && (
+            <section className="rounded-2xl ring-1 ring-surface-container p-4">
+              <SectionHeading
+                icon={<ImageIcon size={11} className="stitch-text-secondary" />}
+                label="Cover image"
+              />
+              <p className="text-[11px] stitch-text-secondary leading-snug mt-1 mb-3">
+                Optional banner shown at the top of the project page and on cards. Falls back to the colour gradient if no image.
+              </p>
+
+              {coverUrl ? (
+                // ── With cover: 16:9 preview + Replace / Remove actions ──
+                <div className="space-y-2">
+                  <div
+                    className="aspect-[16/9] rounded-xl bg-cover bg-center bg-surface-container-low ring-1 ring-surface-container"
+                    style={{ backgroundImage: `url(${coverUrl})` }}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => coverInputRef.current?.click()}
+                      disabled={coverUploading}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.98] transition-all disabled:opacity-50"
+                    >
+                      {coverUploading
+                        ? <><Loader2 size={12} className="animate-spin" /> Uploading…</>
+                        : <><Upload size={12} /> Replace</>
+                      }
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCover}
+                      disabled={coverUploading}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-700 bg-white ring-1 ring-rose-200 hover:bg-rose-50 active:scale-[0.98] transition-all disabled:opacity-50"
+                    >
+                      <X size={12} /> Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // ── No cover: dashed dropzone-style upload button ──
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  disabled={coverUploading}
+                  className="w-full aspect-[16/9] rounded-xl border-2 border-dashed border-surface-container-high hover:border-primary/40 hover:bg-primary/5 flex flex-col items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  {coverUploading ? (
+                    <Loader2 size={20} className="animate-spin stitch-text-secondary" />
+                  ) : (
+                    <>
+                      <ImageIcon size={20} className="stitch-text-secondary" />
+                      <span className="text-xs font-semibold stitch-text-primary">Upload cover image</span>
+                      <span className="text-[10px] stitch-text-secondary">JPEG/PNG/WebP · up to 4 MB</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleCoverFile}
+                className="hidden"
+              />
+            </section>
+          )}
+
           <section className="rounded-2xl ring-1 ring-surface-container p-4">
             <SectionHeading icon={<span className="text-[10px]">🎨</span>} label="Colour" />
             <div className="grid grid-cols-6 gap-2 mt-3">
