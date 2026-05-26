@@ -38,7 +38,9 @@ import type { FocusSession } from '../../../lib/sessions/focusTypes';
 //   • Goals    — phases / deliverables this project is chasing
 //   • Notes    — project thinking + docs
 //   • Activity — chronological event feed
-type Tab = 'tasks' | 'kanban' | 'goals' | 'notes' | 'activity';
+// 'tasks' is the unified board-style task view (formerly named 'kanban').
+// The earlier flat-list 'tasks' tab was redundant and has been removed.
+type Tab = 'tasks' | 'goals' | 'notes' | 'activity';
 
 // ── Priority / energy labels ─────────────────────────────────────
 
@@ -149,13 +151,20 @@ export function ProjectDetailPage() {
     }
   }
 
-  async function toggleTaskStatus(task: Task) {
-    const next = task.status === 'done' ? 'active' : 'done';
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: next } : t)));
+  /** Move a task to an explicit status. Used by the Kanban arrows so the
+   *  ←/→ buttons land on the column they say they will — replacing the
+   *  earlier "toggle done/active" implementation that was double-firing
+   *  and flipping inbox → active → done in a single click. Optimistic
+   *  update with rollback on DB failure. */
+  async function setTaskStatus(taskId: string, next: Task['status']) {
+    const original = tasks.find((t) => t.id === taskId);
+    if (!original || original.status === next) return;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: next } : t)));
     try {
-      await TaskService.updateTask(task.id, { status: next });
-    } catch {
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: task.status } : t)));
+      await TaskService.updateTask(taskId, { status: next });
+    } catch (err) {
+      console.error('[ProjectDetailPage] setTaskStatus failed:', err);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: original.status } : t)));
     }
   }
 
@@ -399,8 +408,7 @@ export function ProjectDetailPage() {
       {/* Tab strip — horizontally scrollable on mobile so all 5 fit. */}
       <div className="flex p-1 bg-surface-container-low rounded-full gap-1 mb-4 overflow-x-auto scrollbar-thin">
         {([
-          { id: 'tasks'    as const, label: 'Tasks',    count: openTasks.length, icon: Target,       hint: 'Flat list' },
-          { id: 'kanban'   as const, label: 'Kanban',   count: tasks.length,     icon: Columns,      hint: 'Board view' },
+          { id: 'tasks'    as const, label: 'Tasks',    count: tasks.length,     icon: Columns,      hint: 'To do · Active · Done' },
           { id: 'goals'    as const, label: 'Goals',    count: 0,                icon: Flag,         hint: 'Phases this project is chasing' },
           { id: 'notes'    as const, label: 'Notes',    count: 0,                icon: NotebookPen,  hint: 'Project thinking' },
           { id: 'activity' as const, label: 'Activity', count: 0,                icon: Activity,     hint: 'What happened' },
@@ -429,22 +437,9 @@ export function ProjectDetailPage() {
 
       {/* ── Tab body ───────────────────────────────────────────── */}
       {tab === 'tasks' && (
-        <TasksTab
-          openTasks={openTasks}
-          doneTasks={doneTasks}
-          newTaskTitle={newTaskTitle}
-          setNewTaskTitle={setNewTaskTitle}
-          onAdd={handleAddTask}
-          onToggle={toggleTaskStatus}
-          submitting={taskSubmitting}
-          colorHex={color.hex}
-          colorGradient={color.gradient}
-        />
-      )}
-      {tab === 'kanban' && (
         <KanbanTab
           tasks={tasks}
-          onToggle={toggleTaskStatus}
+          onSetStatus={setTaskStatus}
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={handleAddTask}
@@ -847,38 +842,34 @@ export type { Task, ShippedSession, ScheduledSessionWithProfile };
 // drag would add ~50 LOC + dnd-kit dep for a marginal UX win at this
 // scale. If task volume grows, drag becomes worth it.
 
+// "Inbox" used to live here as a column label but read like an email
+// inbox — renamed to "To do" so users see a task list, not a queue of
+// captured-but-unread items. DB value stays 'inbox' for back-compat.
 const KANBAN_COLUMNS = [
-  { key: 'inbox' as const,  label: 'Inbox',  desc: 'Captured. Not started.', tint: 'bg-surface-container-low' },
-  { key: 'active' as const, label: 'Active', desc: 'In progress.',           tint: 'bg-blue-50/60' },
-  { key: 'done' as const,   label: 'Done',   desc: 'Finished.',              tint: 'bg-emerald-50/60' },
+  { key: 'inbox' as const,  label: 'To do',  desc: 'Not started yet.',  tint: 'bg-surface-container-low' },
+  { key: 'active' as const, label: 'Active', desc: 'In progress.',      tint: 'bg-blue-50/60' },
+  { key: 'done' as const,   label: 'Done',   desc: 'Finished.',         tint: 'bg-emerald-50/60' },
 ];
 
 type KanbanStatus = 'inbox' | 'active' | 'done';
 
 function KanbanTab({
-  tasks, onToggle, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  tasks, onSetStatus, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
 }: {
   tasks: Task[];
-  onToggle: (task: Task) => void;
+  /** Move a task to a specific status — never to be confused with
+   *  toggle. The earlier `onToggle` indirection double-fired the status
+   *  change and bounced tasks straight from inbox to done. */
+  onSetStatus: (taskId: string, next: KanbanStatus) => void;
   newTaskTitle: string;
   setNewTaskTitle: (s: string) => void;
   onAdd: () => void;
   submitting: boolean;
   colorHex: string;
 }) {
-  async function moveTask(task: Task, next: KanbanStatus) {
+  function moveTask(task: Task, next: KanbanStatus) {
     if (task.status === next) return;
-    try {
-      await TaskService.updateTask(task.id, { status: next });
-      // Optimistic local mutation through the parent toggle isn't quite
-      // right here (different target), so we let the parent re-fetch by
-      // toggling and using the lazy refresh path. For now, mutate via the
-      // direct service call — the parent's `tasks` state will re-sync on
-      // next load. If this feels stale, lift state into the parent.
-      onToggle({ ...task, status: next } as Task);
-    } catch (err) {
-      console.error('[KanbanTab] move failed:', err);
-    }
+    onSetStatus(task.id, next);
   }
 
   // Group tasks by status; treat unknown as 'inbox'.
@@ -963,6 +954,9 @@ function KanbanCard({
   const canNext = columnKey !== 'done';
   const prevTarget: KanbanStatus = columnKey === 'done' ? 'active' : 'inbox';
   const nextTarget: KanbanStatus = columnKey === 'inbox' ? 'active' : 'done';
+  // Pretty labels for the button text so it matches the column headers
+  // ("To do" instead of the DB-internal "inbox").
+  const labelFor = (s: KanbanStatus) => s === 'inbox' ? 'to do' : s;
 
   return (
     <div className="group bg-white rounded-xl ring-1 ring-surface-container px-3 py-2 hover:shadow-sm transition-shadow">
@@ -975,18 +969,18 @@ function KanbanCard({
           onClick={() => canPrev && onMove(prevTarget)}
           disabled={!canPrev}
           className="text-[10px] font-bold stitch-text-secondary hover:stitch-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-          title={canPrev ? `Move to ${prevTarget}` : ''}
+          title={canPrev ? `Move to ${labelFor(prevTarget)}` : ''}
         >
-          ← {canPrev ? prevTarget : ''}
+          ← {canPrev ? labelFor(prevTarget) : ''}
         </button>
         <button
           type="button"
           onClick={() => canNext && onMove(nextTarget)}
           disabled={!canNext}
           className="text-[10px] font-bold stitch-text-secondary hover:stitch-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-          title={canNext ? `Move to ${nextTarget}` : ''}
+          title={canNext ? `Move to ${labelFor(nextTarget)}` : ''}
         >
-          {canNext ? nextTarget : ''} →
+          {canNext ? labelFor(nextTarget) : ''} →
         </button>
       </div>
     </div>
