@@ -24,6 +24,10 @@ export interface HomeDashboard {
   /** Just start_times (one per session in the last 7 days), used by the
    *  today/week grid for sparkline-style density display. */
   weekSessions: { start_time: string }[];
+  /** ISO timestamp of the most recent completed session, or null for
+   *  brand-new users. Used privately (never displayed numerically) to
+   *  decide whether to surface the Quick Restart card. */
+  lastActiveAt: string | null;
 }
 
 /** Single-call home dashboard fetch. ~30-80 ms in practice on Pro/Micro;
@@ -54,5 +58,6 @@ export async function fetchHomeDashboard(userId: string): Promise<HomeDashboard 
     upcomingScheduled,
     recentShips:       (blob.recentShips ?? []) as ShippedSession[],
     weekSessions:      (blob.weekSessions ?? []) as { start_time: string }[],
+    lastActiveAt:      blob.lastActiveAt ?? null,
   };
 }

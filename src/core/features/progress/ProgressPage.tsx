@@ -179,7 +179,7 @@ export function ProgressPage() {
           <p className="text-2xl font-extrabold stitch-headline leading-none">
             {loading ? '—' : streak}
           </p>
-          <p className="text-[11px] font-semibold stitch-text-secondary uppercase tracking-wider">Day streak</p>
+          <p className="text-[11px] font-semibold stitch-text-secondary uppercase tracking-wider">Recent run</p>
         </SurfaceCard>
 
         <SurfaceCard className="flex flex-col items-center justify-center py-5 text-center gap-1.5">

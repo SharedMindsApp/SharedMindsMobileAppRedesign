@@ -54,6 +54,8 @@ import { PulsePeopleTab } from './PulsePeopleTab';
 import { FoundingMemberBadge } from './FoundingMemberBadge';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
 import { FirstWeekIntentionsCard, useFirstWeekIntentionsEligible } from './FirstWeekIntentionsCard';
+import { deriveMomentum, momentumChipClasses } from './momentum';
+import { QuickRestartCard } from './QuickRestartCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
@@ -339,6 +341,7 @@ export function DashboardPage() {
   // fast, because there's only ONE network call and the heavy
   // aggregation happens server-side.
   const [hasAnySession, setHasAnySession] = useState<boolean | null>(null);
+  const [lastActiveAt, setLastActiveAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -351,6 +354,7 @@ export function DashboardPage() {
       setUpcomingScheduled(dash.upcomingScheduled);
       setMyShips(dash.recentShips);
       setWeekSessions(dash.weekSessions);
+      setLastActiveAt(dash.lastActiveAt);
       // Synthesize a partial ProfileStats from the home RPC for the
       // identity chips. Full stats (best day/week, longest streak, etc.)
       // still loads lazily when the user opens the Stats tab.
@@ -384,6 +388,17 @@ export function DashboardPage() {
   // wrong branch into view first.
   const isDayZero = hasAnySession === false;
   const dayZeroResolved = hasAnySession !== null;
+
+  // Derive the warmth-band from stats + activity. Replaces the old
+  // "X day streak" chip with a forgiving "Cruising / Warming up /
+  // Coming back" band that doesn't break catastrophically on a single
+  // missed day.
+  const momentum = stats ? deriveMomentum({
+    totalSessions:     stats.totalSessions,
+    currentStreak:     stats.currentStreak,
+    lastActiveAt,
+    sessionsLast7Days: weekSessions.length,
+  }) : null;
   // Coordinate the two intentions-related cards so we never show both.
   // First-week is more contextual (it knows the user is in their first
   // partial week and offers a softer ask) so it wins when both apply.
@@ -442,11 +457,19 @@ export function DashboardPage() {
                 {workTypeLabel}
               </span>
             )}
-            {stats && stats.currentStreak > 0 && (
-              <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-                <Flame size={11} /> {stats.currentStreak} day streak
-              </span>
-            )}
+            {/* Momentum chip — forgiving warmth band, never a streak count.
+                A single missed day shifts the band gently, never resets it. */}
+            {momentum && momentum.band !== 'building' && (() => {
+              const cls = momentumChipClasses(momentum.band);
+              return (
+                <span
+                  className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${cls.bg} ${cls.text}`}
+                  title={momentum.hint}
+                >
+                  <Flame size={11} /> {momentum.label}
+                </span>
+              );
+            })()}
             {stats && stats.totalSessions > 0 && (
               <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
                 {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
@@ -500,6 +523,16 @@ export function DashboardPage() {
         </>
       ) : (
         <>
+          {/* Quick Restart — warm welcome-back for users returning after
+              a 3+ day gap. Fires before everything else so it's the first
+              thing they see. No streak-broken language anywhere. */}
+          {momentum?.isReturning && user?.id && (
+            <QuickRestartCard
+              userId={user.id}
+              onQuickStart={() => { setTemplateDuration(25); openDeclare(); }}
+            />
+          )}
+
           {/* First-week bridge — only renders during the window between
               wizard completion and the user's first intentions day.
               Self-hides outside that window or once the user dismisses. */}

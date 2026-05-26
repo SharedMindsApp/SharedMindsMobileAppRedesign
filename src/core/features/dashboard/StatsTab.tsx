@@ -90,18 +90,21 @@ export function StatsTab() {
         <Sparkline values={weekly.dailyMinutes.slice(7)} />
       </section>
 
-      {/* ── Streak strip ─────────────────────────────────────── */}
+      {/* ── Consistency strip ───────────────────────────────────
+          Reframed from "streak" to "consistency" to soften the punitive
+          edge. A single missed day no longer feels like a failure —
+          these are reflective metrics, not pressure metrics. */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           icon={<Flame size={14} className="text-orange-500" />}
-          label="Current streak"
+          label="Recent run"
           value={profile.currentStreak}
           unit={profile.currentStreak === 1 ? 'day' : 'days'}
           accent="orange"
         />
         <StatCard
           icon={<Trophy size={14} className="text-amber-500" />}
-          label="Longest"
+          label="Best run"
           value={profile.longestStreak}
           unit={profile.longestStreak === 1 ? 'day' : 'days'}
           accent="amber"
