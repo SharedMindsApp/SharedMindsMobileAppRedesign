@@ -19,6 +19,8 @@ import {
   type Project,
   type ProjectMemberWithProfile,
   type ProjectGoal,
+  type ProjectMilestone,
+  type ProjectPhase,
   type ProjectNote,
 } from '../../services/ProjectService';
 import { TaskService, type Task } from '../../services/TaskService';
@@ -78,6 +80,11 @@ export function ProjectDetailPage() {
   /** Brain-dump descriptions can run 300-500 words. We collapse to ~150
    *  characters by default so the hero stays digestible; user can expand. */
   const [descExpanded, setDescExpanded] = useState(false);
+
+  /** Roadmap state lives at the parent so both the hero progress bar and
+   *  the GoalsTab nested view stay in sync from one fetch. */
+  const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
+  const [phases, setPhases] = useState<ProjectPhase[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [declareOpen, setDeclareOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -93,13 +100,17 @@ export function ProjectDetailPage() {
       ProjectService.getProjectMembers(projectId),
       TaskService.getTasksByProject(projectId),
       fetchProjectSessions(projectId),
+      ProjectService.listMilestones(projectId),
+      ProjectService.listPhases(projectId),
     ])
-      .then(([p, m, t, s]) => {
+      .then(([p, m, t, s, ms, ph]) => {
         if (cancelled) return;
         setProject(p);
         setMembers(m);
         setTasks(t);
         setSessions(s);
+        setMilestones(ms);
+        setPhases(ph);
       })
       .catch((err) => console.error('[ProjectDetailPage] load failed:', err))
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -109,6 +120,33 @@ export function ProjectDetailPage() {
 
   const color = useMemo(() => projectColorMeta(project?.color ?? null), [project]);
   const isPinned = activeProjectId === projectId;
+
+  // ── Roadmap math ───────────────────────────────────────────────
+  // Per-milestone progress: weighted sum of done phases. If a milestone
+  // has no phases, fall back to the explicit completed_at toggle (the
+  // wizard does this for "milestone is hit" shortcuts).
+  function milestoneProgressPct(m: ProjectMilestone): number {
+    const myPhases = phases.filter((p) => p.milestone_id === m.id);
+    if (myPhases.length === 0) return m.completed_at ? 100 : 0;
+    const totalWeight = myPhases.reduce((s, p) => s + (p.weight_pct ?? 0), 0);
+    if (totalWeight === 0) return m.completed_at ? 100 : 0;
+    const doneWeight = myPhases
+      .filter((p) => p.completed_at)
+      .reduce((s, p) => s + (p.weight_pct ?? 0), 0);
+    return Math.round((doneWeight / totalWeight) * 100);
+  }
+
+  // Project completion = Σ (milestone_weight × milestone_done_pct / 100).
+  // Same math the wizard's roadmap step shows — keeps numbers consistent.
+  const projectCompletionPct = useMemo(() => {
+    if (milestones.length === 0) return 0;
+    let sum = 0;
+    for (const m of milestones) {
+      const w = m.weight_pct ?? Math.round(100 / milestones.length);
+      sum += (w * milestoneProgressPct(m)) / 100;
+    }
+    return Math.round(sum);
+  }, [milestones, phases]);
 
   const openTasks = useMemo(() =>
     tasks.filter((t) => t.status !== 'done' && t.status !== 'dropped')
@@ -302,11 +340,39 @@ export function ProjectDetailPage() {
           </div>{/* close .relative.z-10 inner wrapper */}
         </div>
 
+        {/* ── Project completion bar ─────────────────────────────
+            Sits between the banner and the stats band. Driven by
+            milestone + phase weights (same math the wizard's roadmap
+            step uses), so the number here always matches what the user
+            sees in the Goals tab. Hidden if no milestones — nothing to
+            compute yet. */}
+        {milestones.length > 0 && (
+          <div className="px-4 pt-3 border-t border-surface-container/40">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+                Project progress
+              </span>
+              <span className="text-xs font-extrabold tabular-nums" style={{ color: color.hex }}>
+                {projectCompletionPct}%
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface-container-low overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${Math.min(100, projectCompletionPct)}%`,
+                  background: `linear-gradient(to right, ${color.hex}, ${color.hex}cc)`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* ── Stats band (below the banner, inside the same card) ─
             Equal-width tiles with consistent icon-box treatment so the row
             reads as a balanced strip, not three different-shaped widgets.
             Each tile: tinted square icon + label/value stacked next to it. */}
-        <div className="px-4 py-3 grid grid-cols-3 gap-3 border-t border-surface-container/40">
+        <div className={`px-4 py-3 grid grid-cols-3 gap-3 ${milestones.length > 0 ? '' : 'border-t border-surface-container/40'}`}>
 
           <StatTile
             icon={<Target size={16} style={{ color: color.hex }} />}
@@ -448,7 +514,15 @@ export function ProjectDetailPage() {
         />
       )}
       {tab === 'goals' && (
-        <GoalsTab projectId={project.id} colorHex={color.hex} />
+        <GoalsTab
+          projectId={project.id}
+          colorHex={color.hex}
+          milestones={milestones}
+          phases={phases}
+          milestoneProgressPct={milestoneProgressPct}
+          onMilestonesChange={setMilestones}
+          onPhasesChange={setPhases}
+        />
       )}
       {tab === 'notes' && (
         <NotesTab projectId={project.id} colorHex={color.hex} />
@@ -989,182 +1063,374 @@ function KanbanCard({
 
 // ── Goals tab ───────────────────────────────────────────────────────────
 //
-// A goal = a phase / deliverable the project is chasing, with an optional
-// target date. Kept deliberately lite: inline add row at top, vertical list
-// below, complete by clicking the circle. Edit-in-place is intentionally
-// deferred — if a goal's title is wrong, delete it and re-add. Keeps the
-// surface tiny.
+// Two-tier: milestones (major destinations) hold nested phases (work units).
+// Each milestone shows its weight as % of the project plus a progress bar
+// computed from phase completion. Phases are toggled inline by clicking the
+// circle. Inline add for both milestones and phases. Delete from the card
+// header. Edit-in-place deferred to keep surface small.
 
-function GoalsTab({ projectId, colorHex }: { projectId: string; colorHex: string }) {
-  const [goals, setGoals] = useState<ProjectGoal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [title, setTitle] = useState('');
-  const [targetDate, setTargetDate] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+function GoalsTab({
+  projectId,
+  colorHex,
+  milestones,
+  phases,
+  milestoneProgressPct,
+  onMilestonesChange,
+  onPhasesChange,
+}: {
+  projectId: string;
+  colorHex: string;
+  milestones: ProjectMilestone[];
+  phases: ProjectPhase[];
+  milestoneProgressPct: (m: ProjectMilestone) => number;
+  onMilestonesChange: (m: ProjectMilestone[]) => void;
+  onPhasesChange: (p: ProjectPhase[]) => void;
+}) {
+  const [newMilestoneTitle, setNewMilestoneTitle] = useState('');
+  const [addingMilestone, setAddingMilestone] = useState(false);
+  // Per-milestone composer: tracks which milestone has its phase input open
+  // and the current input value. Null = no composer open.
+  const [openPhaseFor, setOpenPhaseFor] = useState<string | null>(null);
+  const [newPhaseTitle, setNewPhaseTitle] = useState('');
+  const [savingPhase, setSavingPhase] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    ProjectService.listMilestones(projectId)
-      .then((rows) => { if (!cancelled) setGoals(rows); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [projectId]);
+  const evenSplit = milestones.length > 0 ? Math.round(100 / milestones.length) : 100;
 
-  async function handleAdd() {
-    if (!title.trim() || submitting) return;
-    setSubmitting(true);
+  async function handleAddMilestone() {
+    const title = newMilestoneTitle.trim();
+    if (!title || addingMilestone) return;
+    setAddingMilestone(true);
     try {
+      // New milestones get an even split of remaining weight by default.
+      const splitWeight = Math.max(5, Math.round(100 / (milestones.length + 1)));
       const created = await ProjectService.createMilestone({
         project_id: projectId,
-        title: title.trim(),
-        target_date: targetDate || null,
+        title,
+        weight_pct: splitWeight,
+        sort_order: milestones.length,
       });
-      setGoals((prev) => [created, ...prev]);
-      setTitle('');
-      setTargetDate('');
-    } catch (err) {
-      console.error('[GoalsTab] add:', err);
+      onMilestonesChange([...milestones, created]);
+      setNewMilestoneTitle('');
+    } catch (e) {
+      console.error('[GoalsTab] createMilestone', e);
     } finally {
-      setSubmitting(false);
+      setAddingMilestone(false);
     }
   }
 
-  async function handleToggle(g: ProjectGoal) {
-    const prev = goals;
-    const optimistic: ProjectGoal = {
-      ...g,
-      completed_at: g.completed_at ? null : new Date().toISOString(),
-    };
-    setGoals((cur) => cur.map((x) => (x.id === g.id ? optimistic : x)));
+  async function handleDeleteMilestone(m: ProjectMilestone) {
+    if (!confirm(`Delete milestone "${m.title}"? Its phases will be removed too.`)) return;
     try {
-      const updated = await ProjectService.toggleMilestoneComplete(g);
-      setGoals((cur) => cur.map((x) => (x.id === g.id ? updated : x)));
-    } catch (err) {
-      console.error('[GoalsTab] toggle:', err);
-      setGoals(prev);
+      await ProjectService.deleteMilestone(m.id);
+      onMilestonesChange(milestones.filter((x) => x.id !== m.id));
+      onPhasesChange(phases.filter((p) => p.milestone_id !== m.id));
+    } catch (e) {
+      console.error('[GoalsTab] deleteMilestone', e);
     }
   }
 
-  async function handleDelete(g: ProjectGoal) {
-    if (!confirm(`Delete goal "${g.title}"?`)) return;
-    const prev = goals;
-    setGoals((cur) => cur.filter((x) => x.id !== g.id));
+  async function handleToggleMilestone(m: ProjectMilestone) {
     try {
-      await ProjectService.deleteMilestone(g.id);
-    } catch (err) {
-      console.error('[GoalsTab] delete:', err);
-      setGoals(prev);
-      alert('Could not delete that goal.');
+      const updated = await ProjectService.toggleMilestoneComplete(m);
+      onMilestonesChange(milestones.map((x) => (x.id === m.id ? updated : x)));
+    } catch (e) {
+      console.error('[GoalsTab] toggleMilestone', e);
+    }
+  }
+
+  async function handleAddPhase(milestoneId: string) {
+    const title = newPhaseTitle.trim();
+    if (!title || savingPhase) return;
+    setSavingPhase(true);
+    try {
+      const siblingCount = phases.filter((p) => p.milestone_id === milestoneId).length;
+      const splitWeight = Math.max(5, Math.round(100 / (siblingCount + 1)));
+      const created = await ProjectService.createPhase({
+        project_id: projectId,
+        milestone_id: milestoneId,
+        title,
+        weight_pct: splitWeight,
+        sort_order: siblingCount,
+      });
+      onPhasesChange([...phases, created]);
+      setNewPhaseTitle('');
+      setOpenPhaseFor(null);
+    } catch (e) {
+      console.error('[GoalsTab] createPhase', e);
+    } finally {
+      setSavingPhase(false);
+    }
+  }
+
+  async function handleTogglePhase(p: ProjectPhase) {
+    try {
+      const updated = await ProjectService.togglePhaseComplete(p);
+      onPhasesChange(phases.map((x) => (x.id === p.id ? updated : x)));
+    } catch (e) {
+      console.error('[GoalsTab] togglePhase', e);
+    }
+  }
+
+  async function handleDeletePhase(p: ProjectPhase) {
+    try {
+      await ProjectService.deletePhase(p.id);
+      onPhasesChange(phases.filter((x) => x.id !== p.id));
+    } catch (e) {
+      console.error('[GoalsTab] deletePhase', e);
     }
   }
 
   return (
-    <div className="space-y-2">
-      {/* Inline add row */}
-      <div className="bg-surface rounded-xl ring-1 ring-surface-container/80 px-4 py-3 shadow-sm">
+    <div className="space-y-4">
+      {/* Inline add-milestone row */}
+      <SurfaceCard padding="md" className="!p-3">
         <div className="flex items-center gap-2">
-          <Plus size={14} className="stitch-text-secondary shrink-0" />
+          <div
+            className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
+            style={{ background: `${colorHex}22`, color: colorHex }}
+            aria-hidden="true"
+          >
+            +
+          </div>
           <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
-            placeholder="Add a goal…"
-            className="flex-1 bg-transparent outline-none text-sm stitch-text-primary placeholder:stitch-text-secondary"
+            type="text"
+            value={newMilestoneTitle}
+            onChange={(e) => setNewMilestoneTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAddMilestone();
+            }}
+            placeholder="Add a milestone…"
+            className="flex-1 bg-transparent text-sm font-semibold stitch-text-primary placeholder:stitch-text-secondary/60 outline-none"
+            disabled={addingMilestone}
           />
-          {title.trim() && (
+          {newMilestoneTitle.trim() && (
             <button
               type="button"
-              onClick={handleAdd}
-              disabled={submitting}
-              className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full text-white disabled:opacity-50"
-              style={{ backgroundColor: colorHex }}
+              onClick={handleAddMilestone}
+              disabled={addingMilestone}
+              className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wide text-white disabled:opacity-50"
+              style={{ background: colorHex }}
             >
-              {submitting ? '…' : 'Add'}
+              Add
             </button>
           )}
         </div>
-        {title.trim() && (
-          <div className="flex items-center gap-2 mt-2 pl-6">
-            <Calendar size={12} className="stitch-text-secondary" />
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="text-xs bg-transparent stitch-text-secondary outline-none"
-            />
-            <span className="text-[10px] stitch-text-secondary italic">optional</span>
-          </div>
-        )}
-      </div>
+      </SurfaceCard>
 
-      {loading ? (
-        <div className="flex justify-center py-6">
-          <Loader2 size={16} className="animate-spin stitch-text-secondary" />
-        </div>
-      ) : goals.length === 0 ? (
-        <div className="flex flex-col items-center text-center py-10 px-4 bg-surface rounded-2xl ring-1 ring-surface-container/80">
-          <Flag size={24} className="mb-3 stitch-text-secondary opacity-40" />
-          <p className="text-sm font-bold stitch-text-primary mb-1">No goals yet</p>
-          <p className="text-xs stitch-text-secondary">Map out the phases of getting this done.</p>
-        </div>
-      ) : (
-        goals.map((g) => {
-          const isDone = !!g.completed_at;
-          const overdue = !isDone && g.target_date && new Date(g.target_date) < new Date();
-          return (
-            <div
-              key={g.id}
-              className="group flex items-start gap-3 px-4 py-3 rounded-xl bg-surface ring-1 ring-surface-container/60 shadow-sm hover:ring-surface-container transition-all"
-            >
+      {milestones.length === 0 && (
+        <SurfaceCard padding="md" className="text-center">
+          <p className="text-sm stitch-text-secondary py-4">
+            No milestones yet. Break the project into 2–5 major destinations to give your sessions
+            something to aim at.
+          </p>
+        </SurfaceCard>
+      )}
+
+      {milestones.map((m) => {
+        const weight = m.weight_pct ?? evenSplit;
+        const pct = milestoneProgressPct(m);
+        const myPhases = phases.filter((p) => p.milestone_id === m.id);
+        const isDone = !!m.completed_at;
+
+        return (
+          <SurfaceCard key={m.id} padding="md" className="!p-3">
+            {/* Milestone header */}
+            <div className="flex items-start gap-3">
               <button
                 type="button"
-                onClick={() => handleToggle(g)}
-                className="mt-0.5 shrink-0"
-                aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+                onClick={() => handleToggleMilestone(m)}
+                className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors"
+                style={{
+                  borderColor: colorHex,
+                  background: isDone ? colorHex : 'transparent',
+                }}
+                aria-label={isDone ? 'Mark milestone incomplete' : 'Mark milestone complete'}
               >
-                {isDone ? (
-                  <CheckCircle2 size={18} className="text-emerald-500" />
-                ) : (
-                  <div
-                    className="w-[18px] h-[18px] rounded-full border-2 hover:scale-110 transition-transform"
-                    style={{ borderColor: colorHex }}
-                  />
+                {isDone && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M2 6L5 9L10 3"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 )}
               </button>
 
               <div className="flex-1 min-w-0">
-                <p className={`text-sm leading-snug ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary font-semibold'}`}>
-                  {g.title}
-                </p>
-                {g.description && !isDone && (
-                  <p className="text-xs stitch-text-secondary mt-0.5 leading-snug">{g.description}</p>
-                )}
-                {g.target_date && (
-                  <div className={`inline-flex items-center gap-1 mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                    overdue
-                      ? 'bg-rose-50 text-rose-700'
-                      : 'bg-surface-container-low stitch-text-secondary'
-                  }`}>
-                    <Calendar size={9} />
-                    {new Date(g.target_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    {overdue && ' · overdue'}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3
+                    className={`text-sm font-bold ${
+                      isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'
+                    }`}
+                  >
+                    {m.title}
+                  </h3>
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full tabular-nums"
+                    style={{ background: `${colorHex}22`, color: colorHex }}
+                    title="Share of overall project"
+                  >
+                    {weight}% of project
+                  </span>
+                </div>
+
+                {/* Per-milestone progress bar */}
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 rounded-full bg-surface-container-low overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, pct)}%`,
+                        background: colorHex,
+                      }}
+                    />
                   </div>
-                )}
+                  <span className="text-[10px] font-bold tabular-nums stitch-text-secondary w-9 text-right">
+                    {pct}%
+                  </span>
+                </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => handleDelete(g)}
-                className="opacity-0 group-hover:opacity-60 hover:opacity-100 transition-opacity shrink-0 stitch-text-secondary hover:text-rose-600"
-                aria-label="Delete goal"
+                onClick={() => handleDeleteMilestone(m)}
+                className="flex-shrink-0 w-7 h-7 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low transition-colors"
+                aria-label="Delete milestone"
+                title="Delete milestone"
               >
-                <Trash2 size={13} />
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M3 3L11 11M11 3L3 11"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
               </button>
             </div>
-          );
-        })
-      )}
+
+            {/* Nested phases */}
+            {myPhases.length > 0 && (
+              <ul className="mt-3 pl-9 space-y-1.5 border-l-2 ml-3" style={{ borderColor: `${colorHex}33` }}>
+                {myPhases.map((p) => {
+                  const phaseDone = !!p.completed_at;
+                  return (
+                    <li key={p.id} className="flex items-center gap-2 group">
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePhase(p)}
+                        className="flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                        style={{
+                          borderColor: colorHex,
+                          background: phaseDone ? colorHex : 'transparent',
+                        }}
+                        aria-label={phaseDone ? 'Mark phase incomplete' : 'Mark phase complete'}
+                      >
+                        {phaseDone && (
+                          <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                            <path
+                              d="M2 6L5 9L10 3"
+                              stroke="white"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                      <span
+                        className={`flex-1 text-xs ${
+                          phaseDone
+                            ? 'line-through stitch-text-secondary'
+                            : 'stitch-text-primary'
+                        }`}
+                      >
+                        {p.title}
+                      </span>
+                      {p.weight_pct != null && (
+                        <span className="text-[9px] font-bold tabular-nums stitch-text-secondary opacity-70">
+                          {p.weight_pct}%
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePhase(p)}
+                        className="flex-shrink-0 w-5 h-5 rounded-full grid place-items-center stitch-text-secondary opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Delete phase"
+                        title="Delete phase"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+                          <path
+                            d="M3 3L11 11M11 3L3 11"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {/* Add phase composer */}
+            {openPhaseFor === m.id ? (
+              <div className="mt-3 pl-9 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newPhaseTitle}
+                  onChange={(e) => setNewPhaseTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddPhase(m.id);
+                    if (e.key === 'Escape') {
+                      setOpenPhaseFor(null);
+                      setNewPhaseTitle('');
+                    }
+                  }}
+                  placeholder="Phase title…"
+                  autoFocus
+                  className="flex-1 bg-surface-container-low rounded-full px-3 py-1.5 text-xs stitch-text-primary placeholder:stitch-text-secondary/60 outline-none"
+                  disabled={savingPhase}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAddPhase(m.id)}
+                  disabled={savingPhase || !newPhaseTitle.trim()}
+                  className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide text-white disabled:opacity-50"
+                  style={{ background: colorHex }}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenPhaseFor(null);
+                    setNewPhaseTitle('');
+                  }}
+                  className="px-2 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide stitch-text-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenPhaseFor(m.id);
+                  setNewPhaseTitle('');
+                }}
+                className="mt-3 ml-9 text-[11px] font-bold uppercase tracking-wider stitch-text-secondary hover:stitch-text-primary transition-colors"
+              >
+                + Add phase
+              </button>
+            )}
+          </SurfaceCard>
+        );
+      })}
     </div>
   );
 }
