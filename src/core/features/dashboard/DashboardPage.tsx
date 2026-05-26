@@ -51,6 +51,7 @@ import { PulsePeopleTab } from './PulsePeopleTab';
 // handles all setup before the user reaches the home screen.
 import { FoundingMemberBadge } from './FoundingMemberBadge';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
+import { FirstWeekIntentionsCard } from './FirstWeekIntentionsCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
@@ -478,6 +479,11 @@ export function DashboardPage() {
         </>
       ) : (
         <>
+          {/* First-week bridge — only renders during the window between
+              wizard completion and the user's first intentions day.
+              Self-hides outside that window or once the user dismisses. */}
+          <FirstWeekIntentionsCard />
+
           {/* Returning user: weekly review prompt + SmartNextCard sit side-by-side
               on desktop to reduce wasted vertical space. Stacked on mobile.
               When the review prompt is hidden (outside Sun/Mon window or already
