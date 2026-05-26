@@ -13,6 +13,12 @@ import { markSessionEnded, triggerDebriefForSession } from '../../services/Sessi
 import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
+import { SessionMusicPlayer } from './SessionMusicPlayer';
+import type { MusicCategory } from '../../services/SessionMusicService';
+import { useSessionWizards } from './SessionWizards/useSessionWizards';
+import { WizardLauncher } from './SessionWizards/WizardLauncher';
+import { WizardOverlay } from './SessionWizards/WizardOverlay';
+import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 
 // Sessions become joinable 5 minutes before their scheduled start.
 const JOIN_WINDOW_MS = 5 * 60 * 1000;
@@ -74,6 +80,26 @@ export function ActiveSessionPage() {
   const location = useLocation();
   const { profile, user } = useAuth();
   const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, clearSession } = useFocusSession();
+  // Music category is now driven by the user's ARRIVAL STATE, not the
+  // task's cognitive load — the old deep/medium/light axis confused the
+  // two. Default to 'flow' (neutral/ready target). The user picks their
+  // actual state via the player's 6-pill grid; that choice persists.
+  // Future: a "How are you arriving?" wizard at session start can pre-set
+  // this without the user having to open the player.
+  const musicCategory: MusicCategory = 'flow';
+
+  // Host = the user_id on the focus_sessions row. In group sessions the
+  // host controls the music; everyone else can only mute locally.
+  const isMusicHost = !!user && !!activeSession && activeSession.user_id === user.id;
+  const isMusicGroupSession = activeSession?.session_mode === 'group';
+
+  // Session wizards (breathing, intentions, etc.) — host launches, all
+  // participants see the overlay. Solo/1-on-1 sessions skip this entirely.
+  const wizards = useSessionWizards({
+    sessionId: activeSession?.id ?? null,
+    isGroupSession: isMusicGroupSession,
+    isHost: isMusicHost,
+  });
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
   const [ending, setEnding] = useState(false);
@@ -342,6 +368,12 @@ export function ActiveSessionPage() {
 
         {/* Timer */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Wizard launcher. Shown to anyone who controls music in this
+              session: solo users, both sides of a 1-on-1, and group hosts.
+              Group participants don't see it — they can only mute. */}
+          {(!isMusicGroupSession || isMusicHost) && (
+            <WizardLauncher onLaunch={wizards.launchWizard} />
+          )}
           <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1.5">
             <Clock size={12} className="text-white/60" />
             <span className={`text-sm font-bold tabular-nums ${timerSecondsRemaining <= 300 && timerSecondsRemaining > 0 ? 'text-amber-400' : 'text-white'}`}>
@@ -560,6 +592,34 @@ export function ActiveSessionPage() {
           )}
         </div>
       )}
+
+      {/* Floating music mini-bar — opt-in background tracks. In hosted
+          group sessions the host controls the track; participants can only
+          mute on their device. Solo / 1-on-1 sessions stay per-user. */}
+      <SessionMusicPlayer
+        category={musicCategory}
+        sessionId={activeSession?.id ?? null}
+        isGroupSession={isMusicGroupSession}
+        isHost={isMusicHost}
+      />
+
+      {/* Wizard overlay — covers the session when a guided experience is
+          running. Host launches via the top-bar sparkles button. */}
+      <WizardOverlay
+        wizardId={wizards.activeWizardId}
+        isHost={isMusicHost}
+        onLocalDismiss={wizards.dismissLocally}
+        onBroadcastEnd={wizards.broadcastEnd}
+      />
+
+      {/* Mid-session state recheck — only for users who control music,
+          only when music is currently audible, only past the 60-min mark. */}
+      <MidSessionStateRecheck
+        totalSeconds={totalSeconds}
+        remainingSeconds={timerSecondsRemaining}
+        applicable={!isMusicGroupSession || isMusicHost}
+        onRepick={() => wizards.launchWizard('arrival_state')}
+      />
     </div>,
     document.body,
   );
