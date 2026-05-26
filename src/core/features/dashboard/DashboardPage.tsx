@@ -22,8 +22,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Check, Flame, CheckCircle2, Plus, Pin, Target, Users,
+  ArrowRight, Check, Flame, CheckCircle2, Plus, Target, Users, Flag, Layers,
 } from 'lucide-react';
+import { ProjectService, type ProjectStats } from '../../services/ProjectService';
+import { EMPTY_PROJECT_STATS, deriveProjectProgress, projectColorMeta } from '../projects/ProjectsPage';
 import { useAuth } from '../../auth/AuthProvider';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCoreData } from '../../data/CoreDataContext';
@@ -165,14 +167,25 @@ function projectDotHex(token: string | null) {
 }
 
 function ProjectsMiniGrid({
-  projects, tasks, activeProjectId, onPin,
+  projects,
 }: {
   projects: import('../../data/CoreDataContext').CoreProject[];
-  tasks: import('../../data/CoreDataContext').CoreTask[];
-  activeProjectId: string | null;
-  onPin: (id: string | null) => void;
 }) {
   const navigate = useNavigate();
+  const [stats, setStats] = useState<Map<string, ProjectStats>>(new Map());
+
+  // Fetch real project-level aggregates (goals/phases/tasks across all
+  // statuses) so the mini-card matches the Projects list page. Without
+  // this we'd be reading from CoreDataContext.tasks which excludes done
+  // rows and would always show 0% progress.
+  useEffect(() => {
+    if (projects.length === 0) return;
+    let cancelled = false;
+    ProjectService.getProjectStats(projects.map((p) => p.id))
+      .then((m) => { if (!cancelled) setStats(m); })
+      .catch((e) => console.warn('[Home/ProjectsMiniGrid] getProjectStats failed', e));
+    return () => { cancelled = true; };
+  }, [projects]);
 
   if (projects.length === 0) {
     return (
@@ -195,18 +208,7 @@ function ProjectsMiniGrid({
     );
   }
 
-  const counts = new Map<string, number>();
-  for (const t of tasks) {
-    if (!t.projectId || t.done) continue;
-    counts.set(t.projectId, (counts.get(t.projectId) ?? 0) + 1);
-  }
-
-  const sorted = [...projects].sort((a, b) => {
-    if (a.id === activeProjectId) return -1;
-    if (b.id === activeProjectId) return 1;
-    return 0;
-  });
-  const visible = sorted.slice(0, 4);
+  const visible = projects.slice(0, 4);
   const hiddenCount = projects.length - visible.length;
 
   return (
@@ -222,56 +224,15 @@ function ProjectsMiniGrid({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        {visible.map((p) => {
-          const isPinned = p.id === activeProjectId;
-          const openCount = counts.get(p.id) ?? 0;
-          return (
-            <div
-              key={p.id}
-              className={`relative rounded-2xl p-3 cursor-pointer transition-all hover:shadow-md ${
-                isPinned
-                  ? 'bg-primary/5 ring-1 ring-primary/30'
-                  : 'bg-surface-container-low hover:bg-surface-container'
-              }`}
-              onClick={() => navigate(`/projects/${p.id}`)}
-              role="button"
-              tabIndex={0}
-            >
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onPin(isPinned ? null : p.id); }}
-                title={isPinned ? 'Unpin' : 'Pin as active'}
-                className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                  isPinned ? 'text-primary bg-white shadow-sm' : 'text-transparent hover:text-primary hover:bg-surface-container'
-                }`}
-              >
-                <Pin size={10} fill={isPinned ? 'currentColor' : 'none'} strokeWidth={2.5} />
-              </button>
-              <div className="flex items-start gap-2 pr-6">
-                <span
-                  className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow"
-                  style={{ backgroundColor: projectDotHex(p.color) }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold stitch-text-primary leading-tight line-clamp-2 mb-1">
-                    {p.name}
-                  </p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary">
-                      <Target size={9} /> {openCount}
-                    </span>
-                    {p.scope === 'shared' && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 bg-violet-100 px-1.5 py-px rounded-full">
-                        <Users size={8} /> {p.memberCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {visible.map((p) => (
+          <MiniProjectCard
+            key={p.id}
+            project={p}
+            stats={stats.get(p.id) ?? EMPTY_PROJECT_STATS}
+            onOpen={() => navigate(`/projects/${p.id}`)}
+          />
+        ))}
 
         {hiddenCount > 0 && (
           <button
@@ -285,6 +246,92 @@ function ProjectsMiniGrid({
         )}
       </div>
     </section>
+  );
+}
+
+/** Compact version of the ProjectsPage card. Same progress + chip
+ *  language so the home view and the dedicated page feel like one
+ *  surface, just at two zoom levels. */
+function MiniProjectCard({
+  project: p,
+  stats,
+  onOpen,
+}: {
+  project: import('../../data/CoreDataContext').CoreProject;
+  stats: ProjectStats;
+  onOpen: () => void;
+}) {
+  const color = projectColorMeta(p.color);
+  const progress = deriveProjectProgress(stats);
+  const isShared = p.scope === 'shared';
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      className="group relative rounded-2xl p-3 cursor-pointer transition-all bg-surface-container-low hover:bg-surface-container hover:shadow-md space-y-2"
+    >
+      {/* Title row */}
+      <div className="flex items-start gap-2">
+        <span
+          className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow"
+          style={{ backgroundColor: color.hex }}
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold stitch-text-primary leading-tight line-clamp-1">
+            {p.name}
+          </p>
+        </div>
+        {isShared && (
+          <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700 bg-violet-100 px-1.5 py-px rounded-full">
+            <Users size={8} /> {p.memberCount}
+          </span>
+        )}
+      </div>
+
+      {/* Progress bar — only when there's something to measure */}
+      {progress && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-bold stitch-text-secondary uppercase tracking-wider">
+              {progress.basis === 'goals' ? 'Goal progress' : progress.basis === 'phases' ? 'Phase progress' : 'Task progress'}
+            </span>
+            <span className={`text-[10px] font-extrabold tabular-nums ${color.textDark}`}>
+              {progress.pct}%
+            </span>
+          </div>
+          <div className="h-1 w-full bg-surface-container rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${color.bar}`}
+              style={{ width: `${progress.pct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Stats chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {stats.milestones.total > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary">
+            <Flag size={9} /> {stats.milestones.done}/{stats.milestones.total}
+          </span>
+        )}
+        {stats.phases.total > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary">
+            <Layers size={9} /> {stats.phases.done}/{stats.phases.total}
+          </span>
+        )}
+        {stats.tasks.total > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary">
+            <CheckCircle2 size={9} /> {stats.tasks.done}/{stats.tasks.total}
+          </span>
+        )}
+        {!progress && (
+          <span className="text-[10px] stitch-text-secondary italic">No goals or tasks yet</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -582,12 +629,7 @@ export function DashboardPage() {
                 />
 
                 {/* 3. Projects — containers */}
-                <ProjectsMiniGrid
-                  projects={projects}
-                  tasks={tasks}
-                  activeProjectId={activeProjectId}
-                  onPin={setActiveProject}
-                />
+                <ProjectsMiniGrid projects={projects} />
               </div>
             }
             stats={<StatsTab />}

@@ -165,18 +165,15 @@ export function ProjectsPage() {
 
 // ── Card ─────────────────────────────────────────────────────────
 
-const EMPTY_STATS: ProjectStats = {
+export const EMPTY_PROJECT_STATS: ProjectStats = {
   tasks: { total: 0, done: 0, open: 0 },
   phases: { total: 0, done: 0 },
   milestones: { total: 0, done: 0, weightDone: 0, weightTotal: 0 },
 };
 
-/** Pick the most meaningful "progress" view for a project.
- *
- *  Hierarchy: milestones (weighted by weight_pct if set, else equal) →
- *  phases → tasks. Whichever bucket has rows wins. If none, returns
- *  null and the card hides the bar. */
-function deriveProjectProgress(s: ProjectStats): { pct: number; basis: 'goals' | 'phases' | 'tasks' } | null {
+/** Pick the most meaningful "progress" view for a project. Exported so
+ *  the dashboard mini-grid can render the same bar with the same basis. */
+export function deriveProjectProgress(s: ProjectStats): { pct: number; basis: 'goals' | 'phases' | 'tasks' } | null {
   if (s.milestones.total > 0) {
     if (s.milestones.weightTotal > 0) {
       return { pct: Math.round((s.milestones.weightDone / s.milestones.weightTotal) * 100), basis: 'goals' };
@@ -191,6 +188,8 @@ function deriveProjectProgress(s: ProjectStats): { pct: number; basis: 'goals' |
   }
   return null;
 }
+
+const EMPTY_STATS = EMPTY_PROJECT_STATS;
 
 function ProjectCard({
   project,
