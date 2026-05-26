@@ -17,8 +17,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   Play, ChevronLeft, ChevronRight, Calendar as CalIcon,
   Users, UserPlus, User, Loader2, X, Clock, StopCircle, Plus,
-  CalendarPlus,
+  CalendarPlus, List as ListIcon, LayoutGrid,
 } from 'lucide-react';
+import { SessionsListView, type ListSession } from './SessionsListView';
 import { SessionTagPills } from './SessionTagPills';
 import { downloadIcs } from '../../../lib/sessions/icsExport';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -207,6 +208,18 @@ export function CalendarView() {
     booked: true,
   });
 
+  // View toggle — list (default) vs calendar grid. Persisted per user
+  // so power users who prefer the grid don't get bounced back to list.
+  const LS_VIEW = 'sm.sessions.view';
+  const [view, setView] = useState<'list' | 'calendar'>(() => {
+    if (typeof window === 'undefined') return 'list';
+    const stored = window.localStorage.getItem(LS_VIEW);
+    return stored === 'calendar' ? 'calendar' : 'list';
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(LS_VIEW, view); } catch { /* private mode */ }
+  }, [view]);
+
   // tick "now" every minute for the red current-time line
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -275,6 +288,26 @@ export function CalendarView() {
     ];
     return days.map((day) => all.filter((s) => sameDay(s.startsAt, day)));
   }, [active, scheduled, days, filter, user?.id]);
+
+  // Flat list of filtered sessions for the list view. Same passesFilter
+  // logic as sessionsByDay but unbucketed — the list view groups by day
+  // internally based on the user's strip selection.
+  const filteredSessions: ListSession[] = useMemo(() => {
+    function passesFilter(mode: string | undefined | null, isMine: boolean, isBooked: boolean): boolean {
+      if (mode === 'solo') return filter.solo && isMine;
+      if (isBooked) return filter.booked;
+      if (mode === 'one_on_one') return filter.oneOnOne;
+      return filter.group;
+    }
+    return [
+      ...active
+        .filter((s) => passesFilter(s.session_mode, s.user_id === user?.id, (s as any).partner_user_id === user?.id))
+        .map(toGridSession),
+      ...scheduled
+        .filter((s: any) => passesFilter(s.session_mode, s.user_id === user?.id, s.partner_user_id === user?.id))
+        .map(toGridScheduled),
+    ];
+  }, [active, scheduled, filter, user?.id]);
 
   // auto-scroll grid to current hour on mount
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -440,6 +473,31 @@ export function CalendarView() {
             </h1>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* View toggle — list vs calendar grid */}
+            <div className="inline-flex p-0.5 rounded-full bg-surface-container-low ring-1 ring-surface-container/60">
+              <button
+                type="button"
+                onClick={() => setView('list')}
+                aria-label="List view"
+                title="List view"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-colors ${
+                  view === 'list' ? 'bg-surface stitch-text-primary shadow-sm' : 'stitch-text-secondary hover:stitch-text-primary'
+                }`}
+              >
+                <ListIcon size={11} /> List
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('calendar')}
+                aria-label="Calendar view"
+                title="Calendar view"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold transition-colors ${
+                  view === 'calendar' ? 'bg-surface stitch-text-primary shadow-sm' : 'stitch-text-secondary hover:stitch-text-primary'
+                }`}
+              >
+                <LayoutGrid size={11} /> Calendar
+              </button>
+            </div>
             <button
               type="button"
               onClick={goToToday}
@@ -447,24 +505,48 @@ export function CalendarView() {
             >
               Today
             </button>
-            <button
-              type="button"
-              onClick={() => nudgeAnchor(-dayCount)}
-              className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container transition-colors"
-              aria-label="Previous days"
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <button
-              type="button"
-              onClick={() => nudgeAnchor(dayCount)}
-              className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container transition-colors"
-              aria-label="Next days"
-            >
-              <ChevronRight size={15} />
-            </button>
+            {view === 'calendar' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => nudgeAnchor(-dayCount)}
+                  className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container transition-colors"
+                  aria-label="Previous days"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => nudgeAnchor(dayCount)}
+                  className="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center hover:bg-surface-container transition-colors"
+                  aria-label="Next days"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* ── List view ──────────────────────────────────────── */}
+        {view === 'list' && (
+          <SessionsListView
+            sessions={filteredSessions}
+            anchorDay={anchor}
+            onPickDay={(d) => setAnchor(startOfDay(d))}
+            onSelect={(s) => setDetail(s as GridSession)}
+            onBook={(d) => {
+              // Open the schedule modal at midday of the chosen day, snapped.
+              const at = new Date(d);
+              at.setHours(9, 0, 0, 0);
+              setModalState({ kind: 'schedule', at });
+            }}
+          />
+        )}
+
+        {/* ── Calendar grid ──────────────────────────────────── */}
+        {view === 'calendar' && (
+        <>
 
         {/* Calendar shell */}
         <div className="flex-1 min-h-0 rounded-2xl bg-surface-container-low overflow-hidden flex flex-col border border-surface-container/50">
@@ -579,6 +661,8 @@ export function CalendarView() {
           </div>
         </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* ── Modals ───────────────────────────────────────── */}
