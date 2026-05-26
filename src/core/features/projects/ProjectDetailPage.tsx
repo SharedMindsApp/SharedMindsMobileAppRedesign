@@ -343,52 +343,32 @@ export function ProjectDetailPage() {
           </h1>
           {project.description && (() => {
             const desc = project.description.trim();
+            // Aggressive truncate at the hero so it always fits cleanly
+            // alongside the cover image. Long descriptions open in a modal
+            // via "Read more" — keeps the hero compact regardless of
+            // how much the user wrote in their brain dump.
             const PREVIEW_CHARS = 150;
             const needsTruncate = desc.length > PREVIEW_CHARS;
-
-            // Split on blank lines so we can render real paragraphs with
-            // meaningful spacing — pre-wrap collapses these into one
-            // visually-undifferentiated wall. Falling back to a single
-            // paragraph when the user wrote one block.
-            const collapsedText = !needsTruncate || descExpanded
-              ? desc
-              : desc.slice(0, PREVIEW_CHARS).replace(/\s+\S*$/, '') + '…';
-            const paragraphs = collapsedText
-              .split(/\n\s*\n/)
-              .map((p) => p.trim())
-              .filter(Boolean);
+            const collapsedText = needsTruncate
+              ? desc.slice(0, PREVIEW_CHARS).replace(/\s+\S*$/, '') + '…'
+              : desc;
 
             return (
-              // max-w-[60ch] keeps line length in the readable 50-75ch
-              // window. mt-3 distances the prose from the title.
               <div className="max-w-[60ch] mt-3">
-                <div className="space-y-3">
-                  {paragraphs.map((para, i) => (
-                    <p
-                      key={i}
-                      className={
-                        // First paragraph: slightly larger + brighter so
-                        // it reads as a "lead" — the rest tapers down.
-                        i === 0
-                          ? `text-[15px] ${titleSubtleClass} leading-relaxed font-medium`
-                          : `text-sm ${titleMutedClass} leading-relaxed`
-                      }
-                    >
-                      {para}
-                    </p>
-                  ))}
-                </div>
+                <p className={`text-[15px] ${titleSubtleClass} leading-relaxed font-medium`}>
+                  {collapsedText}
+                </p>
                 {needsTruncate && (
                   <button
                     type="button"
-                    onClick={() => setDescExpanded((v) => !v)}
+                    onClick={() => setDescExpanded(true)}
                     className={`mt-3 inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm transition-colors ${
                       heroTextDark
                         ? 'text-stitch-text-primary bg-black/8 hover:bg-black/15 ring-1 ring-black/10'
                         : 'text-white bg-white/15 hover:bg-white/25'
                     }`}
                   >
-                    {descExpanded ? '↑ Show less' : '↓ Read more'}
+                    ↓ Read more
                   </button>
                 )}
               </div>
@@ -606,6 +586,56 @@ export function ProjectDetailPage() {
       )}
 
       {/* ── Modals ─────────────────────────────────────────────── */}
+      {/* Description modal — opens when the user clicks "Read more" on
+          the truncated hero description. Keeps the hero compact while
+          still letting the user read the full brain dump comfortably. */}
+      {descExpanded && project.description && (
+        <div
+          className="fixed inset-0 z-[80] grid place-items-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setDescExpanded(false)}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl bg-surface shadow-2xl p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ background: color.hex }}
+                />
+                <h2 className="text-xl font-extrabold stitch-text-primary truncate">
+                  {project.title}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDescExpanded(false)}
+                className="shrink-0 w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary mb-2">
+              Description
+            </p>
+            <div className="space-y-3 max-w-[65ch]">
+              {project.description
+                .trim()
+                .split(/\n\s*\n/)
+                .map((p) => p.trim())
+                .filter(Boolean)
+                .map((para, i) => (
+                  <p key={i} className="text-sm stitch-text-primary leading-relaxed">
+                    {para}
+                  </p>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {editorOpen && (
         <ProjectEditorModal
           project={project}
