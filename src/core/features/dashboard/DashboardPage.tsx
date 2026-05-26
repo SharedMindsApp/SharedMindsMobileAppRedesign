@@ -30,8 +30,10 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { useCommunitySessionsSubscription } from '../sessions/useCommunitySessionsSubscription';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
-import { fetchProfileStats, fetchWeekSessions, fetchHasCompletedAnySession } from '../../services/ProfileService';
-import { fetchRecentShippedSessions, fetchUpcomingScheduledSessions } from '../../services/SessionService';
+import { fetchHomeDashboard } from '../../services/HomeDashboardService';
+// fetchRecentShippedSessions + fetchUpcomingScheduledSessions are no
+// longer called from this file — both are now bundled into the
+// fetchHomeDashboard RPC. The types are still imported below.
 import { SurfaceCard } from '../../ui/CorePage';
 import { HomeHero } from './HomeHero';
 import { SmartNextCard } from './SmartNextCard';
@@ -329,67 +331,51 @@ export function DashboardPage() {
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
   const [myShips, setMyShips] = useState<ShippedSession[]>([]);
   const [upcomingScheduled, setUpcomingScheduled] = useState<ScheduledSessionWithProfile[]>([]);
-  // Progressive load. Each query feeds its own card; cards render with
-  // their own placeholder state until data lands. This used to be a single
-  // load gate that waited for ALL four queries — the slowest one (usually
-  // fetchUpcomingScheduledSessions) blocked everything else. Now the page
-  // paints instantly and sections fill in as their data arrives.
-  //
-  // The day-zero branch decision uses a cheap count-only query that
-  // resolves in ~10ms, so we don't have to default to either branch and
-  // flicker if the user's actually the other.
+  // Single-call home dashboard. The previous progressive-render approach
+  // had four separate queries paint sections at different times, which
+  // felt janky. Now: one server-side RPC bundles everything into a
+  // single ~30-80 ms round-trip, and the whole page renders together
+  // when it resolves. Returns to the "load all at once" feel — but
+  // fast, because there's only ONE network call and the heavy
+  // aggregation happens server-side.
   const [hasAnySession, setHasAnySession] = useState<boolean | null>(null);
 
-  // Cheap day-zero check — runs first, resolves fast, unblocks branching.
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
-    fetchHasCompletedAnySession(user.id).then((has) => {
-      if (!cancelled) setHasAnySession(has);
+    fetchHomeDashboard(user.id).then((dash) => {
+      if (cancelled || !dash) return;
+      // One batched setState call — React 18 commits these atomically
+      // so the whole dashboard paints in a single render.
+      setHasAnySession(dash.hasAnySession);
+      setUpcomingScheduled(dash.upcomingScheduled);
+      setMyShips(dash.recentShips);
+      setWeekSessions(dash.weekSessions);
+      // Synthesize a partial ProfileStats from the home RPC for the
+      // identity chips. Full stats (best day/week, longest streak, etc.)
+      // still loads lazily when the user opens the Stats tab.
+      setStats({
+        totalSessions:     dash.totalSessions,
+        completedSessions: dash.totalSessions,
+        completionRate:    dash.completionRate,
+        finishedCount:     dash.finishedCount,
+        currentStreak:     dash.currentStreak,
+        longestStreak:     0,
+        connectionCount:   dash.connectionCount,
+        totalFocusMinutes: 0,
+        avgSessionMinutes: 0,
+        bestDayOfWeek:     null,
+        bestWeekCount:     0,
+        bestWeekStart:     null,
+        peopleAlongsideThisMonth: 0,
+      });
+    }).catch(() => {
+      // Soft-fail: leave hasAnySession null so the skeleton stays put
+      // briefly, then resolves on a retry. Don't lock the user out.
+      if (!cancelled) setHasAnySession(false);
     });
     return () => { cancelled = true; };
   }, [user?.id]);
-
-  // Heavy stats — only needed for the identity chips + Stats tab. No
-  // longer gates initial paint.
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    fetchProfileStats(user.id)
-      .then((s) => { if (!cancelled) setStats(s); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [user?.id]);
-
-  // Week sessions — used by the weekly grid; loads independently.
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    fetchWeekSessions(user.id)
-      .then((w) => { if (!cancelled) setWeekSessions(w); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [user?.id]);
-
-  // Recent ships — used by ShippedFeedStrip; independent.
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    fetchRecentShippedSessions(user.id)
-      .then((ships) => { if (!cancelled) setMyShips(ships.slice(0, 3)); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [user?.id]);
-
-  // Upcoming scheduled — used by SmartNextCard + UpcomingPublicSessionsStrip.
-  // Historically the slowest query and the main reason the load gate hurt.
-  useEffect(() => {
-    let cancelled = false;
-    fetchUpcomingScheduledSessions()
-      .then((u) => { if (!cancelled) setUpcomingScheduled(u); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
   const workTypeLabel = profile?.work_type ? WORK_TYPE_LABELS[profile.work_type] : null;
