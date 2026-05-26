@@ -322,17 +322,18 @@ export function ProjectDetailPage() {
               within the flex column. */}
           {project.cover_image_url && <div className="flex-1 min-h-[80px]" />}
 
-          {/* Title + description container. With a cover image we wrap in
-              a backdrop-blur panel so the text is ALWAYS readable, even
-              when expanded descriptions push into busy image regions.
-              Without a cover image, the gradient bg handles contrast. */}
+          {/* Title + description container. With a cover image, we wrap
+              in a backdrop-blur panel constrained to ~half the hero width
+              so the image stays visible on the right while the text
+              remains readable on the left. Translucent enough that the
+              image bleeds through gently. */}
           <div
             className={
               project.cover_image_url
-                ? `relative rounded-2xl px-4 py-3 backdrop-blur-md ${
+                ? `relative rounded-2xl px-4 py-3 backdrop-blur-md max-w-xl mr-auto ${
                     heroTextDark
-                      ? 'bg-white/85 ring-1 ring-black/5'
-                      : 'bg-black/55 ring-1 ring-white/10'
+                      ? 'bg-white/70 ring-1 ring-black/5'
+                      : 'bg-black/45 ring-1 ring-white/10'
                   }`
                 : ''
             }

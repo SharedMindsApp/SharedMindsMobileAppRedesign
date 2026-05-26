@@ -132,12 +132,12 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, textColor, onCh
           }`}
         />
         {/* Sample title in a backdrop-blur panel — matches the hero's
-            real readable-anywhere panel. Gives a live preview of how
-            text + panel + image will compose. */}
-        <div className={`absolute left-3 right-3 bottom-3 rounded-lg px-3 py-2 backdrop-blur-md pointer-events-none ${
+            real readable-anywhere panel. Constrained to ~half width so
+            the image stays visible to the right. */}
+        <div className={`absolute left-3 bottom-3 max-w-[60%] rounded-lg px-3 py-2 backdrop-blur-md pointer-events-none ${
           textColor === 'dark'
-            ? 'bg-white/85 ring-1 ring-black/5'
-            : 'bg-black/55 ring-1 ring-white/10'
+            ? 'bg-white/70 ring-1 ring-black/5'
+            : 'bg-black/45 ring-1 ring-white/10'
         }`}>
           <p className={`text-base font-extrabold leading-tight ${
             textColor === 'light' ? 'text-white' : 'text-stitch-text-primary'
