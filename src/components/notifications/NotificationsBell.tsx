@@ -11,10 +11,10 @@ import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell, Loader2, CheckCheck, MessageCircle, Heart, UserPlus, Sparkles, Calendar,
-  FolderPlus, CornerDownRight, HelpCircle, AlertCircle, Check,
+  FolderPlus, CornerDownRight, HelpCircle, AlertCircle, Check, X,
 } from 'lucide-react';
 import {
-  listNotifications, fetchUnreadCount, markRead, markAllRead,
+  listNotifications, fetchUnreadCount, markRead, markAllRead, dismissNotification,
   subscribeToNotifications,
   type Notification, type NotificationType,
 } from '../../core/services/NotificationService';
@@ -168,9 +168,39 @@ export function NotificationsBell() {
   }
 
   async function handleMarkAllRead() {
-    setItems((prev) => prev.map((x) => x.read_at ? x : { ...x, read_at: new Date().toISOString() }));
+    // Optimistic update + immediate UI feedback.
+    const nowIso = new Date().toISOString();
+    setItems((prev) => prev.map((x) => x.read_at ? x : { ...x, read_at: nowIso }));
     setUnread(0);
-    markAllRead().catch(() => refresh());
+    try {
+      const updated = await markAllRead();
+      // If the service returned 0 rows but we showed unread items, something
+      // server-side (RLS, auth) blocked the write. Pull the truth + restore.
+      if (updated === 0) {
+        console.warn('[Notifications] markAllRead affected 0 rows — re-syncing from server');
+        await refresh();
+      }
+    } catch (e) {
+      console.error('[Notifications] markAllRead error, re-syncing', e);
+      await refresh();
+    }
+  }
+
+  /** Per-row dismissal — permanently removes the notification.
+   *  Optimistic local remove + rollback on server failure. */
+  async function handleDismiss(n: Notification) {
+    const wasUnread = !n.read_at;
+    setItems((prev) => prev.filter((x) => x.id !== n.id));
+    if (wasUnread) setUnread((c) => Math.max(0, c - 1));
+    try {
+      await dismissNotification(n.id);
+    } catch {
+      // Restore on failure
+      setItems((prev) => [n, ...prev].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      ));
+      if (wasUnread) setUnread((c) => c + 1);
+    }
   }
 
   if (!user) return null;
@@ -243,6 +273,7 @@ export function NotificationsBell() {
                         key={n.id}
                         notification={n}
                         onClick={() => handleClick(n)}
+                        onDismiss={() => handleDismiss(n)}
                       />
                     ))}
                   </div>
@@ -270,27 +301,34 @@ export function NotificationsBell() {
 // ── Single notification row ────────────────────────────────────
 
 function NotificationRow({
-  notification, onClick,
+  notification, onClick, onDismiss,
 }: {
   notification: Notification;
   onClick: () => void;
+  onDismiss: () => void;
 }) {
   const meta = TYPE_META[notification.type] ?? { Icon: AlertCircle, cls: 'text-slate-500 bg-slate-100' };
   const Icon = meta.Icon;
   const isUnread = !notification.read_at;
 
+  // role=button on a div instead of a real <button> so the X dismiss can
+  // be its own clickable child (HTML disallows nested buttons).
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`w-full text-left flex items-start gap-3 px-4 py-2.5 transition-colors ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+      }}
+      className={`group relative w-full text-left flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
         isUnread ? 'bg-primary/[0.03] hover:bg-primary/[0.06]' : 'hover:bg-surface-container-low'
       }`}
     >
       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${meta.cls}`}>
         <Icon size={14} strokeWidth={2.5} />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 pr-6">
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
           <p className={`text-xs ${isUnread ? 'font-extrabold stitch-text-primary' : 'font-bold stitch-text-primary'}`}>
             {notification.title}
@@ -308,7 +346,18 @@ function NotificationRow({
       {isUnread && (
         <span className="w-1.5 h-1.5 mt-1.5 rounded-full bg-primary shrink-0" />
       )}
-    </button>
+      {/* X dismiss — hover-revealed, click bubbles stopped so the row
+          onClick doesn't fire alongside. */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDismiss(); }}
+        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md grid place-items-center stitch-text-secondary opacity-0 group-hover:opacity-100 hover:bg-surface-container hover:stitch-text-primary transition-opacity"
+        aria-label="Dismiss notification"
+        title="Dismiss"
+      >
+        <X size={11} />
+      </button>
+    </div>
   );
 }
 

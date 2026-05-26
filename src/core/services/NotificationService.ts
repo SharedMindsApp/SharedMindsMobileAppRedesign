@@ -93,21 +93,53 @@ export async function fetchUnreadCount(): Promise<number> {
 }
 
 export async function markRead(notificationId: string): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from('notifications')
     .update({ read_at: new Date().toISOString() })
     .eq('id', notificationId)
     .is('read_at', null);
+  if (error) console.error('[NotificationService] markRead:', error);
 }
 
-export async function markAllRead(): Promise<void> {
+/**
+ * Flip every unread notification for the current user to read. Returns the
+ * number of rows actually updated — important because a successful Supabase
+ * call with zero affected rows still resolves without an error, which the
+ * previous version of this function hid.
+ *
+ * If the count is 0 despite unread items being visible, RLS is denying the
+ * update (or auth has lapsed) and we should surface that to the caller
+ * rather than fail silently.
+ */
+export async function markAllRead(): Promise<number> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase
+  if (!user) return 0;
+  const { data, error } = await supabase
     .from('notifications')
     .update({ read_at: new Date().toISOString() })
     .eq('user_id', user.id)
-    .is('read_at', null);
+    .is('read_at', null)
+    .select('id'); // force RETURNING so we can count
+  if (error) {
+    console.error('[NotificationService] markAllRead failed:', error);
+    throw error;
+  }
+  return data?.length ?? 0;
+}
+
+/**
+ * Permanently remove a notification. RLS gates by user_id = auth.uid()
+ * so users can only delete their own.
+ */
+export async function dismissNotification(notificationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', notificationId);
+  if (error) {
+    console.error('[NotificationService] dismissNotification:', error);
+    throw error;
+  }
 }
 
 /** Realtime: fires whenever ANY new notification for the current user arrives.
