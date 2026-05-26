@@ -23,6 +23,23 @@ export interface Task {
     updated_at: string;
 }
 
+/** Schedule a task to a specific calendar date (YYYY-MM-DD) or clear
+ *  the assignment (null = backlog). Wraps updateTask for clarity since
+ *  scheduling is the most common task mutation in the new weekly model. */
+export async function scheduleTaskFor(
+  taskId: string,
+  date: string | null,
+): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ scheduled_for: date })
+    .eq('id', taskId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Task;
+}
+
 export const TaskService = {
     /**
      * Fetch all open + active tasks in a single project (across whatever

@@ -167,7 +167,11 @@ export function ProjectDetailPage() {
   const totalSessionMinutes = completedSessions.reduce((sum, s) =>
     sum + (s.actual_duration_minutes ?? s.intended_duration_minutes ?? 0), 0);
 
-  async function handleAddTask() {
+  /** scheduledFor lets the Day view auto-assign new tasks to the day
+   *  the user is currently viewing. Without it the task lands in the
+   *  backlog (scheduled_for null), which is right for Week view + the
+   *  Backlog accordion. */
+  async function handleAddTask(scheduledFor?: string | null) {
     if (!project || !user || !newTaskTitle.trim() || taskSubmitting) return;
     setTaskSubmitting(true);
     try {
@@ -179,6 +183,7 @@ export function ProjectDetailPage() {
         status: 'inbox',
         priority: 'medium',
         energy_level: 'medium',
+        scheduled_for: scheduledFor ?? null,
         sort_order: 0,
       });
       setTasks((prev) => [created, ...prev]);
@@ -219,6 +224,34 @@ export function ProjectDetailPage() {
     } catch (err) {
       console.error('[ProjectDetailPage] renameTask failed:', err);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, title: original.title } : t)));
+    }
+  }
+
+  /** Schedule a task to a given date (YYYY-MM-DD) or null for backlog.
+   *  Optimistic + rollback. */
+  async function setTaskSchedule(taskId: string, date: string | null) {
+    const original = tasks.find((t) => t.id === taskId);
+    if (!original) return;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, scheduled_for: date } : t)));
+    try {
+      await TaskService.updateTask(taskId, { scheduled_for: date });
+    } catch (err) {
+      console.error('[ProjectDetailPage] setTaskSchedule failed:', err);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, scheduled_for: original.scheduled_for } : t)));
+    }
+  }
+
+  /** Carry forward all unfinished tasks (status != done) with scheduled_for
+   *  earlier than the current week. Single round-trip per task; cheap. */
+  async function carryForwardUnfinishedTasks(taskIds: string[], toDate: string) {
+    if (taskIds.length === 0) return;
+    setTasks((prev) => prev.map((t) => (taskIds.includes(t.id) ? { ...t, scheduled_for: toDate } : t)));
+    try {
+      await Promise.all(
+        taskIds.map((id) => TaskService.updateTask(id, { scheduled_for: toDate })),
+      );
+    } catch (err) {
+      console.error('[ProjectDetailPage] carryForwardUnfinishedTasks failed', err);
     }
   }
 
@@ -585,11 +618,13 @@ export function ProjectDetailPage() {
 
       {/* ── Tab body ───────────────────────────────────────────── */}
       {tab === 'tasks' && (
-        <KanbanTab
+        <TasksTab
           tasks={tasks}
           onSetStatus={setTaskStatus}
           onRename={renameTask}
           onDelete={deleteTask}
+          onSchedule={setTaskSchedule}
+          onCarryForward={carryForwardUnfinishedTasks}
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={handleAddTask}
@@ -1061,8 +1096,467 @@ const KANBAN_COLUMNS = [
 
 type KanbanStatus = 'inbox' | 'active' | 'done';
 
+// ── Date helpers ────────────────────────────────────────────────────────
+// All scheduling math works in the user's local calendar. Tasks store a
+// YYYY-MM-DD `scheduled_for` (no timezone) so "today" matches whatever
+// day the user perceives, regardless of their UTC offset.
+
+const DAY_NAMES_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_NAMES_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+/** Monday-of-week for the given date. */
+function startOfWeek(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  const dow = (r.getDay() + 6) % 7; // Mon=0, Sun=6
+  r.setDate(r.getDate() - dow);
+  return r;
+}
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function formatWeekRange(weekStart: Date): string {
+  const end = addDays(weekStart, 6);
+  const sameMonth = weekStart.getMonth() === end.getMonth();
+  const startStr = weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: sameMonth ? undefined : 'short' });
+  const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${startStr} – ${endStr}`;
+}
+function formatDayLabel(d: Date): string {
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
+// ── TasksTab — the scheduling shell around KanbanTab ────────────────────
+//
+// Adds three things over the bare Kanban:
+//   1. Day / Week view toggle. Day = the Kanban filtered to one date.
+//      Week = a compact 7-column overview.
+//   2. Date / week navigator + "Today" / "This week" jump button.
+//   3. Backlog accordion (tasks with scheduled_for = null) +
+//      carry-forward banner for unfinished tasks from prior weeks.
+//
+// The Kanban status (To do / Active / Done) is preserved — it's the
+// task lifecycle, orthogonal to scheduling. A task can be Active AND
+// scheduled for Wednesday simultaneously.
+
+function TasksTab({
+  tasks, onSetStatus, onRename, onDelete, onSchedule, onCarryForward,
+  newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+}: {
+  tasks: Task[];
+  onSetStatus: (taskId: string, next: KanbanStatus) => void;
+  onRename: (taskId: string, newTitle: string) => void;
+  onDelete: (taskId: string) => void;
+  onSchedule: (taskId: string, date: string | null) => void;
+  onCarryForward: (taskIds: string[], toDate: string) => void;
+  newTaskTitle: string;
+  setNewTaskTitle: (s: string) => void;
+  onAdd: () => void;
+  submitting: boolean;
+  colorHex: string;
+}) {
+  const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+  const todayIso = useMemo(() => isoDate(today), [today]);
+
+  // View state.
+  const [view, setView] = useState<'day' | 'week'>('day');
+  const [selectedDay, setSelectedDay] = useState<Date>(today);
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(today));
+  const [showBacklog, setShowBacklog] = useState(false);
+  const [dismissedCarry, setDismissedCarry] = useState(false);
+
+  const selectedDayIso = isoDate(selectedDay);
+  const weekStartIso = isoDate(weekStart);
+
+  // Partition tasks for fast filtering.
+  const backlogTasks = tasks.filter((t) => !t.scheduled_for && t.status !== 'done');
+  const tasksForSelectedDay = tasks.filter((t) => t.scheduled_for === selectedDayIso);
+  // Unfinished tasks scheduled for a day BEFORE this week — candidates
+  // for the carry-forward banner.
+  const overdueTasks = tasks.filter((t) => {
+    if (!t.scheduled_for) return false;
+    if (t.status === 'done') return false;
+    return t.scheduled_for < weekStartIso;
+  });
+
+  // ── Render ───────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-3">
+      {/* Carry-forward banner — only when there are overdue unfinished
+          tasks. One-click bulk move to today; dismiss to hide for this
+          session (will reappear on next load if still overdue). */}
+      {overdueTasks.length > 0 && !dismissedCarry && (
+        <div className="rounded-2xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 grid place-items-center shrink-0">
+            <Clock size={14} className="text-amber-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-extrabold text-amber-900">
+              {overdueTasks.length} unfinished task{overdueTasks.length !== 1 ? 's' : ''} from before this week
+            </p>
+            <p className="text-[11px] text-amber-800/80 mt-0.5 leading-snug">
+              Carry them forward to today, or open each to defer / drop.
+            </p>
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => onCarryForward(overdueTasks.map((t) => t.id), todayIso)}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 text-white hover:bg-amber-700"
+              >
+                Carry to today
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedCarry(true)}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-amber-800 hover:bg-amber-100"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top bar — Day / Week toggle on the left, navigator on the right */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="inline-flex p-0.5 rounded-full bg-surface-container-low">
+          <button
+            type="button"
+            onClick={() => setView('day')}
+            className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              view === 'day' ? 'bg-white stitch-text-primary shadow-sm' : 'stitch-text-secondary'
+            }`}
+          >
+            Day
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('week')}
+            className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              view === 'week' ? 'bg-white stitch-text-primary shadow-sm' : 'stitch-text-secondary'
+            }`}
+          >
+            Week
+          </button>
+        </div>
+
+        {view === 'day' ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSelectedDay(addDays(selectedDay, -1))}
+              className="w-7 h-7 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+              aria-label="Previous day"
+            >
+              ‹
+            </button>
+            <span className="text-xs font-bold stitch-text-primary px-2 min-w-[150px] text-center tabular-nums">
+              {selectedDayIso === todayIso ? 'Today' : formatDayLabel(selectedDay)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedDay(addDays(selectedDay, 1))}
+              className="w-7 h-7 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+              aria-label="Next day"
+            >
+              ›
+            </button>
+            {selectedDayIso !== todayIso && (
+              <button
+                type="button"
+                onClick={() => setSelectedDay(today)}
+                className="ml-1 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:stitch-text-primary"
+              >
+                Today
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setWeekStart(addDays(weekStart, -7))}
+              className="w-7 h-7 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+              aria-label="Previous week"
+            >
+              ‹
+            </button>
+            <span className="text-xs font-bold stitch-text-primary px-2 min-w-[120px] text-center tabular-nums">
+              {formatWeekRange(weekStart)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setWeekStart(addDays(weekStart, 7))}
+              className="w-7 h-7 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+              aria-label="Next week"
+            >
+              ›
+            </button>
+            {weekStartIso !== isoDate(startOfWeek(today)) && (
+              <button
+                type="button"
+                onClick={() => setWeekStart(startOfWeek(today))}
+                className="ml-1 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:stitch-text-primary"
+              >
+                This week
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Backlog accordion — tasks with no schedule yet */}
+      {backlogTasks.length > 0 && (
+        <details
+          open={showBacklog}
+          onToggle={(e) => setShowBacklog((e.target as HTMLDetailsElement).open)}
+          className="rounded-2xl bg-surface-container-low/60 ring-1 ring-surface-container px-3 py-2"
+        >
+          <summary className="cursor-pointer flex items-center gap-2 select-none list-none">
+            <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest">
+              Backlog
+            </span>
+            <span className="text-[10px] font-bold stitch-text-secondary tabular-nums">
+              {backlogTasks.length}
+            </span>
+            <span className="ml-auto text-[10px] stitch-text-secondary">
+              {showBacklog ? '▾' : '▸'} unscheduled
+            </span>
+          </summary>
+          <div className="mt-2 space-y-1.5">
+            {backlogTasks.map((t) => (
+              <BacklogRow
+                key={t.id}
+                task={t}
+                onScheduleToday={() => onSchedule(t.id, todayIso)}
+                onSchedulePicker={(date) => onSchedule(t.id, date)}
+                onDelete={() => onDelete(t.id)}
+                weekStart={weekStart}
+              />
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* Body — Day view (Kanban filtered) or Week view (7 columns) */}
+      {view === 'day' ? (
+        <KanbanTab
+          tasks={tasksForSelectedDay}
+          onSetStatus={onSetStatus}
+          onRename={onRename}
+          onDelete={onDelete}
+          onSchedule={onSchedule}
+          newTaskTitle={newTaskTitle}
+          setNewTaskTitle={setNewTaskTitle}
+          onAdd={onAdd}
+          submitting={submitting}
+          colorHex={colorHex}
+          emptyMessage={selectedDayIso === todayIso
+            ? 'No tasks for today — add one above, or pull from the backlog.'
+            : `No tasks for ${formatDayLabel(selectedDay)}.`}
+          addContextLabel={selectedDayIso === todayIso ? 'today' : DAY_NAMES_LONG[(selectedDay.getDay() + 6) % 7]}
+          scheduledForOnAdd={selectedDayIso}
+        />
+      ) : (
+        <WeekGrid
+          weekStart={weekStart}
+          tasks={tasks}
+          onSchedule={onSchedule}
+          onSetStatus={onSetStatus}
+          onDelete={onDelete}
+          colorHex={colorHex}
+          todayIso={todayIso}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Backlog row — compact, with a "schedule" action ─────────────────────
+function BacklogRow({
+  task, onScheduleToday, onSchedulePicker, onDelete, weekStart,
+}: {
+  task: Task;
+  onScheduleToday: () => void;
+  onSchedulePicker: (date: string) => void;
+  onDelete: () => void;
+  weekStart: Date;
+}) {
+  const [showDays, setShowDays] = useState(false);
+  return (
+    <div className="group bg-white rounded-lg ring-1 ring-surface-container px-3 py-2 flex items-center gap-2">
+      <p className="flex-1 text-xs font-semibold stitch-text-primary truncate">{task.title}</p>
+      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+        <button
+          type="button"
+          onClick={onScheduleToday}
+          className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:bg-surface-container-low hover:stitch-text-primary"
+        >
+          Today
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowDays((v) => !v)}
+            className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:bg-surface-container-low hover:stitch-text-primary"
+          >
+            Pick day
+          </button>
+          {showDays && (
+            <div className="absolute right-0 top-full mt-1 z-10 bg-surface ring-1 ring-surface-container rounded-lg shadow-lg p-1 w-44">
+              {DAY_NAMES_SHORT.map((name, i) => {
+                const d = addDays(weekStart, i);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => { onSchedulePicker(isoDate(d)); setShowDays(false); }}
+                    className="w-full text-left px-2 py-1.5 rounded-md text-[11px] font-semibold stitch-text-primary hover:bg-surface-container-low"
+                  >
+                    {DAY_NAMES_LONG[i]}, {d.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="w-6 h-6 rounded-md grid place-items-center text-rose-600/70 hover:bg-rose-50 hover:text-rose-700"
+          aria-label="Delete task"
+        >
+          <Trash2 size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Week grid — 7 day columns with task lists + status dots ─────────────
+function WeekGrid({
+  weekStart, tasks, onSchedule, onSetStatus, onDelete, colorHex, todayIso,
+}: {
+  weekStart: Date;
+  tasks: Task[];
+  onSchedule: (taskId: string, date: string | null) => void;
+  onSetStatus: (taskId: string, next: KanbanStatus) => void;
+  onDelete: (taskId: string) => void;
+  colorHex: string;
+  todayIso: string;
+}) {
+  const days = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekStart, i));
+  // void unused warnings for handlers we don't yet expose from this view
+  void onSchedule; void colorHex;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+      {days.map((d, i) => {
+        const iso = isoDate(d);
+        const dayTasks = tasks.filter((t) => t.scheduled_for === iso);
+        const isToday = iso === todayIso;
+        return (
+          <div
+            key={iso}
+            className={`rounded-xl p-2 min-h-[140px] ${
+              isToday
+                ? 'bg-primary/5 ring-1 ring-primary/20'
+                : 'bg-surface-container-low/60'
+            }`}
+          >
+            <div className="flex items-baseline justify-between mb-1.5 px-0.5">
+              <div>
+                <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest leading-none">
+                  {DAY_NAMES_SHORT[i]}
+                </p>
+                <p className={`text-base font-extrabold leading-tight ${isToday ? 'text-primary' : 'stitch-text-primary'}`}>
+                  {d.getDate()}
+                </p>
+              </div>
+              {dayTasks.length > 0 && (
+                <span className="text-[10px] font-bold stitch-text-secondary tabular-nums">
+                  {dayTasks.length}
+                </span>
+              )}
+            </div>
+            <div className="space-y-1">
+              {dayTasks.map((t) => (
+                <WeekTaskRow
+                  key={t.id}
+                  task={t}
+                  onCycleStatus={() => {
+                    const next: KanbanStatus = t.status === 'done'
+                      ? 'inbox' : t.status === 'active' ? 'done' : 'active';
+                    onSetStatus(t.id, next);
+                  }}
+                  onDelete={() => onDelete(t.id)}
+                />
+              ))}
+              {dayTasks.length === 0 && (
+                <p className="text-[10px] italic stitch-text-secondary/70 px-1 py-1">
+                  Nothing yet
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Compact task row for the week grid — a status dot, the title, and a
+// hover-revealed delete. Click the dot to cycle to-do → active → done → to-do.
+function WeekTaskRow({
+  task, onCycleStatus, onDelete,
+}: {
+  task: Task;
+  onCycleStatus: () => void;
+  onDelete: () => void;
+}) {
+  const status = (task.status as KanbanStatus) || 'inbox';
+  const isDone = status === 'done';
+  const isActive = status === 'active';
+  return (
+    <div className="group flex items-center gap-1.5 bg-white rounded-md ring-1 ring-surface-container/60 px-2 py-1.5">
+      <button
+        type="button"
+        onClick={onCycleStatus}
+        className={`shrink-0 w-3 h-3 rounded-full border-2 grid place-items-center transition-colors ${
+          isDone ? 'bg-emerald-500 border-emerald-500'
+            : isActive ? 'bg-blue-500 border-blue-500'
+            : 'border-stitch-text-secondary/40 bg-white'
+        }`}
+        aria-label="Cycle status"
+        title={`Status: ${status}`}
+      >
+        {isDone && <Check size={7} className="text-white" strokeWidth={3} />}
+      </button>
+      <span className={`flex-1 text-[11px] leading-snug truncate ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}>
+        {task.title}
+      </span>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded grid place-items-center text-rose-600/70 hover:bg-rose-50 transition-opacity"
+        aria-label="Delete"
+      >
+        <Trash2 size={9} />
+      </button>
+    </div>
+  );
+}
+
 function KanbanTab({
-  tasks, onSetStatus, onRename, onDelete, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  tasks, onSetStatus, onRename, onDelete, onSchedule, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  emptyMessage, addContextLabel, scheduledForOnAdd,
 }: {
   tasks: Task[];
   /** Move a task to a specific status — never to be confused with
@@ -1073,12 +1567,25 @@ function KanbanTab({
   onRename: (taskId: string, newTitle: string) => void;
   /** Hard delete with confirm step. */
   onDelete: (taskId: string) => void;
+  /** Schedule a task to a date (or null = backlog). Used by the row's
+   *  "Move to backlog" affordance. */
+  onSchedule?: (taskId: string, date: string | null) => void;
   newTaskTitle: string;
   setNewTaskTitle: (s: string) => void;
-  onAdd: () => void;
+  /** Now takes an optional date so the Day-view wrapper can pre-schedule
+   *  the new task to the day the user is viewing. */
+  onAdd: (scheduledFor?: string | null) => void;
   submitting: boolean;
   colorHex: string;
+  /** Customisable empty-state message — useful when the kanban is
+   *  filtered to a single day. */
+  emptyMessage?: string;
+  /** Label for the add input ("today", "Wednesday", project context, etc.). */
+  addContextLabel?: string;
+  /** When set, new tasks are created with this scheduled_for date. */
+  scheduledForOnAdd?: string | null;
 }) {
+  void onSchedule; // currently unused inside the body, threaded for future card actions
   function moveTask(task: Task, next: KanbanStatus) {
     if (task.status === next) return;
     onSetStatus(task.id, next);
@@ -1094,22 +1601,23 @@ function KanbanTab({
 
   return (
     <div className="space-y-3">
-      {/* Inline add — fires straight into inbox */}
+      {/* Inline add — new tasks pre-scheduled to the day this kanban
+          is filtered to (if any). Otherwise lands in the backlog. */}
       <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container">
         <Plus size={13} className="stitch-text-secondary shrink-0" />
         <input
           type="text"
           value={newTaskTitle}
           onChange={(e) => setNewTaskTitle(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') onAdd(); }}
-          placeholder="Add a task to this project…"
+          onKeyDown={(e) => { if (e.key === 'Enter') onAdd(scheduledForOnAdd ?? null); }}
+          placeholder={addContextLabel ? `Add a task for ${addContextLabel}…` : 'Add a task to this project…'}
           className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none border-0"
           disabled={submitting}
         />
         {newTaskTitle.trim().length > 0 && (
           <button
             type="button"
-            onClick={onAdd}
+            onClick={() => onAdd(scheduledForOnAdd ?? null)}
             disabled={submitting}
             className="shrink-0 px-3 py-1 rounded-full text-[11px] font-bold text-white"
             style={{ backgroundColor: colorHex }}
@@ -1119,7 +1627,18 @@ function KanbanTab({
         )}
       </div>
 
-      {/* Three columns side-by-side on desktop, stacked on mobile */}
+      {/* Overall empty state — shown when no tasks at all for the
+          filtered scope (typically: one day with nothing scheduled). */}
+      {tasks.length === 0 && emptyMessage && (
+        <div className="rounded-2xl bg-surface-container-low/40 ring-1 ring-surface-container px-4 py-6 text-center">
+          <p className="text-xs stitch-text-secondary italic">{emptyMessage}</p>
+        </div>
+      )}
+
+      {/* Three columns side-by-side on desktop, stacked on mobile.
+          Hidden when there are zero tasks (the empty-state above
+          takes over to avoid showing three empty columns). */}
+      {tasks.length > 0 && (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {KANBAN_COLUMNS.map((col) => (
           <div key={col.key} className={`rounded-2xl ${col.tint} p-3 min-h-[200px]`}>
@@ -1152,6 +1671,7 @@ function KanbanTab({
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

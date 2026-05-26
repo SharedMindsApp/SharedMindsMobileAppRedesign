@@ -69,6 +69,11 @@ export type CoreTask = {
   lastSessionAt?: string | null;
   /** How many sessions have been worked on this task — drives "3 sessions logged" chip. */
   sessionsCount?: number;
+  /** Day this task is scheduled for, ISO date string (YYYY-MM-DD), or null for backlog. */
+  scheduledFor: string | null;
+  /** Status — preserved from the DB row. Used by the Day/Week task views to
+   *  filter into the To do / Active / Done columns. */
+  status: 'inbox' | 'active' | 'done' | 'dropped';
 };
 
 export type CoreResponsibility = {
@@ -442,6 +447,8 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           lastSessionOutcome: t.last_session_outcome ?? null,
           lastSessionAt: t.last_session_at ?? null,
           sessionsCount: t.sessions_count ?? 0,
+          scheduledFor: t.scheduled_for ?? null,
+          status: t.status,
         }));
 
         // Restore active project from localStorage (validated by refreshProjects).
@@ -538,6 +545,8 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
               priority: 'medium',
               dueLabel: 'Inbox',
               done: false,
+              scheduledFor: null,
+              status: 'inbox',
             },
             ...current.tasks,
           ],
@@ -597,6 +606,8 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
               priority: 'medium',
               dueLabel: 'Inbox',
               done: false,
+              scheduledFor: null,
+              status: 'inbox',
             },
             ...current.tasks,
           ],
