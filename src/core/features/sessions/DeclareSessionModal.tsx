@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock, Video, VideoOff } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock, Video, VideoOff, Lock } from 'lucide-react';
+import { usePublicHostingEligibility } from '../../../hooks/usePublicHostingEligibility';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -10,14 +11,17 @@ import { TaskService } from '../../services/TaskService';
 import { InputWell } from '../../ui/CorePage';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConductGateModal } from '../moderation/ConductGateModal';
+import { useSessionLimits } from '../../../hooks/useSessionLimits';
 
-type DurationOption = 25 | 50 | 90;
 type GoalTab = 'pick' | 'type';
 
-const DURATIONS: { value: DurationOption; label: string; sublabel: string; icon: any }[] = [
-  { value: 25, label: '25 min', sublabel: 'Pomodoro', icon: Coffee },
-  { value: 50, label: '50 min', sublabel: 'Deep work', icon: Zap },
-  { value: 90, label: '90 min', sublabel: 'Flow state', icon: Leaf },
+/** Preset duration chips — the easy ladder. Custom durations available
+ *  via the slider below the chips (for paid / beta users). */
+const DURATION_PRESETS: { value: number; label: string; sublabel: string; icon: any }[] = [
+  { value: 25,  label: '25 min',  sublabel: 'Pomodoro',   icon: Coffee },
+  { value: 50,  label: '50 min',  sublabel: 'Deep work',  icon: Zap    },
+  { value: 90,  label: '90 min',  sublabel: 'Flow state', icon: Leaf   },
+  { value: 120, label: '2 hours', sublabel: 'Long block', icon: Timer  },
 ];
 
 const ENERGY_COLORS: Record<CoreTask['energy'], string> = {
@@ -48,8 +52,8 @@ interface Props {
   forceSoloMode?: boolean;
   /** Pre-selects a project to pin the session to. */
   initialProjectId?: string;
-  /** Pre-selects duration (25 / 50 / 90). Used by Quick Start templates. */
-  initialDuration?: 25 | 50 | 90;
+  /** Pre-selects duration in minutes. Used by Quick Start templates. */
+  initialDuration?: number;
 }
 
 export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration }: Props) {
@@ -77,7 +81,19 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [tab, setTab] = useState<GoalTab>(initialGoal ? 'type' : 'pick');
   const [selectedTask, setSelectedTask] = useState<CoreTask | null>(null);
   const [goalText, setGoalText] = useState(initialGoal ?? '');
-  const [duration, setDuration] = useState<DurationOption>(initialDuration ?? 50);
+  // Session length in minutes. Free text — bounded by useSessionLimits()
+  // below. Default 50 = Pomodoro+ baseline. Capped on submit.
+  const limits = useSessionLimits();
+  const [duration, setDuration] = useState<number>(() => {
+    const requested = initialDuration ?? 50;
+    return Math.min(requested, limits.maxMinutes);
+  });
+  // Visible preset chips — filtered to the user's tier so free users
+  // never see 2hr greyed-out (cleaner than disabled chips).
+  const visiblePresets = DURATION_PRESETS.filter((p) => p.value <= limits.maxMinutes);
+  // Custom = current value isn't on a chip. We only show the slider when
+  // the tier allows it.
+  const isCustomDuration = !visiblePresets.some((p) => p.value === duration);
   const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
     forceSoloMode ? 'solo' : 'one_on_one'
   );
@@ -93,6 +109,12 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
    *  are real tasks people want to track. Toggle off for ad-hoc one-offs. */
   const [saveAsTask, setSaveAsTask] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Public-hosting gate: hosts of 'group' (community-visible) sessions must
+  // have attended N qualifying sessions first. The hook returns admin bypass
+  // so we don't need to special-case that here.
+  const hostingEligibility = usePublicHostingEligibility();
+  const [showGateNotice, setShowGateNotice] = useState(false);
   // Pending-start guard for the conduct gate. If the user hasn't accepted
   // the conduct rules yet, clicking Start opens this gate first; on
   // acceptance we re-enter handleStart() to actually create the session.
@@ -181,6 +203,14 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
 
   async function handleStart() {
     if (!canSubmit) return;
+    // Public-hosting gate: block scheduled-session submission for ineligible
+    // users and surface the explainer instead of a raw RLS error. Live
+    // sessions of any mode are always allowed.
+    if (isScheduling && !hostingEligibility.eligible && !hostingEligibility.loading) {
+      setShowGateNotice(true);
+      setError('Publishing to the community calendar unlocks after a few attended sessions. You can still Start now.');
+      return;
+    }
     // Conduct gate: block the first session until the user has explicitly
     // accepted the community ground rules. The modal calls back into
     // handleStart() on accept (the profile column will be set by then so
@@ -223,7 +253,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         await createScheduledSession({
           title: resolvedGoal,
           scheduledAt: resolvedScheduledAt,
-          durationMinutes: duration,
+          durationMinutes: Math.min(duration, limits.maxMinutes),
           projectId: selectedProjectId ?? undefined,
         });
         setScheduledConfirm(true);
@@ -234,7 +264,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         goalText: resolvedGoal,
         taskId: resolvedTaskId,
         projectId: selectedProjectId ?? undefined,
-        durationMinutes: duration,
+        durationMinutes: Math.min(duration, limits.maxMinutes),
         sessionMode,
         // Solo has no audio room — quiet mode is meaningless there
         quietMode: sessionMode === 'solo' ? false : quietMode,
@@ -661,14 +691,32 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </button>
             <button
               type="button"
-              onClick={() => setWhenMode('schedule')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+              onClick={() => {
+                // Scheduled sessions publish to the community calendar, so
+                // they're gated. Ineligible users get the explainer instead
+                // of switching the toggle — they can still Start now.
+                if (!hostingEligibility.eligible && !hostingEligibility.loading) {
+                  setShowGateNotice(true);
+                  return;
+                }
+                setWhenMode('schedule');
+                setShowGateNotice(false);
+              }}
+              className={`relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
                 whenMode === 'schedule'
                   ? 'stitch-btn--primary text-white shadow-md shadow-primary/20'
-                  : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                  : !hostingEligibility.eligible && !hostingEligibility.loading
+                    ? 'bg-surface-container-low/60 stitch-text-secondary hover:bg-surface-container-low'
+                    : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
               }`}
+              aria-label={!hostingEligibility.eligible && !hostingEligibility.loading ? 'Schedule (locked — attend more sessions to unlock)' : 'Schedule a session'}
             >
-              <Clock size={13} className={whenMode === 'schedule' ? 'text-white/80' : 'stitch-text-secondary'} />
+              {!hostingEligibility.eligible && !hostingEligibility.loading && whenMode !== 'schedule' && (
+                <Lock size={11} className="stitch-text-secondary" />
+              )}
+              {(hostingEligibility.eligible || hostingEligibility.loading || whenMode === 'schedule') && (
+                <Clock size={13} className={whenMode === 'schedule' ? 'text-white/80' : 'stitch-text-secondary'} />
+              )}
               Schedule
             </button>
           </div>
@@ -681,15 +729,70 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               className="mt-2 w-full px-4 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-sm outline-none focus:ring-2 ring-primary/25 transition-all"
             />
           )}
+
+          {/* ── Scheduled-hosting gate notice ──────────────────────
+              Inspired by Flown's two-card moment: explain *why* the user
+              can't publish to the community calendar yet, and surface
+              the escape valve (Start now) in the same breath. */}
+          {showGateNotice && !hostingEligibility.eligible && (
+            <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
+              <div className="flex items-start gap-2 mb-3">
+                <div className="w-7 h-7 rounded-full bg-amber-400/15 grid place-items-center flex-shrink-0">
+                  <Lock size={13} className="text-amber-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-extrabold stitch-text-primary leading-tight">
+                    Scheduling unlocks at {hostingEligibility.threshold} sessions attended
+                  </p>
+                  <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+                    You've attended <span className="font-bold tabular-nums">{hostingEligibility.attendedCount}</span> so far. We keep the public calendar curated by letting members publish sessions once they've experienced the format a few times. You can still Start now any time — solo, 1-on-1, or group.
+                  </p>
+                  <div className="mt-2 h-1.5 w-full rounded-full bg-surface-container-low overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, (hostingEligibility.attendedCount / hostingEligibility.threshold) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWhenMode('now');
+                    setShowGateNotice(false);
+                  }}
+                  className="flex-1 py-2 rounded-lg text-[11px] font-extrabold uppercase tracking-wide stitch-btn--primary text-white"
+                >
+                  Start now instead
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGateNotice(false)}
+                  className="px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wide stitch-text-secondary hover:bg-surface-container-low"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Duration picker ──────────────────────────────── */}
         <div className="shrink-0 px-5 pt-3">
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
-            Session length
-          </p>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+              Session length
+            </p>
+            {/* Live readout — useful when the slider is in play */}
+            <p className="text-[11px] font-bold stitch-text-secondary tabular-nums">
+              {duration < 60 ? `${duration} min` : `${Math.floor(duration / 60)}h ${duration % 60 ? `${duration % 60}m` : ''}`.trim()}
+            </p>
+          </div>
           <div className="flex gap-2">
-            {DURATIONS.map(({ value, label, sublabel, icon: Icon }) => {
+            {visiblePresets.map(({ value, label, sublabel, icon: Icon }) => {
               const isActive = duration === value;
               return (
                 <button
@@ -713,6 +816,53 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               );
             })}
           </div>
+
+          {/* Custom-duration slider — only shown when the tier allows it.
+              Lets deep workers dial in exact lengths (e.g. 75 min, 135 min)
+              that don't fit a preset. Capped to the tier's maxMinutes. */}
+          {limits.canUseCustomDuration && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+                  Custom
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDuration(50)}
+                  className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                    isCustomDuration
+                      ? 'stitch-text-secondary hover:stitch-text-primary'
+                      : 'stitch-text-secondary/40'
+                  }`}
+                  disabled={!isCustomDuration}
+                >
+                  ↺ Use preset
+                </button>
+              </div>
+              <input
+                type="range"
+                min={15}
+                max={limits.maxMinutes}
+                step={5}
+                value={duration}
+                onChange={(e) => setDuration(parseInt(e.target.value, 10))}
+                className="w-full h-1.5 accent-primary"
+                aria-label={`Session length: ${duration} minutes`}
+              />
+              <div className="flex justify-between text-[9px] stitch-text-secondary/60 mt-0.5 tabular-nums">
+                <span>15m</span>
+                <span>{Math.floor(limits.maxMinutes / 60)}h</span>
+              </div>
+            </div>
+          )}
+
+          {/* Free-tier upgrade nudge — only shown once paywall is live and
+              the user hits the cap. During beta this is silent. */}
+          {!limits.isPaid && limits.tier === 'free' && (
+            <p className="mt-2 text-[10px] stitch-text-secondary/70 leading-snug">
+              Free plan caps sessions at {limits.maxMinutes} min. Upgrade for longer focus blocks.
+            </p>
+          )}
         </div>
 
         {/* ── Session mode (hidden when locked to Solo or when scheduling) ── */}
