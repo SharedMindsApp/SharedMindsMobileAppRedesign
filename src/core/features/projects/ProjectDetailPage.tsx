@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Loader2, Pencil, Play, Target, Calendar, ArrowLeft, Link2,
-  CheckCircle2, Plus, Pin, Clock, Zap,
+  CheckCircle2, Plus, Clock, Zap,
   Archive, UserPlus, ChevronRight, Trash2, X, Check,
   Columns, Flag, NotebookPen, Activity,
 } from 'lucide-react';
@@ -70,8 +70,6 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    state: { activeProjectId },
-    setActiveProject,
     refreshProjects,
   } = useCoreData();
 
@@ -147,7 +145,6 @@ export function ProjectDetailPage() {
   }, [projectId]);
 
   const color = useMemo(() => projectColorMeta(project?.color ?? null), [project]);
-  const isPinned = activeProjectId === projectId;
 
   // ── Roadmap math ───────────────────────────────────────────────
   // Per-milestone progress: weighted sum of done phases. If a milestone
@@ -608,19 +605,6 @@ export function ProjectDetailPage() {
               <Calendar size={14} />
               <span className="hidden sm:inline">Find a session</span>
               <span className="sm:hidden">Find</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveProject(isPinned ? null : project.id)}
-              title={isPinned ? 'Unpin from active' : 'Pin as your active project'}
-              className={`shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl text-xs font-bold transition-colors ${
-                isPinned
-                  ? `${color.soft} ${color.textDark}`
-                  : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
-              }`}
-            >
-              <Pin size={13} fill={isPinned ? 'currentColor' : 'none'} />
-              {isPinned ? 'Pinned' : 'Pin'}
             </button>
           </div>
         )}

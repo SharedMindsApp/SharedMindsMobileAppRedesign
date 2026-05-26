@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Target, CheckCircle2, Pin, Play, Archive, Zap, MoreVertical, Trash2, Pencil, Flag, Layers } from 'lucide-react';
+import { Plus, Users, CheckCircle2, Archive, Zap, MoreVertical, Trash2, Pencil, Flag, Layers } from 'lucide-react';
 import { ProjectService, type ProjectStats } from '../../services/ProjectService';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreProject } from '../../data/CoreDataContext';
@@ -43,8 +43,7 @@ export function projectColorMeta(token: string | null) {
 export function ProjectsPage() {
   const navigate = useNavigate();
   const {
-    state: { projects, activeProjectId },
-    setActiveProject,
+    state: { projects },
     refreshProjects,
   } = useCoreData();
   const [editorOpen, setEditorOpen] = useState(false);
@@ -118,13 +117,8 @@ export function ProjectsPage() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                isActive={project.id === activeProjectId}
                 stats={stats.get(project.id) ?? EMPTY_STATS}
                 onOpen={() => navigate(`/projects/${project.id}`)}
-                onStartSession={() => navigate(`/projects/${project.id}`)}
-                onTogglePin={() =>
-                  setActiveProject(project.id === activeProjectId ? null : project.id)
-                }
                 onArchive={() => handleArchive(project)}
                 onDelete={() => handleDelete(project)}
               />
@@ -136,9 +130,7 @@ export function ProjectsPage() {
             <ArchivedSection
               projects={archivedProjects}
               stats={stats}
-              activeProjectId={activeProjectId}
               onOpen={(id) => navigate(`/projects/${id}`)}
-              onTogglePin={(id) => setActiveProject(id === activeProjectId ? null : id)}
               onArchive={handleArchive}
               onDelete={handleDelete}
             />
@@ -202,19 +194,14 @@ function deriveProjectProgress(s: ProjectStats): { pct: number; basis: 'goals' |
 
 function ProjectCard({
   project,
-  isActive,
   stats,
   onOpen,
-  onTogglePin,
   onArchive,
   onDelete,
 }: {
   project: CoreProject;
-  isActive: boolean;
   stats: ProjectStats;
   onOpen: () => void;
-  onStartSession: () => void;
-  onTogglePin: () => void;
   onArchive?: () => void;
   onDelete?: () => void;
 }) {
@@ -242,8 +229,7 @@ function ProjectCard({
   return (
     <div
       className={`group relative bg-surface rounded-2xl overflow-hidden shadow-sm ring-1 transition-all duration-200 cursor-pointer
-        hover:shadow-md hover:-translate-y-0.5
-        ${isActive ? 'ring-2 ' + color.ring : 'ring-surface-container/80 hover:' + color.ring}`}
+        hover:shadow-md hover:-translate-y-0.5 ring-surface-container/80 hover:${color.ring}`}
       onClick={onOpen}
     >
       {/* Top band — cover image as a slim banner when set, else the
@@ -288,11 +274,6 @@ function ProjectCard({
           {/* Badges + overflow menu */}
           <div className="flex items-start gap-1.5 shrink-0">
             <div className="flex flex-col items-end gap-1">
-              {isActive && (
-                <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${color.soft} ${color.textDark}`}>
-                  <Pin size={7} fill="currentColor" /> Active
-                </span>
-              )}
               {isShared && (
                 <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 uppercase tracking-wider">
                   <Users size={8} /> {project.memberCount ?? 2}
@@ -422,26 +403,9 @@ function ProjectCard({
           )}
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-surface-container/60" />
-
-        {/* Footer actions */}
-        <div className="flex items-center justify-between">
-          {/* Pin toggle */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 transition-colors ${
-              isActive
-                ? `${color.soft} ${color.textDark}`
-                : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
-            }`}
-          >
-            <Pin size={10} fill={isActive ? 'currentColor' : 'none'} />
-            {isActive ? 'Pinned' : 'Pin'}
-          </button>
-
-          {/* Open arrow */}
+        {/* Hover "Open →" hint, right-aligned. No divider — the stats
+            row is already informative enough to terminate the card. */}
+        <div className="flex justify-end">
           <span className={`text-[11px] font-bold ${color.textDark} opacity-0 group-hover:opacity-100 transition-opacity`}>
             Open →
           </span>
@@ -463,13 +427,11 @@ function StatChip({ icon, label }: { icon: React.ReactNode; label: string }) {
 // ── Archived section ─────────────────────────────────────────────
 
 function ArchivedSection({
-  projects, stats, activeProjectId, onOpen, onTogglePin, onArchive, onDelete,
+  projects, stats, onOpen, onArchive, onDelete,
 }: {
   projects: CoreProject[];
   stats: Map<string, ProjectStats>;
-  activeProjectId: string | null;
   onOpen: (id: string) => void;
-  onTogglePin: (id: string) => void;
   onArchive?: (project: CoreProject) => void;
   onDelete?: (project: CoreProject) => void;
 }) {
@@ -495,11 +457,8 @@ function ArchivedSection({
             <ProjectCard
               key={project.id}
               project={project}
-              isActive={project.id === activeProjectId}
               stats={stats.get(project.id) ?? EMPTY_STATS}
               onOpen={() => onOpen(project.id)}
-              onStartSession={() => onOpen(project.id)}
-              onTogglePin={() => onTogglePin(project.id)}
               onDelete={onDelete ? () => onDelete(project) : undefined}
             />
           ))}
