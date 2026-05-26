@@ -207,6 +207,36 @@ export function ProjectDetailPage() {
     }
   }
 
+  /** Inline rename. Optimistic + rollback on failure, just like status. */
+  async function renameTask(taskId: string, newTitle: string) {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    const original = tasks.find((t) => t.id === taskId);
+    if (!original || original.title === trimmed) return;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, title: trimmed } : t)));
+    try {
+      await TaskService.updateTask(taskId, { title: trimmed });
+    } catch (err) {
+      console.error('[ProjectDetailPage] renameTask failed:', err);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, title: original.title } : t)));
+    }
+  }
+
+  /** Delete a task. Confirmation step keeps the kanban surface forgiving. */
+  async function deleteTask(taskId: string) {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    if (!confirm(`Delete "${task.title}"? This can't be undone.`)) return;
+    // Optimistic remove; restore on failure.
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    try {
+      await TaskService.deleteTask(taskId);
+    } catch (err) {
+      console.error('[ProjectDetailPage] deleteTask failed:', err);
+      setTasks((prev) => [...prev, task]);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center stitch-text-secondary">
@@ -548,6 +578,8 @@ export function ProjectDetailPage() {
         <KanbanTab
           tasks={tasks}
           onSetStatus={setTaskStatus}
+          onRename={renameTask}
+          onDelete={deleteTask}
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={handleAddTask}
@@ -1020,13 +1052,17 @@ const KANBAN_COLUMNS = [
 type KanbanStatus = 'inbox' | 'active' | 'done';
 
 function KanbanTab({
-  tasks, onSetStatus, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  tasks, onSetStatus, onRename, onDelete, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
 }: {
   tasks: Task[];
   /** Move a task to a specific status — never to be confused with
    *  toggle. The earlier `onToggle` indirection double-fired the status
    *  change and bounced tasks straight from inbox to done. */
   onSetStatus: (taskId: string, next: KanbanStatus) => void;
+  /** Inline rename — KanbanCard switches title to an input on edit. */
+  onRename: (taskId: string, newTitle: string) => void;
+  /** Hard delete with confirm step. */
+  onDelete: (taskId: string) => void;
   newTaskTitle: string;
   setNewTaskTitle: (s: string) => void;
   onAdd: () => void;
@@ -1097,6 +1133,8 @@ function KanbanTab({
                     task={t}
                     columnKey={col.key}
                     onMove={(next) => moveTask(t, next)}
+                    onRename={(title) => onRename(t.id, title)}
+                    onDelete={() => onDelete(t.id)}
                   />
                 ))
               )}
@@ -1109,26 +1147,82 @@ function KanbanTab({
 }
 
 function KanbanCard({
-  task, columnKey, onMove,
+  task, columnKey, onMove, onRename, onDelete,
 }: {
   task: Task;
   columnKey: KanbanStatus;
   onMove: (next: KanbanStatus) => void;
+  onRename: (newTitle: string) => void;
+  onDelete: () => void;
 }) {
-  // Allowed transitions — keep cards moving forward easily and back if needed.
   const canPrev = columnKey !== 'inbox';
   const canNext = columnKey !== 'done';
   const prevTarget: KanbanStatus = columnKey === 'done' ? 'active' : 'inbox';
   const nextTarget: KanbanStatus = columnKey === 'inbox' ? 'active' : 'done';
-  // Pretty labels for the button text so it matches the column headers
-  // ("To do" instead of the DB-internal "inbox").
   const labelFor = (s: KanbanStatus) => s === 'inbox' ? 'to do' : s;
 
+  // Inline edit mode. Esc cancels, Enter / blur commits.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task.title);
+
+  function startEditing() {
+    setDraft(task.title);
+    setEditing(true);
+  }
+  function commit() {
+    const trimmed = draft.trim();
+    setEditing(false);
+    if (trimmed && trimmed !== task.title) onRename(trimmed);
+  }
+
   return (
-    <div className="group bg-white rounded-xl ring-1 ring-surface-container px-3 py-2 hover:shadow-sm transition-shadow">
-      <p className={`text-xs font-semibold leading-snug ${columnKey === 'done' ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}>
-        {task.title}
-      </p>
+    <div className="group relative bg-white rounded-xl ring-1 ring-surface-container px-3 py-2 hover:shadow-sm transition-shadow">
+      {/* Hover-revealed actions row — top-right corner */}
+      <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {!editing && (
+          <button
+            type="button"
+            onClick={startEditing}
+            className="w-6 h-6 rounded-md grid place-items-center stitch-text-secondary hover:bg-surface-container-low hover:stitch-text-primary"
+            aria-label="Rename task"
+            title="Rename"
+          >
+            <Pencil size={11} />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          className="w-6 h-6 rounded-md grid place-items-center text-rose-600/70 hover:bg-rose-50 hover:text-rose-700"
+          aria-label="Delete task"
+          title="Delete"
+        >
+          <Trash2 size={11} />
+        </button>
+      </div>
+
+      {/* Title — flips between text and an input in edit mode */}
+      {editing ? (
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setEditing(false); setDraft(task.title); }
+          }}
+          autoFocus
+          className="w-full text-xs font-semibold stitch-text-primary leading-snug bg-surface-container-low rounded px-1.5 py-1 outline-none focus:ring-2 ring-primary/30"
+        />
+      ) : (
+        <p
+          className={`text-xs font-semibold leading-snug pr-12 ${columnKey === 'done' ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
+        >
+          {task.title}
+        </p>
+      )}
+
       <div className="flex items-center justify-between mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
         <button
           type="button"
