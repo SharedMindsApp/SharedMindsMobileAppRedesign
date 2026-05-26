@@ -48,6 +48,57 @@ function nextDayOfWeekAfter(from: Date, targetDow: number): Date {
   return result;
 }
 
+/**
+ * Hook for the eligibility window — exposed so other dashboard cards
+ * (specifically WeeklyReviewPromptCard) can suppress themselves when
+ * this one is going to show. Same logic as the internal `eligible`
+ * memo below, in a form callers can use without rendering the card.
+ *
+ * Returns true ONLY when the card will actually render — accounts for
+ * wizard completion, target day, the first-intentions-day window,
+ * existing intentions for this week, AND localStorage dismissal.
+ */
+export function useFirstWeekIntentionsEligible(): boolean {
+  const { user, profile } = useAuth();
+  const [intentionsThisWeek, setIntentionsThisWeek] = useState<number | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const dismissKey = user?.id ? `sharedminds:first_week_dismissed:${user.id}` : null;
+
+  const baseEligible = useMemo(() => {
+    if (!profile?.wizard_v2_completed_at) return false;
+    if (profile.intentions_reminder_day == null) return false;
+    const wizardCompletedAt = new Date(profile.wizard_v2_completed_at);
+    const now = new Date();
+    if (now.getDay() === profile.intentions_reminder_day) return false;
+    const firstIntentionsDay = nextDayOfWeekAfter(wizardCompletedAt, profile.intentions_reminder_day);
+    return now.getTime() < firstIntentionsDay.getTime();
+  }, [profile?.wizard_v2_completed_at, profile?.intentions_reminder_day]);
+
+  useEffect(() => {
+    if (!dismissKey || typeof window === 'undefined') return;
+    setDismissed(window.localStorage.getItem(dismissKey) === '1');
+  }, [dismissKey]);
+
+  useEffect(() => {
+    if (!baseEligible || dismissed) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await ReflectionService.getReflectionByWeek(mondayOf());
+        if (cancelled) return;
+        setIntentionsThisWeek(data?.intentions?.length ?? 0);
+      } catch {
+        if (!cancelled) setIntentionsThisWeek(0);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [baseEligible, dismissed]);
+
+  if (!baseEligible || dismissed) return false;
+  if (intentionsThisWeek === null) return false; // still loading
+  return intentionsThisWeek === 0;
+}
+
 export function FirstWeekIntentionsCard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();

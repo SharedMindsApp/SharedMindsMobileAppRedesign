@@ -51,7 +51,7 @@ import { PulsePeopleTab } from './PulsePeopleTab';
 // handles all setup before the user reaches the home screen.
 import { FoundingMemberBadge } from './FoundingMemberBadge';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
-import { FirstWeekIntentionsCard } from './FirstWeekIntentionsCard';
+import { FirstWeekIntentionsCard, useFirstWeekIntentionsEligible } from './FirstWeekIntentionsCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
@@ -366,6 +366,10 @@ export function DashboardPage() {
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
   const workTypeLabel = profile?.work_type ? WORK_TYPE_LABELS[profile.work_type] : null;
   const isDayZero = loaded && (stats?.totalSessions ?? 0) === 0;
+  // Coordinate the two intentions-related cards so we never show both.
+  // First-week is more contextual (it knows the user is in their first
+  // partial week and offers a softer ask) so it wins when both apply.
+  const firstWeekShowing = useFirstWeekIntentionsEligible();
 
   function openDeclare(initialGoal?: string) {
     setDeclareGoal(initialGoal);
@@ -443,8 +447,10 @@ export function DashboardPage() {
           {/* ── Day-0 vs Returning split ──────────────────────── */}
           {isDayZero ? (
         <>
-          {/* Weekly review prompt (auto-hides outside Sun/Mon window) */}
-          <WeeklyReviewPromptCard />
+          {/* Weekly review prompt (auto-hides outside Sun/Mon window).
+              Suppressed when FirstWeekIntentionsCard is showing — they
+              both prompt around intentions and showing both is confusing. */}
+          {!firstWeekShowing && <WeeklyReviewPromptCard />}
 
           {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
           <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
@@ -489,7 +495,7 @@ export function DashboardPage() {
               When the review prompt is hidden (outside Sun/Mon window or already
               completed), SmartNextCard takes the full width naturally. */}
           <div className="flex flex-col md:flex-row gap-4 md:items-stretch">
-            <WeeklyReviewPromptCard className="md:flex-1 md:basis-0" />
+            {!firstWeekShowing && <WeeklyReviewPromptCard className="md:flex-1 md:basis-0" />}
             <div className="md:flex-1 md:basis-0">
               <SmartNextCard
                 liveSessions={liveSessions}
