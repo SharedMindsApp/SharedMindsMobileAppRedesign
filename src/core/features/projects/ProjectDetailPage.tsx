@@ -259,7 +259,16 @@ export function ProjectDetailPage() {
             project's colour gradient. Dark overlay is always present so
             the white title/description text stays legible regardless of
             what photograph the user uploaded. */}
-        <div className={`relative px-5 pt-5 pb-6 ${project.cover_image_url ? '' : `bg-gradient-to-br ${color.gradient}`}`}>
+        <div
+          className={`relative px-5 pb-6 ${
+            project.cover_image_url
+              // Cover image present: give the hero enough vertical room
+              // for the image to breathe above the title, and flex the
+              // content so the title block sits at the bottom.
+              ? 'pt-3 min-h-[300px] flex flex-col'
+              : `pt-5 bg-gradient-to-br ${color.gradient}`
+          }`}
+        >
           {project.cover_image_url && (
             <>
               <CoverImage
@@ -274,20 +283,21 @@ export function ProjectDetailPage() {
               {/* Legibility overlay — flips light/dark with the user's
                   chosen text colour. Eases off in contain mode so the
                   user's bg colour shows through. */}
+              {/* Two overlays: a directional fade (image visible at top,
+                  text legible at bottom) + the colour-specific intensity.
+                  We use bg-gradient-to-t so the heaviest tone lives where
+                  the title sits (bottom). Dark text gets a heavier light
+                  fade so it reads clearly on illustration covers. */}
               <div
-                className={`absolute inset-0 pointer-events-none ${
+                className={`absolute inset-0 pointer-events-none bg-gradient-to-t ${
                   project.cover_text_color === 'dark'
-                    ? project.cover_fit === 'contain'
-                      ? 'bg-gradient-to-br from-white/10 via-white/15 to-white/30'
-                      : 'bg-gradient-to-br from-white/40 via-white/50 to-white/70'
-                    : project.cover_fit === 'contain'
-                      ? 'bg-gradient-to-br from-black/10 via-black/15 to-black/30'
-                      : 'bg-gradient-to-br from-black/30 via-black/40 to-black/60'
+                    ? 'from-white/95 via-white/55 to-transparent'
+                    : 'from-black/75 via-black/35 to-transparent'
                 }`}
               />
             </>
           )}
-          <div className="relative z-10">
+          <div className="relative z-10 flex flex-col flex-1 min-h-0">
 
           {/* Top bar: archived badge + edit */}
           <div className="flex items-center justify-between mb-3">
@@ -307,6 +317,11 @@ export function ProjectDetailPage() {
               <Pencil size={13} className="text-white" />
             </button>
           </div>
+
+          {/* Spacer — when there's a cover image we want the title block
+              to sit at the bottom of the hero. mt-auto pushes it down
+              within the flex column. */}
+          {project.cover_image_url && <div className="flex-1 min-h-[80px]" />}
 
           {/* Title + collapsible description (brain dumps can be 300-500 words) */}
           <h1 className={`text-2xl sm:text-3xl font-extrabold ${titleClass} leading-tight mb-1 drop-shadow-sm`}>
@@ -353,7 +368,11 @@ export function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={() => setDescExpanded((v) => !v)}
-                    className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full backdrop-blur-sm transition-colors"
+                    className={`mt-3 inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm transition-colors ${
+                      heroTextDark
+                        ? 'text-stitch-text-primary bg-black/8 hover:bg-black/15 ring-1 ring-black/10'
+                        : 'text-white bg-white/15 hover:bg-white/25'
+                    }`}
                   >
                     {descExpanded ? '↑ Show less' : '↓ Read more'}
                   </button>

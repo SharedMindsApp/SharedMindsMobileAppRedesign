@@ -122,17 +122,14 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, textColor, onCh
             <Move size={18} className="text-white/70 drop-shadow-md" />
           </div>
         )}
-        {/* Legibility overlay — matches what the hero applies. Lighter
-            in contain mode (less needed; chosen bg shows through). */}
+        {/* Legibility overlay — matches the hero exactly. Directional
+            bottom-up fade so the image stays visible at the top while
+            the title at the bottom gets full contrast. */}
         <div
-          className={`absolute inset-0 pointer-events-none ${
-            textColor === 'light'
-              ? fit === 'contain'
-                ? 'bg-gradient-to-br from-black/10 via-black/15 to-black/30'
-                : 'bg-gradient-to-br from-black/30 via-black/40 to-black/60'
-              : fit === 'contain'
-                ? 'bg-gradient-to-br from-white/10 via-white/15 to-white/30'
-                : 'bg-gradient-to-br from-white/40 via-white/50 to-white/70'
+          className={`absolute inset-0 pointer-events-none bg-gradient-to-t ${
+            textColor === 'dark'
+              ? 'from-white/95 via-white/55 to-transparent'
+              : 'from-black/75 via-black/35 to-transparent'
           }`}
         />
         {/* Sample title — gives a live read of how text will look on
