@@ -171,6 +171,14 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const resolvedGoal = tab === 'pick' ? (selectedTask?.title ?? '') : goalText.trim();
   const canSubmit = resolvedGoal.length > 0 && !submitting;
 
+  // ── Mini-wizard state ──────────────────────────────────────────
+  // Step 1 ("goal") covers task picking / typing + project pin.
+  // Step 2 ("settings") covers when, duration, mode, body-double, quiet.
+  // Splitting in two reduces cognitive load on the modal — what you'll
+  // work on is a separate decision from how the session will run.
+  const [wizardStep, setWizardStep] = useState<'goal' | 'settings'>('goal');
+  const hasGoal = resolvedGoal.length > 0;
+
   async function handleStart() {
     if (!canSubmit) return;
     // Conduct gate: block the first session until the user has explicitly
@@ -345,6 +353,24 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             <X size={15} className="stitch-text-secondary" />
           </button>
         </div>
+
+        {/* ── Step indicator ───────────────────────────────── */}
+        <div className="shrink-0 px-5 pb-2 flex items-center gap-1.5">
+          <div className={`h-1 flex-1 rounded-full transition-all ${
+            wizardStep === 'goal' ? 'bg-primary' : 'bg-primary/30'
+          }`} />
+          <div className={`h-1 flex-1 rounded-full transition-all ${
+            wizardStep === 'settings' ? 'bg-primary' : 'bg-primary/15'
+          }`} />
+          <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest ml-1 tabular-nums">
+            {wizardStep === 'goal' ? '1 / 2' : '2 / 2'}
+          </span>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════
+            STEP 1 — Goal: pick a task / type one + pin to project
+            ═══════════════════════════════════════════════════════ */}
+        {wizardStep === 'goal' && (<>
 
         {/* ── Goal source tabs ─────────────────────────────── */}
         <div className="shrink-0 px-5 pb-3">
@@ -574,6 +600,47 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           </div>
         )}
 
+        {/* ── Step 1 footer: Next button ─────────────────────── */}
+        <div className="shrink-0 px-5 pt-3 pb-6">
+          <button
+            type="button"
+            onClick={() => setWizardStep('settings')}
+            disabled={!hasGoal}
+            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-base font-bold transition-all duration-200 ${
+              hasGoal
+                ? 'stitch-btn--primary text-white shadow-lg shadow-primary/25 hover:-translate-y-0.5 active:scale-[0.98]'
+                : 'bg-surface-container-low stitch-text-secondary cursor-not-allowed'
+            }`}
+          >
+            {hasGoal ? 'Next: session settings →' : 'Pick a goal to continue'}
+          </button>
+        </div>
+
+        </>)}
+
+        {/* ═══════════════════════════════════════════════════════
+            STEP 2 — Settings: when, duration, mode, quiet
+            ═══════════════════════════════════════════════════════ */}
+        {wizardStep === 'settings' && (<>
+
+        {/* ── Selected-goal recap (shown atop step 2) ───────── */}
+        <div className="shrink-0 px-5 pb-2">
+          <div className="rounded-2xl bg-primary/5 ring-1 ring-primary/15 px-3 py-2 flex items-center gap-2">
+            <Target size={13} className="text-primary shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest mb-0.5">Focus</p>
+              <p className="text-sm font-semibold stitch-text-primary truncate">{resolvedGoal}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWizardStep('goal')}
+              className="shrink-0 text-[10px] font-bold text-primary hover:opacity-70 transition-opacity uppercase tracking-wider"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+
         {/* ── When picker ──────────────────────────────────── */}
         <div className="shrink-0 px-5 pt-3">
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
@@ -765,13 +832,21 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           <p className="shrink-0 mx-5 mt-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5">{error}</p>
         )}
 
-        {/* ── Start button ─────────────────────────────────── */}
-        <div className="shrink-0 px-5 pt-3 pb-6">
+        {/* ── Step 2 footer: Back + Start ─────────────────────── */}
+        <div className="shrink-0 px-5 pt-3 pb-6 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setWizardStep('goal')}
+            disabled={submitting}
+            className="shrink-0 px-4 py-3.5 rounded-2xl text-sm font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            ← Back
+          </button>
           <button
             type="button"
             onClick={handleStart}
             disabled={!canSubmit}
-            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-base font-bold transition-all duration-200 ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-base font-bold transition-all duration-200 ${
               canSubmit
                 ? 'stitch-btn--primary text-white shadow-lg shadow-primary/25 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98]'
                 : 'bg-surface-container-low stitch-text-secondary cursor-not-allowed'
@@ -783,7 +858,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               <>
                 {isScheduling ? <Calendar size={18} /> : <Timer size={18} />}
                 {!canSubmit
-                  ? 'Pick a goal to start'
+                  ? 'Pick a goal first'
                   : isScheduling
                   ? `Schedule for ${scheduledLabel ?? `${duration} min`}`
                   : `Start ${duration}-min session`}
@@ -791,6 +866,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             )}
           </button>
         </div>
+
+        </>)}
 
       </div>
 

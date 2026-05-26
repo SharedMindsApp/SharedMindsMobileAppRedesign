@@ -73,6 +73,9 @@ export function ProjectDetailPage() {
   const [sessions, setSessions] = useState<FocusSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('tasks');
+  /** Brain-dump descriptions can run 300-500 words. We collapse to ~150
+   *  characters by default so the hero stays digestible; user can expand. */
+  const [descExpanded, setDescExpanded] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [declareOpen, setDeclareOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -220,15 +223,34 @@ export function ProjectDetailPage() {
             </button>
           </div>
 
-          {/* Title + description */}
+          {/* Title + collapsible description (brain dumps can be 300-500 words) */}
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight mb-1 drop-shadow-sm">
             {project.title}
           </h1>
-          {project.description && (
-            <p className="text-sm text-white/75 leading-snug max-w-lg">
-              {project.description}
-            </p>
-          )}
+          {project.description && (() => {
+            const desc = project.description.trim();
+            const PREVIEW_CHARS = 150;
+            const needsTruncate = desc.length > PREVIEW_CHARS;
+            const shown = !needsTruncate || descExpanded
+              ? desc
+              : desc.slice(0, PREVIEW_CHARS).replace(/\s+\S*$/, '') + '…';
+            return (
+              <div className="max-w-lg">
+                <p className="text-sm text-white/75 leading-snug whitespace-pre-wrap">
+                  {shown}
+                </p>
+                {needsTruncate && (
+                  <button
+                    type="button"
+                    onClick={() => setDescExpanded((v) => !v)}
+                    className="mt-1.5 text-xs font-bold text-white/90 hover:text-white underline-offset-2 hover:underline transition-colors"
+                  >
+                    {descExpanded ? 'Show less' : 'Read more'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Stats band (below the banner, inside the same card) ─
