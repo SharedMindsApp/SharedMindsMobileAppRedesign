@@ -19,7 +19,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { Play } from 'lucide-react';
+import { Play, Calendar } from 'lucide-react';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -58,10 +58,14 @@ export function HomeHero({
   firstName,
   liveSessions,
   onStart,
+  onFind,
 }: {
   firstName: string;
   liveSessions: CommunitySession[];
+  /** Spin up a new session (opens DeclareSessionModal). */
   onStart: () => void;
+  /** Browse the public session calendar (navigates to /sessions). */
+  onFind: () => void;
 }) {
   const navigate = useNavigate();
 
@@ -181,17 +185,32 @@ export function HomeHero({
               )}
             </div>
 
-            {/* Start CTA — full-width row on mobile, tall column on sm+ */}
-            <button
-              type="button"
-              onClick={onStart}
-              className="sm:w-[136px] flex sm:flex-col items-center justify-center gap-2 bg-white text-indigo-950 font-bold text-sm py-3.5 sm:py-0 px-4 rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg shrink-0"
-            >
-              <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-                <Play size={16} fill="currentColor" className="text-indigo-700 ml-0.5" />
-              </div>
-              <span className="sm:text-center sm:leading-snug">Start a focus session</span>
-            </button>
+            {/* Two CTAs — Start vs Find. They map to the two ways into
+                coworking: commit a new block, or join one already on the
+                public calendar. Equal visual weight on sm+, stacked
+                horizontally on mobile to keep the hero compact. */}
+            <div className="sm:w-[160px] flex sm:flex-col gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={onStart}
+                className="flex-1 sm:flex-initial flex sm:flex-col items-center justify-center gap-2 bg-white text-indigo-950 font-bold text-[13px] py-3 px-3 rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg"
+              >
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+                  <Play size={14} fill="currentColor" className="text-indigo-700 ml-0.5" />
+                </div>
+                <span className="sm:text-center sm:leading-snug">Start a session</span>
+              </button>
+              <button
+                type="button"
+                onClick={onFind}
+                className="flex-1 sm:flex-initial flex sm:flex-col items-center justify-center gap-2 bg-white/10 text-white font-bold text-[13px] py-3 px-3 rounded-2xl hover:bg-white/15 active:scale-[0.98] transition-all ring-1 ring-white/15 backdrop-blur-sm"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <Calendar size={14} className="text-white" />
+                </div>
+                <span className="sm:text-center sm:leading-snug">Find a session</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

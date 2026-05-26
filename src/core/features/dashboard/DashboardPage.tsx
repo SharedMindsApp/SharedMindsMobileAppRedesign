@@ -399,6 +399,7 @@ export function DashboardPage() {
         firstName={firstName}
         liveSessions={liveSessions}
         onStart={() => openDeclare()}
+        onFind={() => navigate('/sessions')}
       />
 
       {/* ── Load-gated content ───────────────────────────────── */}

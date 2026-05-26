@@ -253,32 +253,11 @@ export function SmartNextCard({
 
     case 'declare':
     default:
-      return (
-        <div className="rounded-2xl bg-surface-container-low p-4">
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
-            What's next
-          </p>
-          <p className="text-base font-bold stitch-text-primary leading-snug mb-3">
-            Pick something to finish today.
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => onDeclareCustom()}
-              className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl stitch-btn--primary text-white text-sm font-bold shadow-md shadow-primary/20 active:scale-[0.98]"
-            >
-              <Play size={14} /> Start now
-            </button>
-            <button
-              type="button"
-              onClick={onSchedule}
-              className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-surface-container stitch-text-primary text-sm font-bold hover:bg-surface-container-high active:scale-[0.98]"
-            >
-              <Target size={14} /> Schedule
-            </button>
-          </div>
-        </div>
-      );
+      // No specific smart suggestion to make — fall silent. The hero's
+      // Start / Find buttons already cover the generic "start something"
+      // case, so a duplicate "Pick something to finish today" here was
+      // adding noise without offering anything new.
+      return null;
   }
 }
 
