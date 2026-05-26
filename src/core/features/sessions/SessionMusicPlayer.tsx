@@ -11,9 +11,10 @@
 // alive across all state updates.
 
 import { useEffect, useRef, useState } from 'react';
-import { Music, Play, Pause, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
+import { Music, Play, Pause, SkipForward, Volume2, VolumeX, X, Waves, Headphones } from 'lucide-react';
 import { SessionMusicService, type SessionTrack, type MusicCategory, MUSIC_CATEGORIES, categoryMeta } from '../../services/SessionMusicService';
 import { supabase } from '../../../lib/supabase';
+import { BinauralEngine } from './BinauralEngine';
 
 interface Props {
   /** Mood category to pull tracks from. Defaults to 'medium' when unknown. */
@@ -39,6 +40,11 @@ const LS_ENABLED = 'sm.musicEnabled';
 // Persistent category preference. When set, overrides the task-derived
 // auto-pick for every session until the user clicks "Auto-match" to clear it.
 const LS_CATEGORY_OVERRIDE = 'sm.musicCategory';
+// Binaural beat prefs — off by default since many users find it weird.
+const LS_BINAURAL_ENABLED = 'sm.binauralEnabled';
+const LS_BINAURAL_VOLUME = 'sm.binauralVolume';
+// Once the user confirms they have headphones we never ask again.
+const LS_BINAURAL_HEADPHONES_OK = 'sm.binauralHeadphonesOk';
 
 function readLocal<T>(key: string, fallback: T, parse: (raw: string) => T): T {
   try {
@@ -90,6 +96,21 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
   const [expanded, setExpanded] = useState(false);
   const [noTracks, setNoTracks] = useState(false);
 
+  // ── Binaural beats state ──────────────────────────────────────────────
+  // Persisted per-user. Default OFF — binaural is opt-in.
+  const [binauralEnabled, setBinauralEnabled] = useState<boolean>(() =>
+    readLocal(LS_BINAURAL_ENABLED, false, (v) => v === 'true'),
+  );
+  const [binauralVolume, setBinauralVolume] = useState<number>(() =>
+    readLocal(LS_BINAURAL_VOLUME, 0.15, (v) => Math.min(1, Math.max(0, parseFloat(v)))),
+  );
+  // Headphones-confirmation gate — shown the first time the user enables
+  // binaural in the current browser. Saved permanently once they confirm.
+  const [showHeadphonesGate, setShowHeadphonesGate] = useState(false);
+  // The engine itself. Kept in a ref so React re-renders don't recreate
+  // the AudioContext (which would forbid restart by the browser).
+  const binauralRef = useRef<BinauralEngine | null>(null);
+
   const effectiveCategory: MusicCategory = overrideCategory ?? category;
 
   // Persist prefs as they change + publish audible-state events so the
@@ -110,6 +131,63 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
       }),
     );
   }, [enabled, muted, playing]);
+
+  // ── Binaural engine lifecycle ────────────────────────────────────────
+  // Single engine instance per mount. Started/stopped declaratively from
+  // the `binauralEnabled` flag. Frequencies follow the effective category.
+  useEffect(() => {
+    if (!binauralRef.current) binauralRef.current = new BinauralEngine();
+    return () => {
+      binauralRef.current?.destroy();
+      binauralRef.current = null;
+    };
+  }, []);
+
+  // Persist binaural prefs.
+  useEffect(() => {
+    try { localStorage.setItem(LS_BINAURAL_ENABLED, String(binauralEnabled)); } catch {}
+  }, [binauralEnabled]);
+  useEffect(() => {
+    try { localStorage.setItem(LS_BINAURAL_VOLUME, String(binauralVolume)); } catch {}
+    binauralRef.current?.setVolume(binauralVolume);
+  }, [binauralVolume]);
+
+  // Drive start/stop based on enabled flag. When enabled flips on we feed
+  // the current category's freqs; when off we fade out.
+  useEffect(() => {
+    const engine = binauralRef.current;
+    if (!engine) return;
+    if (binauralEnabled) {
+      const meta = categoryMeta(effectiveCategory);
+      engine.start({ baseL: meta.baseL, baseR: meta.baseR });
+      engine.setVolume(binauralVolume);
+    } else {
+      engine.stop();
+    }
+    // Volume effect above handles its own retune; we deliberately don't
+    // re-fire on volume changes to avoid restarting the context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binauralEnabled, effectiveCategory]);
+
+  function handleToggleBinaural() {
+    if (binauralEnabled) {
+      setBinauralEnabled(false);
+      return;
+    }
+    // Turning ON: first-time gate to remind the user about headphones.
+    const ok = readLocal(LS_BINAURAL_HEADPHONES_OK, false, (v) => v === 'true');
+    if (!ok) {
+      setShowHeadphonesGate(true);
+      return;
+    }
+    setBinauralEnabled(true);
+  }
+
+  function confirmHeadphonesAndEnable() {
+    try { localStorage.setItem(LS_BINAURAL_HEADPHONES_OK, 'true'); } catch {}
+    setShowHeadphonesGate(false);
+    setBinauralEnabled(true);
+  }
 
   // External callers (ArrivalStateWizard, MidSessionRecheck) can set the
   // music category via window event. Saves wiring contexts through props.
@@ -468,11 +546,101 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
                 {categoryMeta(effectiveCategory).character}
               </p>
             </div>
+
+            {/* ── Binaural beats ─────────────────────────────────
+                Opt-in subliminal tone layer. Mixed BELOW the music
+                (own volume slider). Requires stereo headphones —
+                first-time toggle shows a confirmation gate. */}
+            <div className="mt-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={handleToggleBinaural}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] font-bold ${
+                  binauralEnabled
+                    ? 'bg-cyan-500/15 text-cyan-300'
+                    : 'bg-white/5 text-white/60 hover:bg-white/10'
+                }`}
+                aria-pressed={binauralEnabled}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Waves size={12} />
+                  Binaural {categoryMeta(effectiveCategory).targetHz} Hz
+                </span>
+                <span className={`w-7 h-4 rounded-full p-0.5 ${binauralEnabled ? 'bg-cyan-500' : 'bg-white/15'} relative`}>
+                  <span
+                    className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all"
+                    style={{ left: binauralEnabled ? 14 : 2 }}
+                  />
+                </span>
+              </button>
+              {binauralEnabled && (
+                <>
+                  <div className="flex items-center gap-2 mt-2 px-1">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 w-12">
+                      Tone
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={0.4}
+                      step={0.02}
+                      value={binauralVolume}
+                      onChange={(e) => setBinauralVolume(parseFloat(e.target.value))}
+                      className="flex-1 h-1 accent-cyan-400"
+                      aria-label="Binaural tone volume"
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[9px] text-white/35 text-center leading-tight px-1">
+                    {categoryMeta(effectiveCategory).baseL}L / {categoryMeta(effectiveCategory).baseR}R Hz · stereo headphones required
+                  </p>
+                </>
+              )}
+            </div>
           </>
         )}
         </>
         )}
       </div>
+
+      {/* ── First-time binaural headphones gate ─────────────────────
+          Shown the very first time a user toggles binaural on. We can't
+          detect headphones reliably from the browser (no API exists);
+          this is honesty mode — tell them what's needed, let them
+          confirm. Saved permanently once confirmed. */}
+      {showHeadphonesGate && (
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-surface text-stitch-text-primary shadow-2xl p-5">
+            <div className="flex flex-col items-center text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-cyan-500/15 grid place-items-center mb-3">
+                <Headphones size={22} className="text-cyan-500" />
+              </div>
+              <h3 className="text-base font-extrabold">Wearing headphones?</h3>
+              <p className="text-xs stitch-text-secondary mt-1.5 leading-snug">
+                Binaural beats only work with <strong>stereo headphones</strong> — the brain needs slightly different frequencies in each ear to perceive the beat. Laptop speakers won't work.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={confirmHeadphonesAndEnable}
+                className="w-full py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wide bg-cyan-500 text-white hover:bg-cyan-600"
+              >
+                Yes, headphones on — enable
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowHeadphonesGate(false)}
+                className="w-full py-2 rounded-lg text-xs font-bold uppercase tracking-wide stitch-text-secondary hover:bg-surface-container-low"
+              >
+                Not right now
+              </button>
+            </div>
+            <p className="mt-3 text-[10px] stitch-text-secondary/70 text-center leading-snug">
+              We won't ask again on this device.
+            </p>
+          </div>
+        </div>
+      )}
     </>
   );
 }
