@@ -14,7 +14,7 @@
 //   (OPENROUTER_API_KEY already set)
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { openrouterJSON } from '../_shared/openrouter.ts';
+import { openrouterChat } from '../_shared/openrouter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -249,26 +249,57 @@ Deno.serve(async (req: Request) => {
     return bad('mode must be "roadmap", "phases", or "tasks"');
   }
 
-  // Default to gpt-5.4-nano via OpenRouter; fall back to gemini-2.5-flash
-  // if it's unavailable. Both are cheap; the fallback is a safety net so
-  // a single provider hiccup doesn't break the wizard.
-  const result = await openrouterJSON<RoadmapResponse | PhasesResponse | TasksResponse>({
-    model: 'openai/gpt-5.4-nano',
-    fallbacks: ['google/gemini-2.5-flash', 'anthropic/claude-haiku-4.5'],
-    temperature: 0.5,
-    maxTokens: 600,
-    messages: [
-      { role: 'system', content: systemPrompt() },
-      { role: 'user',   content: userPrompt(body) },
-    ],
-  });
+  // OpenRouter model picks (verified slugs at https://openrouter.ai/models):
+  //   • google/gemini-2.5-flash — cheap, vision-capable, fast, very reliable
+  //     for structured JSON output. Primary.
+  //   • anthropic/claude-3.5-haiku — strong backup if Google has a hiccup.
+  //   • openai/gpt-4o-mini — third-line safety net.
+  //
+  // Earlier versions tried hypothetical slugs (gpt-5.4-nano,
+  // claude-haiku-4.5) — when none resolved, OpenRouter returned an error
+  // that we caught and turned into an empty success, masking the real
+  // problem. The slugs above are confirmed-available on OpenRouter today.
+  let result: RoadmapResponse | PhasesResponse | TasksResponse | null = null;
+  let lastErr: unknown = null;
+
+  try {
+    const { text, raw } = await openrouterChat({
+      model: 'google/gemini-2.5-flash',
+      fallbacks: ['anthropic/claude-3.5-haiku', 'openai/gpt-4o-mini'],
+      jsonMode: true,
+      temperature: 0.5,
+      maxTokens: 1200,
+      messages: [
+        { role: 'system', content: systemPrompt() },
+        { role: 'user',   content: userPrompt(body) },
+      ],
+    });
+    console.log('[suggest-project-roadmap] model used:', raw?.model ?? 'unknown');
+    try {
+      result = JSON.parse(text) as RoadmapResponse | PhasesResponse | TasksResponse;
+    } catch (parseErr) {
+      console.error('[suggest-project-roadmap] JSON parse failed. Raw text:', text.slice(0, 500));
+      lastErr = parseErr;
+    }
+  } catch (callErr) {
+    console.error('[suggest-project-roadmap] OpenRouter call failed:', callErr);
+    lastErr = callErr;
+  }
 
   if (!result) {
-    // Don't break the wizard — return an empty shape so the UI can fall
-    // through to the manual-entry path. The user can still proceed.
-    if (body.mode === 'roadmap') return ok({ milestones: [] });
-    if (body.mode === 'phases')  return ok({ phases: [] });
-    return ok({ tasks: [] });
+    // Surface the actual reason so the wizard can show something useful
+    // instead of a confusing "no suggestions" notice.
+    const message = lastErr instanceof Error ? lastErr.message : 'unknown error';
+    return new Response(
+      JSON.stringify({
+        error: 'Suggestion service failed',
+        detail: message,
+        ...(body.mode === 'roadmap' ? { milestones: [] }
+         : body.mode === 'phases'  ? { phases: [] }
+         :                            { tasks: [] }),
+      }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
   }
 
   return ok(result);

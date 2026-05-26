@@ -1164,7 +1164,15 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        // FunctionsError swallows the response body. Try to read .context for
+        // the detail message the edge function sent back with the 502.
+        const detail = (error as any)?.context?.body
+          ? await (error as any).context.text().catch(() => null)
+          : null;
+        console.error('[suggestRoadmap] edge function error', { error, detail });
+        throw new Error(detail ?? error.message ?? 'Unknown error');
+      }
 
       type RawPhase = { title?: string; weight_pct?: number; already_done?: boolean };
       type RawMilestone = {
