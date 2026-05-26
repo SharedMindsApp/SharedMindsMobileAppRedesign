@@ -122,19 +122,23 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, textColor, onCh
             <Move size={18} className="text-white/70 drop-shadow-md" />
           </div>
         )}
-        {/* Legibility overlay — matches the hero exactly. Directional
-            bottom-up fade so the image stays visible at the top while
-            the title at the bottom gets full contrast. */}
+        {/* Soft atmospheric fade — matches the hero. Real legibility
+            comes from the panel below. */}
         <div
           className={`absolute inset-0 pointer-events-none bg-gradient-to-t ${
             textColor === 'dark'
-              ? 'from-white/95 via-white/55 to-transparent'
-              : 'from-black/75 via-black/35 to-transparent'
+              ? 'from-white/40 via-white/10 to-transparent'
+              : 'from-black/40 via-black/10 to-transparent'
           }`}
         />
-        {/* Sample title — gives a live read of how text will look on
-            top of the chosen background + overlay combination. */}
-        <div className="absolute left-3 bottom-3 pointer-events-none">
+        {/* Sample title in a backdrop-blur panel — matches the hero's
+            real readable-anywhere panel. Gives a live preview of how
+            text + panel + image will compose. */}
+        <div className={`absolute left-3 right-3 bottom-3 rounded-lg px-3 py-2 backdrop-blur-md pointer-events-none ${
+          textColor === 'dark'
+            ? 'bg-white/85 ring-1 ring-black/5'
+            : 'bg-black/55 ring-1 ring-white/10'
+        }`}>
           <p className={`text-base font-extrabold leading-tight ${
             textColor === 'light' ? 'text-white' : 'text-stitch-text-primary'
           }`}>

@@ -283,16 +283,15 @@ export function ProjectDetailPage() {
               {/* Legibility overlay — flips light/dark with the user's
                   chosen text colour. Eases off in contain mode so the
                   user's bg colour shows through. */}
-              {/* Two overlays: a directional fade (image visible at top,
-                  text legible at bottom) + the colour-specific intensity.
-                  We use bg-gradient-to-t so the heaviest tone lives where
-                  the title sits (bottom). Dark text gets a heavier light
-                  fade so it reads clearly on illustration covers. */}
+              {/* Soft atmospheric fade. Heavy contrast is no longer the
+                  gradient's job — the backdrop-blur title panel below
+                  handles that. The gradient just adds depth and softens
+                  the transition from image into the panel. */}
               <div
                 className={`absolute inset-0 pointer-events-none bg-gradient-to-t ${
                   project.cover_text_color === 'dark'
-                    ? 'from-white/95 via-white/55 to-transparent'
-                    : 'from-black/75 via-black/35 to-transparent'
+                    ? 'from-white/40 via-white/10 to-transparent'
+                    : 'from-black/40 via-black/10 to-transparent'
                 }`}
               />
             </>
@@ -323,8 +322,22 @@ export function ProjectDetailPage() {
               within the flex column. */}
           {project.cover_image_url && <div className="flex-1 min-h-[80px]" />}
 
-          {/* Title + collapsible description (brain dumps can be 300-500 words) */}
-          <h1 className={`text-2xl sm:text-3xl font-extrabold ${titleClass} leading-tight mb-1 drop-shadow-sm`}>
+          {/* Title + description container. With a cover image we wrap in
+              a backdrop-blur panel so the text is ALWAYS readable, even
+              when expanded descriptions push into busy image regions.
+              Without a cover image, the gradient bg handles contrast. */}
+          <div
+            className={
+              project.cover_image_url
+                ? `relative rounded-2xl px-4 py-3 backdrop-blur-md ${
+                    heroTextDark
+                      ? 'bg-white/85 ring-1 ring-black/5'
+                      : 'bg-black/55 ring-1 ring-white/10'
+                  }`
+                : ''
+            }
+          >
+          <h1 className={`text-2xl sm:text-3xl font-extrabold ${titleClass} leading-tight mb-1 ${project.cover_image_url ? '' : 'drop-shadow-sm'}`}>
             {project.title}
           </h1>
           {project.description && (() => {
@@ -380,6 +393,7 @@ export function ProjectDetailPage() {
               </div>
             );
           })()}
+          </div>{/* close text-panel wrapper */}
           </div>{/* close .relative.z-10 inner wrapper */}
         </div>
 
