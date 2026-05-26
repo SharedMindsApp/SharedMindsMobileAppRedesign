@@ -184,11 +184,11 @@ Deno.serve(async (req: Request) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // gpt-4o-mini — verified OpenAI model name with vision support.
-        // Plenty smart for a single-image face-presence check, and cheap
-        // (~$0.0002 per request). Falls through to fail-open below if
-        // anything errors, so user uploads aren't blocked.
-        model: 'gpt-4o-mini',
+        // gpt-5.4-nano — cheapest GPT-5.4 model with vision + structured
+        // output support. Plenty smart for a single-image face-presence
+        // check. Falls through to fail-open below if anything errors so
+        // user uploads aren't blocked.
+        model: 'gpt-5.4-nano',
         response_format: { type: 'json_object' },
         messages: [
           {
