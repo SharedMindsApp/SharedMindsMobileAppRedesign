@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Loader2, Pencil, Play, Target, Calendar, ArrowLeft,
+  Loader2, Pencil, Play, Target, Calendar, ArrowLeft, Link2,
   CheckCircle2, Plus, Pin, Clock, Zap,
   Archive, UserPlus, ChevronRight, Trash2, X, Check,
   Columns, Flag, NotebookPen, Activity,
@@ -28,6 +28,7 @@ import type { ShippedSession, ScheduledSessionWithProfile } from '../../services
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectEditorModal } from './ProjectEditorModal';
+import { ShareForAccountabilitySheet } from './ShareForAccountabilitySheet';
 import { CoverImage } from './CoverImage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { projectColorMeta } from './ProjectsPage';
@@ -87,6 +88,7 @@ export function ProjectDetailPage() {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
   const [phases, setPhases] = useState<ProjectPhase[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [declareOpen, setDeclareOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [taskSubmitting, setTaskSubmitting] = useState(false);
@@ -391,18 +393,33 @@ export function ProjectDetailPage() {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setEditorOpen(true)}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
-                heroTextDark
-                  ? 'bg-black/10 hover:bg-black/20 ring-1 ring-black/10'
-                  : 'bg-white/20 hover:bg-white/30'
-              }`}
-              aria-label="Edit project"
-            >
-              <Pencil size={13} className={heroTextDark ? 'text-stitch-text-primary' : 'text-white'} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShareOpen(true)}
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold transition-colors backdrop-blur-sm ${
+                  heroTextDark
+                    ? 'bg-black/10 hover:bg-black/20 ring-1 ring-black/10 text-stitch-text-primary'
+                    : 'bg-white/20 hover:bg-white/30 text-white'
+                }`}
+                aria-label="Share for accountability"
+              >
+                <Link2 size={12} />
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditorOpen(true)}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
+                  heroTextDark
+                    ? 'bg-black/10 hover:bg-black/20 ring-1 ring-black/10'
+                    : 'bg-white/20 hover:bg-white/30'
+                }`}
+                aria-label="Edit project"
+              >
+                <Pencil size={13} className={heroTextDark ? 'text-stitch-text-primary' : 'text-white'} />
+              </button>
+            </div>
           </div>
 
           {/* Spacer — when there's a cover image we want the title block
@@ -753,6 +770,13 @@ export function ProjectDetailPage() {
         <DeclareSessionModal
           onClose={() => setDeclareOpen(false)}
           initialProjectId={project.id}
+        />
+      )}
+      {shareOpen && (
+        <ShareForAccountabilitySheet
+          projectId={project.id}
+          projectTitle={project.title}
+          onClose={() => setShareOpen(false)}
         />
       )}
     </div>
