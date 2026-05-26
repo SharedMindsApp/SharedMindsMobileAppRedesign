@@ -39,6 +39,10 @@ export type CoreProject = {
   memberCount: number;        // 1 = solo, >1 = shared
   spaceId: string;            // needed for task scoping when creating tasks
   coverImageUrl: string | null; // optional banner image; falls back to color gradient
+  /** Cover image focal point (0-100, percent) + zoom multiplier × 100. */
+  coverX: number;
+  coverY: number;
+  coverZoom: number;
 };
 
 export type CoreTask = {
@@ -378,6 +382,9 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           memberCount: count,
           spaceId: p.space_id,
           coverImageUrl: p.cover_image_url ?? null,
+          coverX: p.cover_x ?? 50,
+          coverY: p.cover_y ?? 50,
+          coverZoom: p.cover_zoom ?? 100,
         };
       });
 

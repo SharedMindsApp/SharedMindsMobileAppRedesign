@@ -28,6 +28,7 @@ import type { ShippedSession, ScheduledSessionWithProfile } from '../../services
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectEditorModal } from './ProjectEditorModal';
+import { CoverImage } from './CoverImage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { projectColorMeta } from './ProjectsPage';
 import { SurfaceCard } from '../../ui/CorePage';
@@ -252,16 +253,18 @@ export function ProjectDetailPage() {
             project's colour gradient. Dark overlay is always present so
             the white title/description text stays legible regardless of
             what photograph the user uploaded. */}
-        <div
-          className={`relative px-5 pt-5 pb-6 ${project.cover_image_url ? '' : `bg-gradient-to-br ${color.gradient}`}`}
-          style={
-            project.cover_image_url
-              ? { backgroundImage: `url(${project.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-              : undefined
-          }
-        >
+        <div className={`relative px-5 pt-5 pb-6 ${project.cover_image_url ? '' : `bg-gradient-to-br ${color.gradient}`}`}>
           {project.cover_image_url && (
-            <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/40 to-black/60 pointer-events-none" />
+            <>
+              <CoverImage
+                url={project.cover_image_url}
+                x={project.cover_x}
+                y={project.cover_y}
+                zoom={project.cover_zoom}
+                className="absolute inset-0"
+              />
+              <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/40 to-black/60 pointer-events-none" />
+            </>
           )}
           <div className="relative z-10">
 

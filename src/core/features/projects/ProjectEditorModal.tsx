@@ -20,6 +20,7 @@ import { ProjectService, type Project, type ProjectMemberWithProfile } from '../
 import { InputWell } from '../../ui/CorePage';
 import { PROJECT_COLORS } from './ProjectsPage';
 import { InviteCollaboratorSheet } from './InviteCollaboratorSheet';
+import { CoverPositioner } from './CoverPositioner';
 
 const COLOR_LABELS: Record<string, string> = {
   cyan:    'Cyan',
@@ -57,6 +58,11 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
    *  what the hero/cards render after save. */
   const [coverUrl, setCoverUrl] = useState<string | null>(project?.cover_image_url ?? null);
   const [coverUploading, setCoverUploading] = useState(false);
+  // Focal point + zoom for the cover image. Stored as integers (0-100 for
+  // position, 100-300 for zoom) to match the DB constraints exactly.
+  const [coverX, setCoverX] = useState<number>(project?.cover_x ?? 50);
+  const [coverY, setCoverY] = useState<number>(project?.cover_y ?? 50);
+  const [coverZoom, setCoverZoom] = useState<number>(project?.cover_zoom ?? 100);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +130,9 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
           title: title.trim(),
           description: description.trim() || null,
           color,
+          cover_x: coverX,
+          cover_y: coverY,
+          cover_zoom: coverZoom,
         });
       }
       await refreshProjects();
@@ -263,11 +272,18 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
               </p>
 
               {coverUrl ? (
-                // ── With cover: 16:9 preview + Replace / Remove actions ──
+                // ── With cover: draggable preview + zoom slider + actions ──
                 <div className="space-y-2">
-                  <div
-                    className="aspect-[16/9] rounded-xl bg-cover bg-center bg-surface-container-low ring-1 ring-surface-container"
-                    style={{ backgroundImage: `url(${coverUrl})` }}
+                  <CoverPositioner
+                    url={coverUrl}
+                    x={coverX}
+                    y={coverY}
+                    zoom={coverZoom}
+                    onChange={(next) => {
+                      setCoverX(next.x);
+                      setCoverY(next.y);
+                      setCoverZoom(next.zoom);
+                    }}
                   />
                   <div className="flex gap-2">
                     <button

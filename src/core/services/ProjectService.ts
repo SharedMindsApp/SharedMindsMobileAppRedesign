@@ -16,6 +16,11 @@ export interface Project {
     completed_at: string | null;
     /** Public URL of the project cover image. NULL = use the color gradient. */
     cover_image_url: string | null;
+    /** Focal point of the cover image (0-100, percent). Default centred. */
+    cover_x: number;
+    cover_y: number;
+    /** Zoom multiplier × 100 (100 = cover-fit baseline, 200 = 2x). */
+    cover_zoom: number;
     created_at: string;
     updated_at: string;
 }

@@ -13,6 +13,7 @@ import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreProject } from '../../data/CoreDataContext';
 import { PageGreeting, GradientButton } from '../../ui/CorePage';
 import { ProjectEditorModal } from './ProjectEditorModal';
+import { CoverImage } from './CoverImage';
 
 // ── Color tokens (match the editor modal swatches) ───────────────
 
@@ -211,10 +212,13 @@ function ProjectCard({
           color gradient stripe. h-16 with a cover image makes the project
           identity immediately visible without dominating the card. */}
       {project.coverImageUrl ? (
-        <div
-          className="h-16 w-full bg-cover bg-center"
-          style={{ backgroundImage: `url(${project.coverImageUrl})` }}
-          aria-hidden="true"
+        <CoverImage
+          url={project.coverImageUrl}
+          x={project.coverX}
+          y={project.coverY}
+          zoom={project.coverZoom}
+          className="h-16 w-full"
+          alt=""
         />
       ) : (
         <div className={`h-1.5 w-full bg-gradient-to-r ${color.gradient}`} />
