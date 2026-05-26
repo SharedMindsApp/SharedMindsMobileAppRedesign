@@ -589,7 +589,66 @@ export const ProjectService = {
             throw new Error('Note delete returned 0 rows — likely an RLS denial (only the author can delete).');
         }
     },
+
+    // ── Project-level aggregate stats ─────────────────────────────────
+    //
+    // The Projects list page needs a true progress view that reflects the
+    // whole project — milestones (goals), phases, and tasks — not just the
+    // sliver of inbox/active tasks loaded into CoreDataContext (which
+    // excludes done/dropped and so always shows 0% complete).
+    //
+    // Three lightweight queries, batched per page load. Aggregation is
+    // done client-side because Supabase's grouped count API is awkward.
+
+    async getProjectStats(projectIds: string[]): Promise<Map<string, ProjectStats>> {
+        const out = new Map<string, ProjectStats>();
+        if (projectIds.length === 0) return out;
+        for (const id of projectIds) {
+            out.set(id, { tasks: { total: 0, done: 0, open: 0 }, phases: { total: 0, done: 0 }, milestones: { total: 0, done: 0, weightDone: 0, weightTotal: 0 } });
+        }
+
+        const [tasksRes, phasesRes, milestonesRes] = await Promise.all([
+            supabase.from('tasks').select('project_id,status').in('project_id', projectIds),
+            supabase.from('project_phases').select('project_id,completed_at').in('project_id', projectIds),
+            supabase.from('project_milestones').select('project_id,completed_at,weight_pct').in('project_id', projectIds),
+        ]);
+
+        for (const row of (tasksRes.data ?? []) as Array<{ project_id: string; status: string }>) {
+            const entry = out.get(row.project_id);
+            if (!entry) continue;
+            entry.tasks.total += 1;
+            if (row.status === 'done') entry.tasks.done += 1;
+            else if (row.status !== 'dropped') entry.tasks.open += 1;
+        }
+        for (const row of (phasesRes.data ?? []) as Array<{ project_id: string; completed_at: string | null }>) {
+            const entry = out.get(row.project_id);
+            if (!entry) continue;
+            entry.phases.total += 1;
+            if (row.completed_at) entry.phases.done += 1;
+        }
+        for (const row of (milestonesRes.data ?? []) as Array<{ project_id: string; completed_at: string | null; weight_pct: number | null }>) {
+            const entry = out.get(row.project_id);
+            if (!entry) continue;
+            entry.milestones.total += 1;
+            const w = row.weight_pct ?? 0;
+            entry.milestones.weightTotal += w;
+            if (row.completed_at) {
+                entry.milestones.done += 1;
+                entry.milestones.weightDone += w;
+            }
+        }
+        return out;
+    },
 };
+
+/** Aggregate counts for a single project. The "progress" hierarchy is:
+ *  milestones (weighted) → phases (equal-weight) → tasks (equal-weight),
+ *  whichever bucket has rows. See deriveProjectProgress() in ProjectsPage. */
+export interface ProjectStats {
+    tasks:      { total: number; done: number; open: number };
+    phases:     { total: number; done: number };
+    milestones: { total: number; done: number; weightDone: number; weightTotal: number };
+}
 
 // ── Milestone + Phase + Note types ─────────────────────────────────────
 

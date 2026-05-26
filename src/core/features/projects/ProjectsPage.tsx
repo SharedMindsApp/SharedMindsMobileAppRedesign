@@ -7,8 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Target, CheckCircle2, Pin, Play, Archive, Zap, MoreVertical, Trash2, Pencil } from 'lucide-react';
-import { ProjectService } from '../../services/ProjectService';
+import { Plus, Users, Target, CheckCircle2, Pin, Play, Archive, Zap, MoreVertical, Trash2, Pencil, Flag, Layers } from 'lucide-react';
+import { ProjectService, type ProjectStats } from '../../services/ProjectService';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreProject } from '../../data/CoreDataContext';
 import { PageGreeting, GradientButton } from '../../ui/CorePage';
@@ -43,26 +43,31 @@ export function projectColorMeta(token: string | null) {
 export function ProjectsPage() {
   const navigate = useNavigate();
   const {
-    state: { projects, tasks, activeProjectId },
+    state: { projects, activeProjectId },
     setActiveProject,
     refreshProjects,
   } = useCoreData();
   const [editorOpen, setEditorOpen] = useState(false);
 
+  // Full project aggregates (milestones + phases + tasks across all
+  // statuses) fetched directly from Supabase. The tasks slice in
+  // CoreDataContext only includes inbox/active rows, so progress would
+  // always read 0% if we sourced this from there.
+  const [stats, setStats] = useState<Map<string, ProjectStats>>(new Map());
+
   useEffect(() => { refreshProjects(); /* eslint-disable-next-line */ }, []);
 
-  // Task counts by project
-  const taskCounts = useMemo(() => {
-    const map = new Map<string, { open: number; done: number; total: number }>();
-    for (const t of tasks) {
-      if (!t.projectId) continue;
-      const c = map.get(t.projectId) ?? { open: 0, done: 0, total: 0 };
-      c.total += 1;
-      if (t.done) c.done += 1; else c.open += 1;
-      map.set(t.projectId, c);
+  useEffect(() => {
+    if (projects.length === 0) {
+      setStats(new Map());
+      return;
     }
-    return map;
-  }, [tasks]);
+    let cancelled = false;
+    ProjectService.getProjectStats(projects.map((p) => p.id))
+      .then((m) => { if (!cancelled) setStats(m); })
+      .catch((e) => console.warn('[ProjectsPage] getProjectStats failed', e));
+    return () => { cancelled = true; };
+  }, [projects]);
 
   const activeProjects = projects.filter((p) => p.status === 'active');
   const archivedProjects = projects.filter((p) => p.status !== 'active');
@@ -114,7 +119,7 @@ export function ProjectsPage() {
                 key={project.id}
                 project={project}
                 isActive={project.id === activeProjectId}
-                taskCounts={taskCounts.get(project.id) ?? { open: 0, done: 0, total: 0 }}
+                stats={stats.get(project.id) ?? EMPTY_STATS}
                 onOpen={() => navigate(`/projects/${project.id}`)}
                 onStartSession={() => navigate(`/projects/${project.id}`)}
                 onTogglePin={() =>
@@ -130,7 +135,7 @@ export function ProjectsPage() {
           {archivedProjects.length > 0 && (
             <ArchivedSection
               projects={archivedProjects}
-              taskCounts={taskCounts}
+              stats={stats}
               activeProjectId={activeProjectId}
               onOpen={(id) => navigate(`/projects/${id}`)}
               onTogglePin={(id) => setActiveProject(id === activeProjectId ? null : id)}
@@ -168,10 +173,37 @@ export function ProjectsPage() {
 
 // ── Card ─────────────────────────────────────────────────────────
 
+const EMPTY_STATS: ProjectStats = {
+  tasks: { total: 0, done: 0, open: 0 },
+  phases: { total: 0, done: 0 },
+  milestones: { total: 0, done: 0, weightDone: 0, weightTotal: 0 },
+};
+
+/** Pick the most meaningful "progress" view for a project.
+ *
+ *  Hierarchy: milestones (weighted by weight_pct if set, else equal) →
+ *  phases → tasks. Whichever bucket has rows wins. If none, returns
+ *  null and the card hides the bar. */
+function deriveProjectProgress(s: ProjectStats): { pct: number; basis: 'goals' | 'phases' | 'tasks' } | null {
+  if (s.milestones.total > 0) {
+    if (s.milestones.weightTotal > 0) {
+      return { pct: Math.round((s.milestones.weightDone / s.milestones.weightTotal) * 100), basis: 'goals' };
+    }
+    return { pct: Math.round((s.milestones.done / s.milestones.total) * 100), basis: 'goals' };
+  }
+  if (s.phases.total > 0) {
+    return { pct: Math.round((s.phases.done / s.phases.total) * 100), basis: 'phases' };
+  }
+  if (s.tasks.total > 0) {
+    return { pct: Math.round((s.tasks.done / s.tasks.total) * 100), basis: 'tasks' };
+  }
+  return null;
+}
+
 function ProjectCard({
   project,
   isActive,
-  taskCounts,
+  stats,
   onOpen,
   onTogglePin,
   onArchive,
@@ -179,7 +211,7 @@ function ProjectCard({
 }: {
   project: CoreProject;
   isActive: boolean;
-  taskCounts: { open: number; done: number; total: number };
+  stats: ProjectStats;
   onOpen: () => void;
   onStartSession: () => void;
   onTogglePin: () => void;
@@ -203,10 +235,9 @@ function ProjectCard({
     };
   }, [menuOpen]);
   const color = projectColorMeta(project.color);
-  const progress = taskCounts.total > 0
-    ? Math.round((taskCounts.done / taskCounts.total) * 100)
-    : 0;
+  const progress = deriveProjectProgress(stats);
   const isShared = project.scope === 'shared';
+  const hasAnyWork = stats.milestones.total + stats.phases.total + stats.tasks.total > 0;
 
   return (
     <div
@@ -337,43 +368,52 @@ function ProjectCard({
           </div>
         </div>
 
-        {/* Progress bar (only when there are tasks) */}
-        {taskCounts.total > 0 && (
+        {/* Progress bar — reflects the strongest signal available
+            (milestones > phases > tasks). Labelled with the basis so
+            the user knows what "60%" actually counts. */}
+        {progress && (
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">
-                Progress
+                {progress.basis === 'goals' ? 'Goal progress' : progress.basis === 'phases' ? 'Phase progress' : 'Task progress'}
               </span>
               <span className={`text-[10px] font-extrabold tabular-nums ${color.textDark}`}>
-                {progress}%
+                {progress.pct}%
               </span>
             </div>
             <div className="h-1.5 w-full bg-surface-container-low rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-700 ${color.bar}`}
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progress.pct}%` }}
               />
             </div>
           </div>
         )}
 
-        {/* Stats row */}
+        {/* Stats row — full project overview: goals + phases + tasks.
+            Each chip only renders if that bucket has rows, so simple
+            projects (just tasks) stay clean. */}
         <div className="flex items-center gap-3 flex-wrap">
-          {taskCounts.total > 0 ? (
-            <>
-              <StatChip
-                icon={<CheckCircle2 size={10} />}
-                label={`${taskCounts.done}/${taskCounts.total} tasks`}
-              />
-              {taskCounts.open > 0 && (
-                <StatChip
-                  icon={<Target size={10} />}
-                  label={`${taskCounts.open} remaining`}
-                />
-              )}
-            </>
-          ) : (
-            <span className="text-[11px] stitch-text-secondary italic">No tasks yet</span>
+          {stats.milestones.total > 0 && (
+            <StatChip
+              icon={<Flag size={10} />}
+              label={`${stats.milestones.done}/${stats.milestones.total} goals`}
+            />
+          )}
+          {stats.phases.total > 0 && (
+            <StatChip
+              icon={<Layers size={10} />}
+              label={`${stats.phases.done}/${stats.phases.total} phases`}
+            />
+          )}
+          {stats.tasks.total > 0 && (
+            <StatChip
+              icon={<CheckCircle2 size={10} />}
+              label={`${stats.tasks.done}/${stats.tasks.total} tasks`}
+            />
+          )}
+          {!hasAnyWork && (
+            <span className="text-[11px] stitch-text-secondary italic">No goals or tasks yet</span>
           )}
           {project.status !== 'active' && (
             <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-surface-container stitch-text-secondary">
@@ -423,10 +463,10 @@ function StatChip({ icon, label }: { icon: React.ReactNode; label: string }) {
 // ── Archived section ─────────────────────────────────────────────
 
 function ArchivedSection({
-  projects, taskCounts, activeProjectId, onOpen, onTogglePin, onArchive, onDelete,
+  projects, stats, activeProjectId, onOpen, onTogglePin, onArchive, onDelete,
 }: {
   projects: CoreProject[];
-  taskCounts: Map<string, { open: number; done: number; total: number }>;
+  stats: Map<string, ProjectStats>;
   activeProjectId: string | null;
   onOpen: (id: string) => void;
   onTogglePin: (id: string) => void;
@@ -456,7 +496,7 @@ function ArchivedSection({
               key={project.id}
               project={project}
               isActive={project.id === activeProjectId}
-              taskCounts={taskCounts.get(project.id) ?? { open: 0, done: 0, total: 0 }}
+              stats={stats.get(project.id) ?? EMPTY_STATS}
               onOpen={() => onOpen(project.id)}
               onStartSession={() => onOpen(project.id)}
               onTogglePin={() => onTogglePin(project.id)}
