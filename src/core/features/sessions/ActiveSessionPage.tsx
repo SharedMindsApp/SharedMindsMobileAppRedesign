@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, LockOpen, Crown } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -463,7 +463,7 @@ export function ActiveSessionPage() {
                   title={activeSession?.accept_joiners === false ? 'Joins locked — click to allow new joiners' : 'Lock joins — no new participants'}
                   aria-pressed={activeSession?.accept_joiners === false}
                 >
-                  {activeSession?.accept_joiners === false ? <Lock size={11} /> : <LockOpen size={11} />}
+                  {activeSession?.accept_joiners === false ? <Lock size={11} /> : <Unlock size={11} />}
                 </button>
               )}
             </div>
