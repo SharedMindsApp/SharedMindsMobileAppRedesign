@@ -30,7 +30,7 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { useCommunitySessionsSubscription } from '../sessions/useCommunitySessionsSubscription';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
-import { fetchProfileStats, fetchWeekSessions } from '../../services/ProfileService';
+import { fetchProfileStats, fetchWeekSessions, fetchHasCompletedAnySession } from '../../services/ProfileService';
 import { fetchRecentShippedSessions, fetchUpcomingScheduledSessions } from '../../services/SessionService';
 import { SurfaceCard } from '../../ui/CorePage';
 import { HomeHero } from './HomeHero';
@@ -329,43 +329,75 @@ export function DashboardPage() {
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
   const [myShips, setMyShips] = useState<ShippedSession[]>([]);
   const [upcomingScheduled, setUpcomingScheduled] = useState<ScheduledSessionWithProfile[]>([]);
-  // Unified load gate. We deliberately await ALL queries before painting
-  // the dashboard so sections don't pop in one at a time. Trade-off: the
-  // slowest query (usually fetchUpcomingScheduledSessions) gates the
-  // whole page — but on Pro/Micro that's well under a second, and the
-  // single-paint feels dramatically less janky.
-  const [loaded, setLoaded] = useState(false);
+  // Progressive load. Each query feeds its own card; cards render with
+  // their own placeholder state until data lands. This used to be a single
+  // load gate that waited for ALL four queries — the slowest one (usually
+  // fetchUpcomingScheduledSessions) blocked everything else. Now the page
+  // paints instantly and sections fill in as their data arrives.
+  //
+  // The day-zero branch decision uses a cheap count-only query that
+  // resolves in ~10ms, so we don't have to default to either branch and
+  // flicker if the user's actually the other.
+  const [hasAnySession, setHasAnySession] = useState<boolean | null>(null);
 
+  // Cheap day-zero check — runs first, resolves fast, unblocks branching.
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
-
-    (async () => {
-      try {
-        const [s, w, ships, upcoming] = await Promise.all([
-          fetchProfileStats(user.id).catch(() => null),
-          fetchWeekSessions(user.id).catch(() => [] as { start_time: string }[]),
-          fetchRecentShippedSessions(user.id).catch(() => [] as ShippedSession[]),
-          fetchUpcomingScheduledSessions().catch(() => [] as ScheduledSessionWithProfile[]),
-        ]);
-        if (cancelled) return;
-        // Batch the updates inside an effect callback so React 18 commits
-        // them in a single render. No partial paints.
-        setStats(s);
-        setWeekSessions(w);
-        setMyShips(ships.slice(0, 3));
-        setUpcomingScheduled(upcoming);
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-
+    fetchHasCompletedAnySession(user.id).then((has) => {
+      if (!cancelled) setHasAnySession(has);
+    });
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  // Heavy stats — only needed for the identity chips + Stats tab. No
+  // longer gates initial paint.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    fetchProfileStats(user.id)
+      .then((s) => { if (!cancelled) setStats(s); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  // Week sessions — used by the weekly grid; loads independently.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    fetchWeekSessions(user.id)
+      .then((w) => { if (!cancelled) setWeekSessions(w); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  // Recent ships — used by ShippedFeedStrip; independent.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    fetchRecentShippedSessions(user.id)
+      .then((ships) => { if (!cancelled) setMyShips(ships.slice(0, 3)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  // Upcoming scheduled — used by SmartNextCard + UpcomingPublicSessionsStrip.
+  // Historically the slowest query and the main reason the load gate hurt.
+  useEffect(() => {
+    let cancelled = false;
+    fetchUpcomingScheduledSessions()
+      .then((u) => { if (!cancelled) setUpcomingScheduled(u); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
   const workTypeLabel = profile?.work_type ? WORK_TYPE_LABELS[profile.work_type] : null;
-  const isDayZero = loaded && (stats?.totalSessions ?? 0) === 0;
+  // Day-zero decision uses the cheap count check. Stays null while that
+  // tiny query is in flight (~10ms typically) so we don't flicker the
+  // wrong branch into view first.
+  const isDayZero = hasAnySession === false;
+  const dayZeroResolved = hasAnySession !== null;
   // Coordinate the two intentions-related cards so we never show both.
   // First-week is more contextual (it knows the user is in their first
   // partial week and offers a softer ask) so it wins when both apply.
@@ -402,21 +434,17 @@ export function DashboardPage() {
         onFind={() => navigate('/sessions')}
       />
 
-      {/* ── Load-gated content ───────────────────────────────── */}
-      {!loaded ? (
+      {/* Progressive render — sections paint as their data arrives. The
+          hero above is always-on, and the day-zero branch waits only for
+          the cheap count query (not the full stats aggregation). */}
+      {!dayZeroResolved ? (
         <div className="space-y-4 animate-pulse">
           <div className="flex gap-2">
             <div className="h-6 w-24 rounded-full bg-surface-container-low" />
             <div className="h-6 w-20 rounded-full bg-surface-container-low" />
             <div className="h-6 w-28 rounded-full bg-surface-container-low" />
           </div>
-          <div className="h-32 rounded-2xl bg-surface-container-low/60" />
           <div className="h-40 rounded-2xl bg-surface-container-low/60" />
-          <div className="grid grid-cols-2 gap-3">
-            <div className="h-20 rounded-xl bg-surface-container-low/60" />
-            <div className="h-20 rounded-xl bg-surface-container-low/60" />
-          </div>
-          <div className="h-48 rounded-2xl bg-surface-container-low/60" />
         </div>
       ) : (
         <>

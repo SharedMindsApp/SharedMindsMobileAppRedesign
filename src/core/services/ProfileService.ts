@@ -204,13 +204,43 @@ function startOfWeekIso(): string {
   return d.toISOString();
 }
 
-export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
-  const { data: sessions } = await supabase
+/**
+ * Cheap "has the user ever completed a session?" check. Used by the home
+ * dashboard to pick the day-zero vs returning-user branch without waiting
+ * for the full stats aggregation. Server-side count, head-only request —
+ * resolves in ~10ms vs hundreds of ms for fetchProfileStats.
+ */
+export async function fetchHasCompletedAnySession(userId: string): Promise<boolean> {
+  const { count, error } = await supabase
     .from('focus_sessions')
-    .select('status, session_outcome, ended_at, end_time, start_time, intended_duration_minutes, partner_user_id')
+    .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'completed')
-    .order('ended_at', { ascending: false });
+    .eq('status', 'completed');
+  if (error) {
+    console.warn('[fetchHasCompletedAnySession]', error);
+    return false; // fail-closed to day-zero rather than blocking render
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
+  // Parallelise the two queries — the connection count used to be a
+  // sequential await at the end of this function, adding a full round-trip
+  // for no good reason. Now both kick off together.
+  const [sessionsRes, connRes] = await Promise.all([
+    supabase
+      .from('focus_sessions')
+      .select('status, session_outcome, ended_at, end_time, start_time, intended_duration_minutes, partner_user_id')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('ended_at', { ascending: false }),
+    supabase
+      .from('connections')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'accepted')
+      .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`),
+  ]);
+  const sessions = sessionsRes.data;
 
   const completed = sessions ?? [];
   const totalCompleted = completed.length;
@@ -308,12 +338,8 @@ export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
   }
   const peopleAlongsideThisMonth = partnerSet.size;
 
-  // ── Connection count ──
-  const { count: connCount } = await supabase
-    .from('connections')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'accepted')
-    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+  // Connection count came in parallel from the Promise.all above.
+  const connCount = connRes.count;
 
   return {
     totalSessions: totalCompleted,
