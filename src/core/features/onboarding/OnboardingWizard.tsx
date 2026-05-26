@@ -35,6 +35,7 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
 import { uploadAvatar } from '../../services/ProfileService';
 import { ProjectService } from '../../services/ProjectService';
+import { SpaceService } from '../../services/SpaceService';
 import { TaskService } from '../../services/TaskService';
 import { ReflectionService, mondayOf } from '../../services/ReflectionService';
 import { AvatarCropper } from './AvatarCropper';
@@ -1321,12 +1322,19 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // 0. Make sure the user has a personal space and grab its id.
+    //    The projects table requires space_id (not null) and RLS only
+    //    permits inserts where the user is a space_member. Bootstrapping
+    //    is idempotent: returns the existing personal space if it exists.
+    const personalSpace = await SpaceService.bootstrapPersonalSpace(user.id);
+
     // 1. Create project (incl. the new shape fields)
     const project = await ProjectService.createProject({
-      title: projectTitle.trim(),
-      description: projectBrainDump.trim() || null,
-      color: projectColour,
-      status: 'active',
+      space_id:   personalSpace.id,
+      title:      projectTitle.trim(),
+      description:projectBrainDump.trim() || null,
+      color:      projectColour,
+      status:     'active',
       created_by: user.id,
       started_status: projectStartedStatus,
       initial_completion_pct: projectStartedStatus === 'in_progress' ? projectCompletionPct : null,
