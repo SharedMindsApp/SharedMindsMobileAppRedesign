@@ -23,6 +23,8 @@ export type WizardId =
   | 'breathing_1min'
   | 'breathing_3min'
   | 'breathing_box'
+  | 'break_3min'
+  | 'break_5min'
   | 'weekly_intentions'
   | 'daily_intentions';
 

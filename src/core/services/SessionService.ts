@@ -143,6 +143,46 @@ export async function markScheduledSessionActive(sessionId: string): Promise<voi
  * Used by the End button — the outcome (finished/partially/something_came_up)
  * is picked separately on the summary page.
  */
+/**
+ * Extend an active session by N minutes. Updates target_end_time +
+ * intended_duration_minutes on the DB row; the realtime subscription on
+ * focus_sessions delivers the update to every participant so their timers
+ * re-derive automatically.
+ *
+ * Caller must check host eligibility — RLS already restricts updates to
+ * user_id = auth.uid() so non-hosts can't extend.
+ */
+export async function extendSession(
+  sessionId: string,
+  addMinutes: number,
+): Promise<FocusSession> {
+  // Fetch the current target so we extend FROM the existing end-time, not
+  // from "now". This matters if the host clicks +15 when there's already
+  // 2 minutes left — we want 17 min remaining, not 15.
+  const { data: existing, error: fetchErr } = await supabase
+    .from('focus_sessions')
+    .select('target_end_time, intended_duration_minutes')
+    .eq('id', sessionId)
+    .single();
+  if (fetchErr) throw fetchErr;
+
+  const currentTarget = new Date(existing.target_end_time).getTime();
+  const newTarget = new Date(currentTarget + addMinutes * 60 * 1000).toISOString();
+  const newDuration = (existing.intended_duration_minutes ?? 0) + addMinutes;
+
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .update({
+      target_end_time: newTarget,
+      intended_duration_minutes: newDuration,
+    })
+    .eq('id', sessionId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FocusSession;
+}
+
 export async function markSessionEnded(sessionId: string): Promise<void> {
   const now = new Date();
   const { data: session, error: fetchError } = await supabase

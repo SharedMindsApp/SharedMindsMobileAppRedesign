@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -9,7 +9,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession } from '../../services/SessionService';
 import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
@@ -100,6 +100,23 @@ export function ActiveSessionPage() {
     isGroupSession: isMusicGroupSession,
     isHost: isMusicHost,
   });
+
+  // Extend session — host updates target_end_time, realtime subscription
+  // pushes the change to every participant so their timers re-derive.
+  const [extending, setExtending] = useState(false);
+  async function handleExtend(addMinutes: number) {
+    if (!activeSession || extending) return;
+    setExtending(true);
+    try {
+      const updated = await extendSession(activeSession.id, addMinutes);
+      // Optimistically reflect locally; realtime subscription will also fire.
+      setActiveSession({ ...activeSession, ...updated });
+    } catch (e) {
+      console.error('[ActiveSession] extend failed', e);
+    } finally {
+      setExtending(false);
+    }
+  }
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
   const [ending, setEnding] = useState(false);
@@ -380,6 +397,34 @@ export function ActiveSessionPage() {
               {formatRemaining(timerSecondsRemaining)}
             </span>
           </div>
+
+          {/* Extend buttons. Owner-only: hosts in group sessions, the
+              user in solo, and either user in 1-on-1. RLS rejects others. */}
+          {(!isMusicGroupSession || isMusicHost) && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleExtend(15)}
+                disabled={extending || ending}
+                className="flex items-center gap-0.5 bg-white/10 hover:bg-white/15 text-white text-[11px] font-bold px-2 py-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40"
+                title="Extend session by 15 minutes"
+              >
+                <Plus size={11} />
+                15
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExtend(30)}
+                disabled={extending || ending}
+                className="flex items-center gap-0.5 bg-white/10 hover:bg-white/15 text-white text-[11px] font-bold px-2 py-1.5 rounded-full transition-all active:scale-95 disabled:opacity-40"
+                title="Extend session by 30 minutes"
+              >
+                <Plus size={11} />
+                30
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleEnd}
