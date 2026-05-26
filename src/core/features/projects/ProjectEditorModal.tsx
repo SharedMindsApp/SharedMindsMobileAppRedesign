@@ -199,7 +199,7 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
     <>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40" onClick={onClose}>
       <div
-        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="w-full sm:max-w-2xl lg:max-w-3xl bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — adds a left colour stripe matching the project's colour
