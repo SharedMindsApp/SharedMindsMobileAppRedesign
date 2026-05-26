@@ -29,6 +29,8 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectEditorModal } from './ProjectEditorModal';
 import { ShareForAccountabilitySheet } from './ShareForAccountabilitySheet';
+import { ShareChooserSheet } from './ShareChooserSheet';
+import { InviteCollaboratorSheet } from './InviteCollaboratorSheet';
 import { CoverImage } from './CoverImage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { projectColorMeta } from './ProjectsPage';
@@ -89,6 +91,8 @@ export function ProjectDetailPage() {
   const [phases, setPhases] = useState<ProjectPhase[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareChooserOpen, setShareChooserOpen] = useState(false);
+  const [coworkerInviteOpen, setCoworkerInviteOpen] = useState(false);
   const [declareOpen, setDeclareOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [taskSubmitting, setTaskSubmitting] = useState(false);
@@ -396,7 +400,7 @@ export function ProjectDetailPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShareOpen(true)}
+                onClick={() => setShareChooserOpen(true)}
                 className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-bold transition-colors backdrop-blur-sm ${
                   heroTextDark
                     ? 'bg-black/10 hover:bg-black/20 ring-1 ring-black/10 text-stitch-text-primary'
@@ -777,6 +781,19 @@ export function ProjectDetailPage() {
           projectId={project.id}
           projectTitle={project.title}
           onClose={() => setShareOpen(false)}
+        />
+      )}
+      {shareChooserOpen && (
+        <ShareChooserSheet
+          onPickCoworker={() => { setShareChooserOpen(false); setCoworkerInviteOpen(true); }}
+          onPickAccountability={() => { setShareChooserOpen(false); setShareOpen(true); }}
+          onClose={() => setShareChooserOpen(false)}
+        />
+      )}
+      {coworkerInviteOpen && (
+        <InviteCollaboratorSheet
+          project={project}
+          onClose={() => setCoworkerInviteOpen(false)}
         />
       )}
     </div>
