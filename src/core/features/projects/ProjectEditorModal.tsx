@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react';
-import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle } from 'lucide-react';
+import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle, Trash2 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { ProjectService, type Project, type ProjectMemberWithProfile } from '../../services/ProjectService';
@@ -39,9 +39,12 @@ type Props = {
   onClose: () => void;
   onSaved?: (project: Project) => void;
   onArchived?: () => void;
+  /** Fires after a successful hard delete. Defaults to onArchived so
+   *  existing callers naturally navigate away. */
+  onDeleted?: () => void;
 };
 
-export function ProjectEditorModal({ project, members = [], onClose, onSaved, onArchived }: Props) {
+export function ProjectEditorModal({ project, members = [], onClose, onSaved, onArchived, onDeleted }: Props) {
   const { user } = useAuth();
   const { state: { spaces }, refreshProjects } = useCoreData();
   const isNew = !project;
@@ -102,6 +105,36 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
       onClose();
     } catch (e: any) {
       setError(e?.message ?? 'Could not archive.');
+      setSubmitting(false);
+    }
+  }
+
+  /** Hard delete — destructive. Two confirms: a high-level intent check
+   *  then a "type the name" gate so it can't be a fat-finger mistake.
+   *  Cascades to milestones, phases, tasks, members, notes, etc.
+   *
+   *  RLS only allows project owners to delete (see
+   *  projects_delete_if_owner policy), so non-owners get a clear error. */
+  async function handleDelete() {
+    if (!project) return;
+    if (!confirm(`Permanently delete "${project.title}"?\n\nThis removes the project, its milestones, phases, tasks, notes, and member list — everything except sessions you've already had (those keep an unlinked record).\n\nThere is no undo.`)) return;
+    // Second gate: name confirmation.
+    const typed = prompt(`Type the project name to confirm:\n"${project.title}"`);
+    if (typed?.trim() !== project.title.trim()) {
+      if (typed != null) {
+        setError('Project name did not match — delete cancelled.');
+      }
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await ProjectService.deleteProject(project.id);
+      await refreshProjects();
+      (onDeleted ?? onArchived)?.();
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not delete.');
       setSubmitting(false);
     }
   }
@@ -262,9 +295,10 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
           )}
 
           {/* 4. Danger zone (existing projects only) — clearly separated by
-              ring colour + label so admin-y actions can't be confused with
-              save flow. Currently just Archive; Delete/Transfer land in the
-              Settings drawer next phase. */}
+              ring colour + label. Archive = soft delete (recoverable from
+              backend), Delete = permanent cascade through milestones, phases,
+              tasks, notes, members. Delete uses two confirms (intent + name)
+              and is gated by RLS to project owners only. */}
           {!isNew && (
             <section className="rounded-2xl ring-1 ring-rose-200/50 p-4 bg-rose-50/30">
               <SectionHeading
@@ -272,6 +306,8 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
                 label="Danger zone"
                 tone="danger"
               />
+
+              {/* Archive — softer option, hides from list, reversible from DB */}
               <div className="flex items-center justify-between gap-3 mt-3">
                 <div className="min-w-0">
                   <p className="text-sm font-bold stitch-text-primary">Archive this project</p>
@@ -286,6 +322,27 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
                   className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-700 bg-white ring-1 ring-rose-200 hover:bg-rose-50 transition-colors disabled:opacity-50"
                 >
                   <Archive size={12} /> Archive
+                </button>
+              </div>
+
+              {/* Divider between soft + hard delete */}
+              <div className="border-t border-rose-200/60 my-3" />
+
+              {/* Delete — permanent, two-step confirm */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-rose-700">Delete permanently</p>
+                  <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+                    Removes the project, milestones, phases, tasks, notes, and members. No undo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={submitting}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <Trash2 size={12} /> Delete
                 </button>
               </div>
             </section>

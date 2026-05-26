@@ -159,6 +159,30 @@ export const ProjectService = {
         await this.updateProject(projectId, { status: 'archived', completed_at: new Date().toISOString() });
     },
 
+    /**
+     * Hard-delete a project. Cascades to milestones, phases, tasks, members,
+     * notes, and any sessions pinned to it (where ON DELETE CASCADE or SET
+     * NULL is configured). Irreversible — UI should confirm with the user
+     * before calling.
+     *
+     * Uses .select('id') so an RLS denial (0 rows affected) throws instead
+     * of silently faking success.
+     */
+    async deleteProject(projectId: string): Promise<void> {
+        const { data, error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', projectId)
+            .select('id');
+        if (error) {
+            console.error('[ProjectService] Failed to delete project:', error);
+            throw error;
+        }
+        if (!data || data.length === 0) {
+            throw new Error('Project delete returned 0 rows — likely an RLS denial (only owners can delete).');
+        }
+    },
+
     // ── Members ───────────────────────────────────────────────────────
 
     async getProjectMembers(projectId: string): Promise<ProjectMemberWithProfile[]> {
