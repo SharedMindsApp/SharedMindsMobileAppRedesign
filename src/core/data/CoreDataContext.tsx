@@ -47,6 +47,8 @@ export type CoreProject = {
   coverFit: 'cover' | 'contain';
   /** Hex colour painted behind the image when bands show; null = none. */
   coverBgColor: string | null;
+  /** 'light' = white title text + dark overlay, 'dark' = near-black + light overlay. */
+  coverTextColor: 'light' | 'dark';
 };
 
 export type CoreTask = {
@@ -391,6 +393,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           coverZoom: p.cover_zoom ?? 100,
           coverFit: (p.cover_fit ?? 'cover') as 'cover' | 'contain',
           coverBgColor: p.cover_bg_color ?? null,
+          coverTextColor: (p.cover_text_color ?? 'light') as 'light' | 'dark',
         };
       });
 

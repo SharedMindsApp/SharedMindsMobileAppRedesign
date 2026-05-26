@@ -228,6 +228,12 @@ export function ProjectDetailPage() {
   }
 
   const isArchived = project.status !== 'active';
+  // Hero text colour. Default white. Dark only when the project has a
+  // cover image AND the user explicitly picked dark (e.g. for light bg).
+  const heroTextDark = !!project.cover_image_url && project.cover_text_color === 'dark';
+  const titleClass = heroTextDark ? 'text-stitch-text-primary' : 'text-white';
+  const titleSubtleClass = heroTextDark ? 'text-stitch-text-primary/80' : 'text-white/95';
+  const titleMutedClass = heroTextDark ? 'text-stitch-text-secondary' : 'text-white/80';
 
   return (
     <div className="space-y-0">
@@ -265,15 +271,18 @@ export function ProjectDetailPage() {
                 bgColor={project.cover_bg_color}
                 className="absolute inset-0"
               />
-              {/* Darken overlay for title legibility. In contain mode the
-                  user's chosen bgColor is meant to show through, so we
-                  use a lighter overlay; in cover (full-bleed photo) we go
-                  heavier because contrast against image content matters. */}
+              {/* Legibility overlay — flips light/dark with the user's
+                  chosen text colour. Eases off in contain mode so the
+                  user's bg colour shows through. */}
               <div
                 className={`absolute inset-0 pointer-events-none ${
-                  project.cover_fit === 'contain'
-                    ? 'bg-gradient-to-br from-black/10 via-black/15 to-black/30'
-                    : 'bg-gradient-to-br from-black/30 via-black/40 to-black/60'
+                  project.cover_text_color === 'dark'
+                    ? project.cover_fit === 'contain'
+                      ? 'bg-gradient-to-br from-white/10 via-white/15 to-white/30'
+                      : 'bg-gradient-to-br from-white/40 via-white/50 to-white/70'
+                    : project.cover_fit === 'contain'
+                      ? 'bg-gradient-to-br from-black/10 via-black/15 to-black/30'
+                      : 'bg-gradient-to-br from-black/30 via-black/40 to-black/60'
                 }`}
               />
             </>
@@ -300,7 +309,7 @@ export function ProjectDetailPage() {
           </div>
 
           {/* Title + collapsible description (brain dumps can be 300-500 words) */}
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight mb-1 drop-shadow-sm">
+          <h1 className={`text-2xl sm:text-3xl font-extrabold ${titleClass} leading-tight mb-1 drop-shadow-sm`}>
             {project.title}
           </h1>
           {project.description && (() => {
@@ -332,8 +341,8 @@ export function ProjectDetailPage() {
                         // First paragraph: slightly larger + brighter so
                         // it reads as a "lead" — the rest tapers down.
                         i === 0
-                          ? 'text-[15px] text-white/95 leading-relaxed font-medium'
-                          : 'text-sm text-white/80 leading-relaxed'
+                          ? `text-[15px] ${titleSubtleClass} leading-relaxed font-medium`
+                          : `text-sm ${titleMutedClass} leading-relaxed`
                       }
                     >
                       {para}

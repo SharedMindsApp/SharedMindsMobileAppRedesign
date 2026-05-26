@@ -11,7 +11,7 @@
 // clean 0-100% focal point regardless of zoom.
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Move, ZoomIn, Maximize2, Crop } from 'lucide-react';
+import { Move, ZoomIn, Maximize2, Crop, Type } from 'lucide-react';
 
 interface Transform {
   x: number;
@@ -19,6 +19,7 @@ interface Transform {
   zoom: number;
   fit: 'cover' | 'contain';
   bgColor: string | null;
+  textColor: 'light' | 'dark';
 }
 
 interface Props extends Transform {
@@ -38,7 +39,7 @@ const BG_PRESETS: { label: string; value: string }[] = [
   { label: 'Black',   value: '#0a0a0a' },
 ];
 
-export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Props) {
+export function CoverPositioner({ url, x, y, zoom, fit, bgColor, textColor, onChange }: Props) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragStartRef = useRef<{ clientX: number; clientY: number; startX: number; startY: number } | null>(null);
@@ -62,7 +63,7 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
     const zoomFactor = zoom / 100;
     const nextX = clamp(dragStartRef.current.startX + dxPct / zoomFactor, 0, 100);
     const nextY = clamp(dragStartRef.current.startY + dyPct / zoomFactor, 0, 100);
-    onChange({ x: Math.round(nextX), y: Math.round(nextY), zoom, fit, bgColor });
+    onChange({ x: Math.round(nextX), y: Math.round(nextY), zoom, fit, bgColor, textColor });
   }, [dragging, zoom, fit, bgColor, onChange]);
 
   const handlePointerUp = useCallback(() => {
@@ -78,7 +79,7 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const delta = e.deltaY > 0 ? -10 : 10;
-      onChange({ x, y, zoom: clamp(zoom + delta, 50, 300), fit, bgColor });
+      onChange({ x, y, zoom: clamp(zoom + delta, 50, 300), fit, bgColor, textColor });
     }
     frame.addEventListener('wheel', onWheel, { passive: false });
     return () => frame.removeEventListener('wheel', onWheel);
@@ -121,18 +122,71 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
             <Move size={18} className="text-white/70 drop-shadow-md" />
           </div>
         )}
+        {/* Legibility overlay — matches what the hero applies. Lighter
+            in contain mode (less needed; chosen bg shows through). */}
+        <div
+          className={`absolute inset-0 pointer-events-none ${
+            textColor === 'light'
+              ? fit === 'contain'
+                ? 'bg-gradient-to-br from-black/10 via-black/15 to-black/30'
+                : 'bg-gradient-to-br from-black/30 via-black/40 to-black/60'
+              : fit === 'contain'
+                ? 'bg-gradient-to-br from-white/10 via-white/15 to-white/30'
+                : 'bg-gradient-to-br from-white/40 via-white/50 to-white/70'
+          }`}
+        />
+        {/* Sample title — gives a live read of how text will look on
+            top of the chosen background + overlay combination. */}
+        <div className="absolute left-3 bottom-3 pointer-events-none">
+          <p className={`text-base font-extrabold leading-tight ${
+            textColor === 'light' ? 'text-white' : 'text-stitch-text-primary'
+          }`}>
+            Your project title
+          </p>
+          <p className={`text-[10px] font-semibold ${
+            textColor === 'light' ? 'text-white/75' : 'text-stitch-text-secondary'
+          }`}>
+            Description preview
+          </p>
+        </div>
         {!dragging && (
-          <div className="absolute bottom-2 right-2 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white/85 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full">
-            <Move size={9} /> Drag to reposition
+          <div className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white/85 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full">
+            <Move size={9} /> Drag
           </div>
         )}
+      </div>
+
+      {/* Light / Dark text toggle */}
+      <div className="flex gap-1 p-1 rounded-lg bg-surface-container-low">
+        <button
+          type="button"
+          onClick={() => onChange({ x, y, zoom, fit, bgColor, textColor: 'light' })}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${
+            textColor === 'light'
+              ? 'bg-white stitch-text-primary shadow-sm'
+              : 'stitch-text-secondary hover:stitch-text-primary'
+          }`}
+        >
+          <Type size={11} /> Light text
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ x, y, zoom, fit, bgColor, textColor: 'dark' })}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${
+            textColor === 'dark'
+              ? 'bg-white stitch-text-primary shadow-sm'
+              : 'stitch-text-secondary hover:stitch-text-primary'
+          }`}
+        >
+          <Type size={11} /> Dark text
+        </button>
       </div>
 
       {/* Fit mode toggle */}
       <div className="flex gap-1 p-1 rounded-lg bg-surface-container-low">
         <button
           type="button"
-          onClick={() => onChange({ x, y, zoom, fit: 'cover', bgColor })}
+          onClick={() => onChange({ x, y, zoom, fit: 'cover', bgColor, textColor })}
           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${
             fit === 'cover'
               ? 'bg-white stitch-text-primary shadow-sm'
@@ -143,7 +197,7 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
         </button>
         <button
           type="button"
-          onClick={() => onChange({ x, y, zoom, fit: 'contain', bgColor })}
+          onClick={() => onChange({ x, y, zoom, fit: 'contain', bgColor, textColor })}
           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${
             fit === 'contain'
               ? 'bg-white stitch-text-primary shadow-sm'
@@ -163,7 +217,7 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
           max={300}
           step={5}
           value={zoom}
-          onChange={(e) => onChange({ x, y, zoom: parseInt(e.target.value, 10), fit, bgColor })}
+          onChange={(e) => onChange({ x, y, zoom: parseInt(e.target.value, 10), fit, bgColor, textColor })}
           className="flex-1 h-1 accent-primary"
           aria-label="Cover zoom"
         />
@@ -186,7 +240,7 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
           {bgColor && (
             <button
               type="button"
-              onClick={() => onChange({ x, y, zoom, fit, bgColor: null })}
+              onClick={() => onChange({ x, y, zoom, fit, bgColor: null, textColor })}
               className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:stitch-text-primary"
             >
               Clear
@@ -198,7 +252,7 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
             <button
               key={preset.value}
               type="button"
-              onClick={() => onChange({ x, y, zoom, fit, bgColor: preset.value })}
+              onClick={() => onChange({ x, y, zoom, fit, bgColor: preset.value, textColor })}
               className={`w-7 h-7 rounded-md ring-2 transition-all hover:scale-110 ${
                 bgColor?.toLowerCase() === preset.value.toLowerCase()
                   ? 'ring-primary'
@@ -216,17 +270,17 @@ export function CoverPositioner({ url, x, y, zoom, fit, bgColor, onChange }: Pro
             <input
               type="color"
               value={bgColor ?? '#ffffff'}
-              onChange={(e) => onChange({ x, y, zoom, fit, bgColor: e.target.value })}
+              onChange={(e) => onChange({ x, y, zoom, fit, bgColor: e.target.value, textColor })}
               className="opacity-0 w-full h-full cursor-pointer"
             />
           </label>
         </div>
       </div>
 
-      {(x !== 50 || y !== 50 || zoom !== 100 || fit !== 'cover' || bgColor) && (
+      {(x !== 50 || y !== 50 || zoom !== 100 || fit !== 'cover' || bgColor || textColor !== 'light') && (
         <button
           type="button"
-          onClick={() => onChange({ x: 50, y: 50, zoom: 100, fit: 'cover', bgColor: null })}
+          onClick={() => onChange({ x: 50, y: 50, zoom: 100, fit: 'cover', bgColor: null, textColor: 'light' })}
           className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:stitch-text-primary transition-colors"
         >
           ↺ Reset everything

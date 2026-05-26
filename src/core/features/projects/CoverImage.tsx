@@ -49,8 +49,16 @@ export function CoverImage({
     ...style,
     ...(bgColor ? { backgroundColor: bgColor } : null),
   };
+  // Only inject `relative` when the caller hasn't already declared their
+  // own position class. Otherwise Tailwind's stylesheet order makes the
+  // injected `relative` override the caller's `absolute`, collapsing the
+  // wrapper to its (typically zero) intrinsic height.
+  const hasPositionClass = /\b(absolute|relative|fixed|sticky)\b/.test(className);
   return (
-    <div className={`relative overflow-hidden ${className}`} style={containerStyle}>
+    <div
+      className={`${hasPositionClass ? '' : 'relative'} overflow-hidden ${className}`}
+      style={containerStyle}
+    >
       <img
         src={url}
         alt={alt}

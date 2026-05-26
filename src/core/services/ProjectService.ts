@@ -27,6 +27,9 @@ export interface Project {
     /** Hex colour painted behind the image when the fit leaves bands.
      *  Null = no background (gradient/surface tone shows through). */
     cover_bg_color: string | null;
+    /** Title/description colour on top of the cover. 'light' = white text
+     *  + dark overlay, 'dark' = near-black text + light overlay. Default 'light'. */
+    cover_text_color: 'light' | 'dark';
     created_at: string;
     updated_at: string;
 }
