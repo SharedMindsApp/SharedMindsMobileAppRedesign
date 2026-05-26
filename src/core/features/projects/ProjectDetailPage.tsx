@@ -508,9 +508,10 @@ export function ProjectDetailPage() {
         </div>
 
         {/* ── Action row (inside the same hero card) ─────────────
-            One primary CTA (Start a session) anchored full-width on the
-            left, with a small secondary Pin toggle on the right. Reads as
-            "primary action + state toggle" rather than two competing pills. */}
+            Two equal primary actions for the two ways to coworking:
+              - Start a session: spawn a new one tied to this project
+              - Find a session: browse the public calendar
+            Then a small Pin toggle on the right as a state control. */}
         {!isArchived && (
           <div className="px-4 pb-4 pt-2 flex items-center gap-2 border-t border-surface-container/40">
             <button
@@ -521,6 +522,15 @@ export function ProjectDetailPage() {
             >
               <Play size={14} fill="currentColor" strokeWidth={0} />
               Start a session
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/sessions')}
+              title="Browse the public session calendar"
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-extrabold transition-all active:scale-[0.98] bg-surface-container-low stitch-text-primary hover:bg-surface-container ring-1 ring-surface-container"
+            >
+              <Calendar size={14} />
+              Find a session
             </button>
             <button
               type="button"
