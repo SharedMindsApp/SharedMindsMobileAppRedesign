@@ -54,9 +54,13 @@ interface Props {
   initialProjectId?: string;
   /** Pre-selects duration in minutes. Used by Quick Start templates. */
   initialDuration?: number;
+  /** Opens the "Make this smaller" breakdown panel immediately. Used by
+   *  the Quick Restart card so returning users land on the friction-
+   *  reducing prompt rather than a blank goal field. */
+  startWithSmallerHint?: boolean;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint }: Props) {
   const navigate = useNavigate();
   const { state: { tasks, projects, activeProjectId }, addTaskAsync, deleteTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
@@ -78,9 +82,27 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const isScheduling = whenMode === 'schedule';
   const resolvedScheduledAt = isScheduling ? new Date(scheduledAt) : null;
 
-  const [tab, setTab] = useState<GoalTab>(initialGoal ? 'type' : 'pick');
+  // Default to 'type' when we have an initial goal OR the caller asked
+  // for the breakdown helper (Quick Restart). Otherwise show the task
+  // picker so users can pull from existing work.
+  const [tab, setTab] = useState<GoalTab>(initialGoal || startWithSmallerHint ? 'type' : 'pick');
   const [selectedTask, setSelectedTask] = useState<CoreTask | null>(null);
   const [goalText, setGoalText] = useState(initialGoal ?? '');
+
+  // ── "Make this smaller" breakdown helper ────────────────────────────
+  // Per the ADHD design principles: when a goal feels too big, offer
+  // three forcing-function prompts that bias the user toward the
+  // tiniest first step. Not AI — just well-framed questions that
+  // reliably unstick people.
+  const [showBreakdown, setShowBreakdown] = useState<boolean>(!!startWithSmallerHint);
+  // When the user picks a prompt, we mirror it as a placeholder so they
+  // can see the framing while they type the smaller version.
+  const [breakdownPlaceholder, setBreakdownPlaceholder] = useState<string | null>(null);
+  const BREAKDOWN_PROMPTS = [
+    { id: 'tiniest', label: "What's the tiniest first step?",          hint: 'e.g. "Open the deck and write the first slide title"' },
+    { id: 'tenmin',  label: 'Could it be done in 10–15 minutes?',      hint: 'e.g. "Choose 3 hero images for the homepage"' },
+    { id: 'unblock', label: "What's the one thing blocking you?",      hint: 'e.g. "Decide on the colour palette so I can start"' },
+  ];
   // Session length in minutes. Free text — bounded by useSessionLimits()
   // below. Default 50 = Pomodoro+ baseline. Capped on submit.
   const limits = useSessionLimits();
@@ -547,11 +569,56 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                 value={goalText}
                 onChange={setGoalText}
                 onSubmit={handleStart}
-                placeholder="e.g. Finish the first draft of the pitch deck"
+                placeholder={breakdownPlaceholder ?? 'e.g. Finish the first draft of the pitch deck'}
               />
-              <p className="mt-1.5 text-xs stitch-text-secondary px-1">
-                Be specific — you'll report back when you're done.
-              </p>
+              <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
+                <p className="text-xs stitch-text-secondary">
+                  Be specific — you'll report back when you're done.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowBreakdown((v) => !v)}
+                  className="text-[11px] font-bold uppercase tracking-wider text-violet-600 hover:text-violet-700 whitespace-nowrap shrink-0"
+                  title="Help break this down into something smaller"
+                >
+                  {showBreakdown ? '✕ Hide' : '↓ Make this smaller'}
+                </button>
+              </div>
+
+              {/* Breakdown panel — three forcing-function prompts that
+                  reliably reduce task-initiation friction for ADHD
+                  users. Click a prompt → its example becomes the
+                  placeholder so the user sees framing while typing the
+                  smaller version. */}
+              {showBreakdown && (
+                <div className="mt-3 rounded-2xl bg-violet-50 ring-1 ring-violet-100 p-3 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-violet-700">
+                    Pick the angle that helps
+                  </p>
+                  {BREAKDOWN_PROMPTS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setBreakdownPlaceholder(p.hint);
+                        // Don't auto-clear goalText — preserve what they typed
+                        // so they can edit it down rather than rewriting.
+                      }}
+                      className="w-full text-left rounded-xl bg-white hover:bg-violet-100/40 ring-1 ring-violet-100 px-3 py-2 transition-colors"
+                    >
+                      <p className="text-xs font-extrabold text-violet-900 leading-tight">
+                        {p.label}
+                      </p>
+                      <p className="text-[10px] text-violet-700/70 mt-0.5 leading-snug">
+                        {p.hint}
+                      </p>
+                    </button>
+                  ))}
+                  <p className="text-[10px] text-violet-700/60 leading-snug pt-1">
+                    Tip: a session that finishes a tiny thing beats one that almost-but-not-quite finishes a big thing.
+                  </p>
+                </div>
+              )}
 
               {/* Save-as-task toggle — only shown when there's something to save */}
               {goalText.trim() && (

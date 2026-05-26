@@ -404,8 +404,13 @@ export function DashboardPage() {
   // partial week and offers a softer ask) so it wins when both apply.
   const firstWeekShowing = useFirstWeekIntentionsEligible();
 
-  function openDeclare(initialGoal?: string) {
+  // Tracks whether to open DeclareSessionModal with the "Make this smaller"
+  // breakdown panel already expanded. Set by Quick Restart so returning
+  // users land directly on the friction-reduction prompts.
+  const [declareSmallerHint, setDeclareSmallerHint] = useState(false);
+  function openDeclare(initialGoal?: string, opts?: { smallerHint?: boolean }) {
     setDeclareGoal(initialGoal);
+    setDeclareSmallerHint(!!opts?.smallerHint);
     setShowDeclare(true);
   }
 
@@ -529,7 +534,7 @@ export function DashboardPage() {
           {momentum?.isReturning && user?.id && (
             <QuickRestartCard
               userId={user.id}
-              onQuickStart={() => { setTemplateDuration(25); openDeclare(); }}
+              onQuickStart={() => { setTemplateDuration(25); openDeclare(undefined, { smallerHint: true }); }}
             />
           )}
 
@@ -596,9 +601,10 @@ export function DashboardPage() {
       {/* Modals */}
       {showDeclare && (
         <DeclareSessionModal
-          onClose={() => { setShowDeclare(false); setDeclareGoal(undefined); setTemplateDuration(undefined); }}
+          onClose={() => { setShowDeclare(false); setDeclareGoal(undefined); setTemplateDuration(undefined); setDeclareSmallerHint(false); }}
           initialGoal={declareGoal}
           initialDuration={templateDuration}
+          startWithSmallerHint={declareSmallerHint}
         />
       )}
       {showSchedule && <ScheduleSessionModal onClose={() => setShowSchedule(false)} />}
