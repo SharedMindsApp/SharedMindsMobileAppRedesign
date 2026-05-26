@@ -91,30 +91,51 @@ export function ProjectDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [taskSubmitting, setTaskSubmitting] = useState(false);
 
+  // Progressive load — paint the hero as soon as the project row arrives,
+  // then fill in tasks / sessions / milestones / phases as each query
+  // resolves. Previously a single Promise.all over 6 queries gated EVERY
+  // section until the slowest one finished.
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     setLoading(true);
 
+    // Critical path: project + members. Hero needs project, the member
+    // avatar strip needs members. Resolve quickly together.
     Promise.all([
       ProjectService.getProjectById(projectId),
       ProjectService.getProjectMembers(projectId),
-      TaskService.getTasksByProject(projectId),
-      fetchProjectSessions(projectId),
-      ProjectService.listMilestones(projectId),
-      ProjectService.listPhases(projectId),
     ])
-      .then(([p, m, t, s, ms, ph]) => {
+      .then(([p, m]) => {
         if (cancelled) return;
         setProject(p);
         setMembers(m);
-        setTasks(t);
-        setSessions(s);
+      })
+      .catch((err) => console.error('[ProjectDetailPage] project load failed:', err))
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    // Independent: tasks (can be many rows).
+    TaskService.getTasksByProject(projectId)
+      .then((t) => { if (!cancelled) setTasks(t); })
+      .catch((err) => console.error('[ProjectDetailPage] tasks load:', err));
+
+    // Independent: sessions (can be many rows).
+    fetchProjectSessions(projectId)
+      .then((s) => { if (!cancelled) setSessions(s); })
+      .catch((err) => console.error('[ProjectDetailPage] sessions load:', err));
+
+    // Independent: milestones + phases (small, scoped). Paired because the
+    // Goals tab needs both together.
+    Promise.all([
+      ProjectService.listMilestones(projectId),
+      ProjectService.listPhases(projectId),
+    ])
+      .then(([ms, ph]) => {
+        if (cancelled) return;
         setMilestones(ms);
         setPhases(ph);
       })
-      .catch((err) => console.error('[ProjectDetailPage] load failed:', err))
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch((err) => console.error('[ProjectDetailPage] goals load:', err));
 
     return () => { cancelled = true; };
   }, [projectId]);
@@ -550,20 +571,22 @@ export function ProjectDetailPage() {
             <button
               type="button"
               onClick={() => setDeclareOpen(true)}
-              className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-extrabold transition-all active:scale-[0.98] bg-gradient-to-r ${color.gradient}`}
+              className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-extrabold transition-all active:scale-[0.98] bg-gradient-to-r ${color.gradient} whitespace-nowrap`}
               style={{ boxShadow: `0 4px 14px ${color.hex}40` }}
             >
               <Play size={14} fill="currentColor" strokeWidth={0} />
-              Start a session
+              <span className="hidden sm:inline">Start a session</span>
+              <span className="sm:hidden">Start</span>
             </button>
             <button
               type="button"
               onClick={() => navigate('/sessions')}
               title="Browse the public session calendar"
-              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-extrabold transition-all active:scale-[0.98] bg-surface-container-low stitch-text-primary hover:bg-surface-container ring-1 ring-surface-container"
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-extrabold transition-all active:scale-[0.98] bg-surface-container-low stitch-text-primary hover:bg-surface-container ring-1 ring-surface-container whitespace-nowrap"
             >
               <Calendar size={14} />
-              Find a session
+              <span className="hidden sm:inline">Find a session</span>
+              <span className="sm:hidden">Find</span>
             </button>
             <button
               type="button"
@@ -599,7 +622,7 @@ export function ProjectDetailPage() {
             type="button"
             onClick={() => setTab(id)}
             title={hint}
-            className={`shrink-0 flex-1 min-w-[88px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-full text-xs font-semibold transition-all ${
+            className={`shrink-0 flex-1 min-w-0 sm:min-w-[88px] flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
               tab === id ? 'bg-white shadow-sm text-primary' : 'stitch-text-secondary hover:stitch-text-primary'
             }`}
           >
@@ -1514,12 +1537,18 @@ function KanbanTab({
       )}
 
       {/* Three columns side-by-side on desktop, stacked on mobile.
-          Hidden when there are zero tasks (the empty-state above
-          takes over to avoid showing three empty columns). */}
+          On mobile we HIDE empty columns to reduce vertical scroll —
+          on desktop they're kept so the layout stays rhythmic.
+          Empty-state for fully empty Kanban is handled above. */}
       {tasks.length > 0 && (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {KANBAN_COLUMNS.map((col) => (
-          <div key={col.key} className={`rounded-2xl ${col.tint} p-3 min-h-[200px]`}>
+          <div
+            key={col.key}
+            className={`rounded-2xl ${col.tint} p-3 min-h-[200px] ${
+              grouped[col.key].length === 0 ? 'hidden sm:block' : ''
+            }`}
+          >
             <div className="flex items-center justify-between mb-2 px-1">
               <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest">
                 {col.label}
