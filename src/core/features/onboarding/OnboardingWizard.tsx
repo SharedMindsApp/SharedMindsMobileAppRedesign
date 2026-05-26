@@ -874,6 +874,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   const [suggestingTasks, setSuggestingTasks] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // ── Clarifying questions (AI's "need more context" path) ──────
+  // When the roadmap call returns questions instead of milestones, we
+  // stash them here and render an inline form. On submit we re-call the
+  // edge function with the typed answers as `clarifications`.
+  type AiQuestion = { id: string; question: string; max_chars: number; why?: string };
+  const [pendingQuestions, setPendingQuestions] = useState<AiQuestion[] | null>(null);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+
   // ── "Use your own AI" prompt helper ────────────────────────────
   // A copy-able prompt the user pastes into ChatGPT/Claude/etc — which
   // already has rich context from their existing chats — to produce a
@@ -1138,9 +1146,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   // the rows as-is and surface a small error — the user can still type
   // manually and proceed.
 
-  /** Call the edge function in hierarchical mode and unpack milestones+phases
-   *  into the nested wizard state. Replaces the older flat-phases path. */
-  const suggestRoadmap = useCallback(async () => {
+  /** Call the edge function in hierarchical mode and unpack the response.
+   *  Two possible outcomes:
+   *    1. AI returned milestones → populate state, clear any pending questions.
+   *    2. AI returned questions → show the questions card; user answers and
+   *       this fn is called again with the clarifications array. */
+  const suggestRoadmap = useCallback(async (
+    clarifications?: Array<{ question: string; answer: string }>,
+  ) => {
     if (suggestingPhases) return;
     setSuggestingPhases(true);
     setAiError(null);
@@ -1162,6 +1175,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             industries: industries,
             skills: skills,
           },
+          ...(clarifications && clarifications.length > 0 ? { clarifications } : {}),
         },
       });
       if (error) {
@@ -1173,6 +1187,37 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         console.error('[suggestRoadmap] edge function error', { error, detail });
         throw new Error(detail ?? error.message ?? 'Unknown error');
       }
+
+      // ── Branch 1: AI is asking for more context ───────────────
+      // It returned questions instead of milestones. Stash them and
+      // render the inline question form. The user's typed answers feed
+      // back through this same function as `clarifications`.
+      const rawQuestions: Array<any> = data?.questions ?? [];
+      if (rawQuestions.length > 0) {
+        const cleaned: AiQuestion[] = rawQuestions
+          .filter((q) => q?.question && typeof q.question === 'string')
+          .slice(0, 3)
+          .map((q, i) => ({
+            id: typeof q.id === 'string' ? q.id : `q${i + 1}`,
+            question: q.question.trim(),
+            max_chars: typeof q.max_chars === 'number'
+              ? Math.max(40, Math.min(500, Math.round(q.max_chars)))
+              : 200,
+            why: typeof q.why === 'string' ? q.why.trim() : undefined,
+          }));
+        if (cleaned.length > 0) {
+          setPendingQuestions(cleaned);
+          // Reset previously-typed answers so the form starts fresh.
+          setQuestionAnswers({});
+          return; // don't fall through to milestone path
+        }
+      }
+
+      // ── Branch 2: AI returned milestones — populate roadmap ───
+      // Reaching this path means we have a usable roadmap; clear any
+      // stale question state from a previous round.
+      setPendingQuestions(null);
+      setQuestionAnswers({});
 
       type RawPhase = { title?: string; weight_pct?: number; already_done?: boolean };
       type RawMilestone = {
@@ -2481,7 +2526,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         {/* ── AI Suggest button ── */}
         <button
           type="button"
-          onClick={suggestRoadmap}
+          onClick={() => suggestRoadmap()}
           disabled={suggestingPhases || !projectTitle.trim()}
           className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] mb-4 ${
             suggestingPhases
@@ -2499,6 +2544,95 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
             {aiError}
           </p>
+        )}
+
+        {/* ── AI clarifying questions card ─────────────────────
+            Shown when the AI thinks it needs more context before
+            generating a roadmap. Each question is character-limited;
+            the submit button feeds the answers back as `clarifications`
+            on the next call, which forces the AI to produce milestones. */}
+        {pendingQuestions && pendingQuestions.length > 0 && (
+          <div
+            className="mb-4 rounded-2xl bg-gradient-to-br from-violet-50 to-fuchsia-50 ring-1 ring-violet-200 p-4"
+            style={{ animation: 'wizFadeUp 350ms cubic-bezier(0.16, 1, 0.3, 1) both' }}
+          >
+            <div className="flex items-start gap-2 mb-3">
+              <Sparkles size={14} className="text-violet-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-xs font-bold text-violet-900 mb-0.5">
+                  A few quick questions before I build the roadmap
+                </p>
+                <p className="text-[11px] text-violet-700/80 leading-snug">
+                  I'd rather ask than guess. Answer what you can — leave anything tricky blank.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setPendingQuestions(null); setQuestionAnswers({}); }}
+                className="shrink-0 w-6 h-6 rounded-full hover:bg-violet-100 flex items-center justify-center transition-colors"
+                aria-label="Dismiss questions"
+              >
+                <X size={11} className="text-violet-700" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {pendingQuestions.map((q, i) => {
+                const value = questionAnswers[q.id] ?? '';
+                const overLimit = value.length > q.max_chars;
+                return (
+                  <div key={q.id} style={{ animation: `wizFadeUp 280ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 80}ms both` }}>
+                    <label className="text-[11px] font-semibold text-violet-900 block mb-1 leading-snug">
+                      {q.question}
+                    </label>
+                    <textarea
+                      value={value}
+                      onChange={(e) => setQuestionAnswers((cur) => ({ ...cur, [q.id]: e.target.value }))}
+                      rows={2}
+                      maxLength={q.max_chars}
+                      placeholder="Your answer…"
+                      className="w-full px-3 py-2 rounded-lg bg-white text-xs stitch-text-primary placeholder:stitch-text-secondary border border-violet-200 focus:border-violet-400 outline-none focus:ring-2 focus:ring-violet-200 transition-all resize-none"
+                    />
+                    <div className="flex items-center justify-between mt-1 text-[10px]">
+                      <span className="text-violet-700/70 italic">
+                        {q.why ?? ' '}
+                      </span>
+                      <span className={`tabular-nums font-medium ${
+                        overLimit ? 'text-rose-600' : value.length > q.max_chars * 0.85 ? 'text-amber-600' : 'text-violet-700/70'
+                      }`}>
+                        {value.length}/{q.max_chars}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const clarifications = pendingQuestions
+                  .map((q) => ({ question: q.question, answer: (questionAnswers[q.id] ?? '').trim() }))
+                  .filter((c) => c.answer.length > 0);
+                if (clarifications.length === 0) {
+                  setAiError('Please answer at least one question before generating.');
+                  return;
+                }
+                suggestRoadmap(clarifications);
+              }}
+              disabled={suggestingPhases}
+              className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] ${
+                suggestingPhases
+                  ? 'bg-violet-100 text-violet-700 cursor-wait'
+                  : 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-500/30'
+              }`}
+            >
+              {suggestingPhases
+                ? <><Loader2 size={14} className="animate-spin" /> Building roadmap…</>
+                : <><Wand2 size={12} /> Generate roadmap with my answers</>
+              }
+            </button>
+          </div>
         )}
 
         {/* ── Milestone list ─────────────────────────────────── */}

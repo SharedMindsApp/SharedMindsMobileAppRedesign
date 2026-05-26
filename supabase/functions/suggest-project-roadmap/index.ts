@@ -48,6 +48,26 @@ interface RoadmapRequest {
   };
   /** For mode='tasks': the phases the user has confirmed. */
   phases?: string[];
+  /** Follow-up clarifications: when the AI previously returned questions
+   *  instead of milestones, this carries the user's typed answers back
+   *  in so the next call has the missing context. */
+  clarifications?: Array<{ question: string; answer: string }>;
+}
+
+/** Returned when the model needs more from the user before it can
+ *  generate a faithful roadmap. Each entry has a per-question character
+ *  cap so the UI can render counters and constrain input. */
+interface QuestionsResponse {
+  questions: Array<{
+    /** Stable id like 'q1', 'q2' — used as React keys + payload index. */
+    id: string;
+    /** The question shown to the user (12–25 words). */
+    question: string;
+    /** Max characters the user may type. Typically 80–250. */
+    max_chars: number;
+    /** Optional short rationale shown beneath the input ("we need this so we can…"). */
+    why?: string;
+  }>;
 }
 
 /** Hierarchical roadmap response — what mode='roadmap' returns. */
@@ -115,6 +135,18 @@ function systemPrompt(): string {
     '• Concrete > generic. "Lock pitch deck narrative with co-founder" beats "Refine pitch". "Send second-act draft to producer" beats "Get feedback".',
     '• Short phrases. 3–8 words per phase title. 5–12 words per task. No filler.',
     '',
+    'HONESTY OVER FABRICATION (roadmap mode only):',
+    'If the context the user has given you is too thin to confidently generate milestones — e.g. the brain dump is empty or under ~40 words, the project title is generic ("My project", "Side hustle", "New idea"), no project type was selected, or you would be guessing the audience/timeline/current stage — return CLARIFYING QUESTIONS instead of fabricating a plausible-but-wrong roadmap.',
+    '',
+    'Ask 1–3 SHARP questions only. Each question should:',
+    '  • Be 12–25 words',
+    '  • Set max_chars based on the answer size you need (typically 80–250)',
+    '  • Include a short "why" so the user knows what their answer unlocks',
+    '',
+    'Prefer milestones if you have any reasonable grounding. The user just gave you a brain dump and a project type — only ask if you genuinely cannot do better than guessing.',
+    '',
+    'If clarifications have already been provided in the user message, you MUST return milestones (do not ask more questions).',
+    '',
     'You always respond with valid JSON in the exact shape requested.',
   ].join('\n');
 }
@@ -174,6 +206,20 @@ function userPrompt(req: RoadmapRequest): string {
     lines.push(`INDUSTRIES: ${ctx.industries.join(', ')}`);
   }
 
+  // Any follow-up answers the user has typed. When this block is present
+  // the model is forbidden from asking more questions — it must produce
+  // milestones.
+  if (req.clarifications && req.clarifications.length > 0) {
+    lines.push('');
+    lines.push('FOLLOW-UP CLARIFICATIONS (the user answered your earlier questions — use these now):');
+    for (const c of req.clarifications) {
+      lines.push(`  Q: ${c.question}`);
+      lines.push(`  A: ${c.answer}`);
+    }
+    lines.push('');
+    lines.push('Now produce the milestones. Do NOT ask more questions.');
+  }
+
   lines.push('');
   if (req.mode === 'roadmap') {
     lines.push('Generate a HIERARCHICAL roadmap: 3–5 milestones (the destinations / major checkpoints), and 2–5 phases nested under each milestone (the work between checkpoints).');
@@ -199,7 +245,10 @@ function userPrompt(req: RoadmapRequest): string {
     lines.push('');
     lines.push('IMPORTANT: do NOT compress everything shipped into one milestone — split foundational work into 1-3 distinct shipped milestones with named-out phases. The whole point is restoring fidelity that a flat list collapses.');
     lines.push('');
-    lines.push('Return JSON: { "milestones": [{ "title": "...", "weight_pct": 25, "already_done": true, "why": "...", "phases": [{ "title": "...", "weight_pct": 50, "already_done": true }] }] }');
+    lines.push('Return JSON in ONE of these two shapes:');
+    lines.push('  EITHER milestones: { "milestones": [{ "title": "...", "weight_pct": 25, "already_done": true, "why": "...", "phases": [{ "title": "...", "weight_pct": 50, "already_done": true }] }] }');
+    lines.push('  OR questions (when context is too thin): { "questions": [{ "id": "q1", "question": "What stage is this at — discovery, building, or polishing for launch?", "max_chars": 150, "why": "We need this to pick the right phase shape" }] }');
+    lines.push('  Never return both. Prefer milestones if you have any reasonable grounding.');
   } else if (req.mode === 'phases') {
     lines.push('Generate 3–6 phases — the macro checkpoints on the way to done.');
     lines.push('');
@@ -261,7 +310,12 @@ Deno.serve(async (req: Request) => {
   // OpenRouter validates every model in the array upfront — if ANY slug
   // is invalid the entire request 400s, so we keep the list clean and
   // current.
-  let result: RoadmapResponse | PhasesResponse | TasksResponse | null = null;
+  let result:
+    | RoadmapResponse
+    | QuestionsResponse
+    | PhasesResponse
+    | TasksResponse
+    | null = null;
   let lastErr: unknown = null;
 
   try {
