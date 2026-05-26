@@ -119,9 +119,12 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
     forceSoloMode ? 'solo' : 'one_on_one'
   );
-  // Solo-only sub-toggle: when ON, user joins the shared body-double Daily
-  // room with camera mandatory + mic locked off. Off = pure private solo.
+  // Solo-only sub-toggles. Mutually exclusive: a user picks one of
+  //   • Just me (default, neither toggled)
+  //   • Body double (shared silent video room)
+  //   • Real world (no screen, mobile chrome, offline-friendly)
   const [bodyDouble, setBodyDouble] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
@@ -290,7 +293,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         sessionMode,
         // Solo has no audio room — quiet mode is meaningless there
         quietMode: sessionMode === 'solo' ? false : quietMode,
-        bodyDouble: sessionMode === 'solo' ? bodyDouble : false,
+        bodyDouble: sessionMode === 'solo' && !isOffline ? bodyDouble : false,
+        isOffline: sessionMode === 'solo' ? isOffline : false,
       });
       // Bump the linked task to 'active' + increment sessions_count.
       // Fire-and-forget — the DB write isn't worth blocking navigation on.
@@ -970,12 +974,16 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
         )}
 
-        {/* ── Body-double toggle (Solo only) ────────────────────── */}
+        {/* ── Solo sub-toggles: Body double + Real world ──────────
+            Mutually exclusive. Picking one forces the other off. */}
         {sessionMode === 'solo' && (
-          <div className="shrink-0 px-5 pt-3">
+          <div className="shrink-0 px-5 pt-3 space-y-2">
             <button
               type="button"
-              onClick={() => setBodyDouble((v) => !v)}
+              onClick={() => {
+                setBodyDouble((v) => !v);
+                if (!bodyDouble) setIsOffline(false);
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
                 bodyDouble
                   ? 'bg-violet-500/10 ring-2 ring-violet-400/30'
@@ -1002,6 +1010,46 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               }`}>
                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
                   bodyDouble ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </div>
+            </button>
+
+            {/* Real-world / offline session — for tasks away from the
+                screen (allotment, exercise, household, parenting prep).
+                Switches the active session UI to a phone-optimised chrome
+                and fires a Web Notification when the timer completes. */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsOffline((v) => !v);
+                if (!isOffline) setBodyDouble(false);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
+                isOffline
+                  ? 'bg-emerald-500/10 ring-2 ring-emerald-400/30'
+                  : 'bg-surface-container-low hover:bg-surface-container'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                isOffline ? 'bg-emerald-500 text-white' : 'bg-white stitch-text-secondary'
+              }`}>
+                <Leaf size={14} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold stitch-text-primary leading-tight">
+                  Real world · away from screen {isOffline && <span className="text-emerald-600">· on</span>}
+                </p>
+                <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
+                  {isOffline
+                    ? "We'll ping your phone when the timer's up. Walk away — your session keeps running."
+                    : 'For gardening, exercise, errands — anything that isn\'t at your screen.'}
+                </p>
+              </div>
+              <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                isOffline ? 'bg-emerald-500' : 'bg-surface-container'
+              }`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                  isOffline ? 'translate-x-4' : 'translate-x-0'
                 }`} />
               </div>
             </button>

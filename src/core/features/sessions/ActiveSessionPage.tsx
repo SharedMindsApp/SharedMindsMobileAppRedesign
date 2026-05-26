@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -534,7 +534,8 @@ export function ActiveSessionPage() {
             goal={currentGoal}
             secondsRemaining={timerSecondsRemaining}
             totalSeconds={totalSeconds}
-            hideAmbientStrip={!!session.body_double}
+            hideAmbientStrip={!!session.body_double || !!session.is_offline}
+            isOffline={!!session.is_offline}
           />
 
           {/* Body-double mode: silent video grid sidebar.
@@ -755,6 +756,7 @@ function SoloFocusView({
   secondsRemaining,
   totalSeconds,
   hideAmbientStrip = false,
+  isOffline = false,
 }: {
   goal: string;
   secondsRemaining: number;
@@ -762,6 +764,10 @@ function SoloFocusView({
   /** Hide the avatars-only ambient peers strip — used when body-double
       mode is on and the silent video grid already provides presence. */
   hideAmbientStrip?: boolean;
+  /** Real-world / away-from-screen mode. Renders a phone-optimised
+      chrome: bigger timer text, no animated focus circle (which only
+      makes sense on a glance back), warmer language. */
+  isOffline?: boolean;
 }) {
   const progress = totalSeconds > 0 ? Math.max(0, 1 - secondsRemaining / totalSeconds) : 0;
   const elapsedMin = Math.max(0, Math.floor((totalSeconds - secondsRemaining) / 60));
@@ -779,6 +785,70 @@ function SoloFocusView({
       : progress < 0.9
       ? 'In the zone'
       : 'Bring it home';
+
+  // Web Notifications when offline — fire a phone notification at timer
+  // zero so the user knows their session is up even with the app
+  // backgrounded. Request permission lazily on entry; degrade silently
+  // if denied (we still always show the in-app debrief). One-shot guard
+  // prevents repeated notifications if the timer re-enters 0 across
+  // re-renders.
+  const notifiedRef = useRef(false);
+  useEffect(() => {
+    if (!isOffline) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'default') {
+      void Notification.requestPermission().catch(() => {});
+    }
+  }, [isOffline]);
+  useEffect(() => {
+    if (!isOffline) return;
+    if (notifiedRef.current) return;
+    if (secondsRemaining > 0) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'granted') return;
+    notifiedRef.current = true;
+    try {
+      new Notification('Session complete', {
+        body: goal ? `Done with: ${goal}` : 'Time to come back and log your progress.',
+        icon: '/favicon-192.png',
+        tag: 'sharedminds-session-complete',
+        requireInteraction: false,
+      });
+    } catch { /* ignore — desktop browsers can be picky about icons */ }
+  }, [isOffline, secondsRemaining, goal]);
+
+  // ── Real-world / offline chrome ─────────────────────────────────────
+  // Stripped-down phone-first layout: warm gradient, big tabular timer,
+  // no focus circle (it's a glance-back surface, not a watch-the-counter
+  // experience). Goal pinned at the top so it's the first thing the
+  // user sees when they pop their phone back on.
+  if (isOffline) {
+    return (
+      <div className="flex-1 relative min-h-0 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-teal-900 to-emerald-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(16,185,129,0.18),transparent_60%)]" />
+        <div className="relative h-full flex flex-col items-center justify-center px-6 py-8 text-center gap-5">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30 text-emerald-200 text-[10px] font-bold uppercase tracking-widest">
+            <Leaf size={11} /> Real world
+          </span>
+          <p className="text-base sm:text-lg font-semibold text-white/90 leading-snug max-w-md">
+            {goal || 'Focusing offline'}
+          </p>
+          <p className="text-6xl sm:text-7xl font-extrabold text-white tabular-nums leading-none">
+            {formatRemaining(secondsRemaining)}
+          </p>
+          <p className="text-[11px] text-white/55 max-w-xs leading-snug">
+            Put your phone down. We'll ping you when the timer's up — then come back to log how it went.
+          </p>
+          {elapsedMin > 0 && (
+            <p className="text-[10px] text-white/40 uppercase tracking-widest">
+              {elapsedMin} / {totalMin} min in
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 relative min-h-0 overflow-hidden">

@@ -38,6 +38,13 @@ export interface StartCommunitySessionInput {
    * doublers' cameras silently. Requires camera permission.
    */
   bodyDouble?: boolean;
+  /**
+   * Real-world / offline session — user is away from the screen entirely.
+   * UI flips to phone-optimised chrome (no big timer circle, no Jitsi),
+   * and Web Notifications fire when the timer completes. Implies solo
+   * mode. Disables body_double.
+   */
+  isOffline?: boolean;
 }
 
 export async function startCommunitySession(
@@ -62,7 +69,10 @@ export async function startCommunitySession(
       project_id: input.projectId ?? null,
       session_mode: input.sessionMode ?? 'group',
       quiet_mode: input.quietMode ?? false,
-      body_double: input.sessionMode === 'solo' && !!input.bodyDouble,
+      // Body-double and offline are mutually exclusive solo variants.
+      // Offline takes precedence — if both are passed, body_double off.
+      body_double: input.sessionMode === 'solo' && !input.isOffline && !!input.bodyDouble,
+      is_offline:  input.sessionMode === 'solo' && !!input.isOffline,
       drift_count: 0,
       distraction_count: 0,
     })
