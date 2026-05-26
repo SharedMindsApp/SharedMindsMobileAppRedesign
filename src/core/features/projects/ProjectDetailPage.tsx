@@ -310,10 +310,14 @@ export function ProjectDetailPage() {
             <button
               type="button"
               onClick={() => setEditorOpen(true)}
-              className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors backdrop-blur-sm ${
+                heroTextDark
+                  ? 'bg-black/10 hover:bg-black/20 ring-1 ring-black/10'
+                  : 'bg-white/20 hover:bg-white/30'
+              }`}
               aria-label="Edit project"
             >
-              <Pencil size={13} className="text-white" />
+              <Pencil size={13} className={heroTextDark ? 'text-stitch-text-primary' : 'text-white'} />
             </button>
           </div>
 
