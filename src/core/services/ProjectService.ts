@@ -19,8 +19,14 @@ export interface Project {
     /** Focal point of the cover image (0-100, percent). Default centred. */
     cover_x: number;
     cover_y: number;
-    /** Zoom multiplier × 100 (100 = cover-fit baseline, 200 = 2x). */
+    /** Zoom multiplier × 100. Range 50–300. 100 = cover/contain baseline. */
     cover_zoom: number;
+    /** 'cover' = crop to fill the frame. 'contain' = fit whole image,
+     *  bands painted with cover_bg_color. */
+    cover_fit: 'cover' | 'contain';
+    /** Hex colour painted behind the image when the fit leaves bands.
+     *  Null = no background (gradient/surface tone shows through). */
+    cover_bg_color: string | null;
     created_at: string;
     updated_at: string;
 }

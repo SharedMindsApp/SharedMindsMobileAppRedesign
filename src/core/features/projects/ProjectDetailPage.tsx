@@ -261,9 +261,21 @@ export function ProjectDetailPage() {
                 x={project.cover_x}
                 y={project.cover_y}
                 zoom={project.cover_zoom}
+                fit={project.cover_fit}
+                bgColor={project.cover_bg_color}
                 className="absolute inset-0"
               />
-              <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/40 to-black/60 pointer-events-none" />
+              {/* Darken overlay for title legibility. In contain mode the
+                  user's chosen bgColor is meant to show through, so we
+                  use a lighter overlay; in cover (full-bleed photo) we go
+                  heavier because contrast against image content matters. */}
+              <div
+                className={`absolute inset-0 pointer-events-none ${
+                  project.cover_fit === 'contain'
+                    ? 'bg-gradient-to-br from-black/10 via-black/15 to-black/30'
+                    : 'bg-gradient-to-br from-black/30 via-black/40 to-black/60'
+                }`}
+              />
             </>
           )}
           <div className="relative z-10">

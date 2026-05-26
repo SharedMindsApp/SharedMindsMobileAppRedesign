@@ -63,6 +63,8 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
   const [coverX, setCoverX] = useState<number>(project?.cover_x ?? 50);
   const [coverY, setCoverY] = useState<number>(project?.cover_y ?? 50);
   const [coverZoom, setCoverZoom] = useState<number>(project?.cover_zoom ?? 100);
+  const [coverFit, setCoverFit] = useState<'cover' | 'contain'>(project?.cover_fit ?? 'cover');
+  const [coverBgColor, setCoverBgColor] = useState<string | null>(project?.cover_bg_color ?? null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +135,8 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
           cover_x: coverX,
           cover_y: coverY,
           cover_zoom: coverZoom,
+          cover_fit: coverFit,
+          cover_bg_color: coverBgColor,
         });
       }
       await refreshProjects();
@@ -279,10 +283,14 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
                     x={coverX}
                     y={coverY}
                     zoom={coverZoom}
+                    fit={coverFit}
+                    bgColor={coverBgColor}
                     onChange={(next) => {
                       setCoverX(next.x);
                       setCoverY(next.y);
                       setCoverZoom(next.zoom);
+                      setCoverFit(next.fit);
+                      setCoverBgColor(next.bgColor);
                     }}
                   />
                   <div className="flex gap-2">

@@ -217,6 +217,8 @@ function ProjectCard({
           x={project.coverX}
           y={project.coverY}
           zoom={project.coverZoom}
+          fit={project.coverFit}
+          bgColor={project.coverBgColor}
           className="h-16 w-full"
           alt=""
         />

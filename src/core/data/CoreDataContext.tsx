@@ -43,6 +43,10 @@ export type CoreProject = {
   coverX: number;
   coverY: number;
   coverZoom: number;
+  /** 'cover' = crop to fill. 'contain' = fit whole image, show bands. */
+  coverFit: 'cover' | 'contain';
+  /** Hex colour painted behind the image when bands show; null = none. */
+  coverBgColor: string | null;
 };
 
 export type CoreTask = {
@@ -385,6 +389,8 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           coverX: p.cover_x ?? 50,
           coverY: p.cover_y ?? 50,
           coverZoom: p.cover_zoom ?? 100,
+          coverFit: (p.cover_fit ?? 'cover') as 'cover' | 'contain',
+          coverBgColor: p.cover_bg_color ?? null,
         };
       });
 
