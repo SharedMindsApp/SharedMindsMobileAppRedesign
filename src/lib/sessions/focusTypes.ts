@@ -35,6 +35,12 @@ export interface FocusSession {
   target_end_time: string | null;
   goal_minutes: number | null;
   ended_at?: string | null;
+  /** Set by the host's End button OR the timer-zero auto-trigger. Once
+      non-null, every participant's client opens the debrief overlay. */
+  debrief_started_at?: string | null;
+  /** Solo body-double mode: silent video coworking in a shared room.
+      Only meaningful when session_mode = 'solo'. */
+  body_double?: boolean;
   created_at: string;
   updated_at: string;
   // Community session fields

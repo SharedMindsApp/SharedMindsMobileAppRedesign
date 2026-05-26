@@ -1,13 +1,13 @@
 /**
- * ConnectionsPage — /connections
+ * ConnectionsPage — /people and /connections (same page)
  *
  * Three tabs:
+ *   * Discover — browse the community (embedded MembersDirectoryPage)
  *   * Connected — your existing connections (Message + Remove)
  *   * Requests — incoming requests (Accept)
- *   * Discover — link to /people directory
  *
- * The Discover tab now lives at /people (full member browser); this page
- * stays focused on managing your existing relationships.
+ * People and connections belong together — one is how you find them, the
+ * others is what happens once you do.
  */
 
 import { useEffect, useState } from 'react';
@@ -25,6 +25,8 @@ import {
 import { getOrCreateDm, DmPrivacyError } from '../../services/MessageService';
 import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
+import { MembersDirectoryPage } from '../people/MembersDirectoryPage';
+import { WantedSkillsCard } from '../people/WantedSkillsCard';
 
 const AVATAR_COLORS = [
   'bg-violet-100 text-violet-700',
@@ -40,11 +42,10 @@ function avatarClass(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-type Tab = 'connected' | 'requests';
+type Tab = 'discover' | 'connected' | 'requests';
 
 export function ConnectionsPage() {
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('connected');
+  const [tab, setTab] = useState<Tab>('discover');
   const [requests, setRequests] = useState<ConnectionWithProfile[]>([]);
   const [connections, setConnections] = useState<ConnectionWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,8 +54,10 @@ export function ConnectionsPage() {
     Promise.all([fetchPendingRequests(), fetchConnections()]).then(([reqs, conns]) => {
       setRequests(reqs);
       setConnections(conns);
-      // Auto-jump to requests if there are any
+      // Auto-jump: requests first if any pending, then connected if you have any,
+      // else stay on discover as the default landing tab.
       if (reqs.length > 0) setTab('requests');
+      else if (conns.length > 0) setTab('connected');
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -72,21 +75,15 @@ export function ConnectionsPage() {
   return (
     <div className="space-y-5">
       <PageGreeting
-        greeting="Connections"
-        subtitle="People you've worked alongside."
-        actions={
-          <button
-            type="button"
-            onClick={() => navigate('/people')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container transition-colors"
-          >
-            <Search size={11} /> Find people
-          </button>
-        }
+        greeting="People"
+        subtitle="Find members, manage your network."
       />
 
       {/* Tabs */}
       <div className="flex p-1 bg-surface-container-low rounded-full gap-1">
+        <TabBtn active={tab === 'discover'} onClick={() => setTab('discover')}>
+          <Search size={11} /> Discover
+        </TabBtn>
         <TabBtn active={tab === 'connected'} onClick={() => setTab('connected')}>
           <Users size={11} /> Connected · {connections.length}
         </TabBtn>
@@ -95,7 +92,12 @@ export function ConnectionsPage() {
         </TabBtn>
       </div>
 
-      {loading ? (
+      {tab === 'discover' ? (
+        <div className="space-y-5">
+          <WantedSkillsCard />
+          <MembersDirectoryPage embedded />
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 size={20} className="animate-spin stitch-text-secondary" />
         </div>
@@ -124,7 +126,7 @@ export function ConnectionsPage() {
           ))}
         </div>
       ) : (
-        <EmptyState onBrowse={() => navigate('/people')} />
+        <EmptyState onBrowse={() => setTab('discover')} />
       )}
     </div>
   );
@@ -186,7 +188,9 @@ function RequestCard({ conn, onAccept }: { conn: ConnectionWithProfile; onAccept
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold stitch-text-primary truncate">{conn.display_name}</p>
-          <p className="text-xs stitch-text-secondary">Wants to connect</p>
+          <p className="text-xs stitch-text-secondary">
+            {conn.note ? 'Says:' : 'Wants to connect'}
+          </p>
         </div>
         <button
           type="button"
@@ -198,6 +202,13 @@ function RequestCard({ conn, onAccept }: { conn: ConnectionWithProfile; onAccept
           Accept
         </button>
       </div>
+      {/* Personal note from the requester. Quoted + indented so it visually
+          reads as their words, not the requester's. */}
+      {conn.note && (
+        <p className="mt-2.5 pl-13 text-xs stitch-text-primary leading-snug italic">
+          "{conn.note}"
+        </p>
+      )}
     </SurfaceCard>
   );
 }

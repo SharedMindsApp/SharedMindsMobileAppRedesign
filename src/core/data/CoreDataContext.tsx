@@ -49,6 +49,15 @@ export type CoreTask = {
   priority: 'high' | 'medium' | 'low';
   dueLabel: string;
   done: boolean;
+  /** Set when this task is tracking a weekly intention — drives the picker badge. */
+  weeklyIntentionId?: string | null;
+  /** Last outcome from a debrief. Tasks marked 'partially' or 'something_came_up'
+      get pinned to the top of the picker as "continue from where you left off". */
+  lastSessionOutcome?: 'finished' | 'partially' | 'something_came_up' | 'no_answer' | null;
+  /** Timestamp of the last session for sort ordering of "continue" tasks. */
+  lastSessionAt?: string | null;
+  /** How many sessions have been worked on this task — drives "3 sessions logged" chip. */
+  sessionsCount?: number;
 };
 
 export type CoreResponsibility = {
@@ -134,6 +143,17 @@ type CoreDataContextValue = {
   addTaskAsync: (title: string, projectId?: string | null) => Promise<string>;
   /** Permanently deletes a task from the DB and removes it from local state. */
   deleteTaskAsync: (taskId: string) => Promise<void>;
+  /**
+   * Patch a task — title, project_id, weekly_intention_id, energy_level.
+   * Optimistic local update + DB write. Other fields can be added as the
+   * editor surfaces grow.
+   */
+  updateTaskAsync: (taskId: string, updates: {
+    title?: string;
+    projectId?: string | null;
+    weeklyIntentionId?: string | null;
+    energy?: CoreTask['energy'];
+  }) => Promise<void>;
   toggleResponsibility: (responsibilityId: string) => void;
   addActivityEntry: (title: string) => void;
   addParkedIdea: (text: string) => void;
@@ -399,7 +419,11 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           energy: t.energy_level === 'high' ? 'deep' : t.energy_level === 'medium' ? 'medium' : 'light',
           priority: t.priority,
           dueLabel: t.due_on ? new Date(t.due_on).toLocaleDateString() : 'Inbox',
-          done: t.status === 'done' || t.status === 'dropped'
+          done: t.status === 'done' || t.status === 'dropped',
+          weeklyIntentionId: t.weekly_intention_id ?? null,
+          lastSessionOutcome: t.last_session_outcome ?? null,
+          lastSessionAt: t.last_session_at ?? null,
+          sessionsCount: t.sessions_count ?? 0,
         }));
 
         // Restore active project from localStorage (validated by refreshProjects).
@@ -563,17 +587,75 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
         return realTask.id;
       },
       deleteTaskAsync: async (taskId) => {
-        // Optimistic remove — disappears immediately in the UI
-        setState((current) => ({
-          ...current,
-          tasks: current.tasks.filter((t) => t.id !== taskId),
-        }));
+        // Snapshot the task before optimistic removal so we can put it
+        // back if the DB delete fails (RLS, network error, etc.).
+        let snapshot: CoreTask | undefined;
+        setState((current) => {
+          snapshot = current.tasks.find((t) => t.id === taskId);
+          return {
+            ...current,
+            tasks: current.tasks.filter((t) => t.id !== taskId),
+          };
+        });
         try {
           await TaskService.deleteTask(taskId);
         } catch (err) {
           console.error('[CoreDataContext] deleteTaskAsync failed, restoring task:', err);
-          // Undo optimistic remove on failure by re-fetching tasks
-          // (simple: just log — next page load will restore from DB)
+          // Restore the snapshot so the UI doesn't pretend the row is gone
+          // until the next page-load refetch contradicts it.
+          if (snapshot) {
+            const t = snapshot;
+            setState((current) => ({
+              ...current,
+              tasks: current.tasks.some((x) => x.id === taskId)
+                ? current.tasks
+                : [...current.tasks, t],
+            }));
+          }
+          throw err;
+        }
+      },
+      updateTaskAsync: async (taskId, updates) => {
+        // Optimistic patch — reflect the edit immediately
+        const prevTask = state.tasks.find((t) => t.id === taskId);
+        setState((current) => ({
+          ...current,
+          tasks: current.tasks.map((t) =>
+            t.id !== taskId
+              ? t
+              : {
+                  ...t,
+                  ...(updates.title !== undefined ? { title: updates.title } : {}),
+                  ...(updates.projectId !== undefined ? { projectId: updates.projectId } : {}),
+                  ...(updates.weeklyIntentionId !== undefined ? { weeklyIntentionId: updates.weeklyIntentionId } : {}),
+                  ...(updates.energy !== undefined ? { energy: updates.energy } : {}),
+                },
+          ),
+        }));
+
+        // Map UI fields → DB columns
+        const dbUpdates: Record<string, unknown> = {};
+        if (updates.title !== undefined) dbUpdates.title = updates.title;
+        if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId;
+        if (updates.weeklyIntentionId !== undefined) dbUpdates.weekly_intention_id = updates.weeklyIntentionId;
+        if (updates.energy !== undefined) {
+          dbUpdates.energy_level =
+            updates.energy === 'deep' ? 'high'
+            : updates.energy === 'light' ? 'low'
+            : 'medium';
+        }
+
+        try {
+          await TaskService.updateTask(taskId, dbUpdates as Partial<import('../services/TaskService').Task>);
+        } catch (err) {
+          console.error('[CoreDataContext] updateTaskAsync failed, reverting:', err);
+          // Revert local change if the DB write failed
+          if (prevTask) {
+            setState((current) => ({
+              ...current,
+              tasks: current.tasks.map((t) => (t.id === taskId ? prevTask : t)),
+            }));
+          }
         }
       },
       toggleResponsibility: (responsibilityId) => {

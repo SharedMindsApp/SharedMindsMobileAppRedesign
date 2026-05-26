@@ -12,14 +12,18 @@
     "repair:pantry-quantities": "node scripts/repair-pantry-quantities.mjs"
   },
   "dependencies": {
+    "@daily-co/daily-js": "^0.90.0",
+    "@daily-co/daily-react": "^0.25.2",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.57.4",
     "date-fns": "^4.1.0",
+    "jotai": "^2.20.0",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.7",
     "react-router-dom": "^7.10.1",
     "react-zoom-pan-pinch": "^3.7.0",
     "recharts": "^3.6.0",

@@ -13,6 +13,7 @@ import {
   X,
   CalendarRange,
   ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { getOpenFlagCount } from '../../core/services/ModerationService';
 import { useAuth } from '../../core/auth/AuthProvider';
@@ -54,6 +55,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin',                     icon: LayoutDashboard, label: 'Dashboard',          badge: 0 },
     { path: '/admin/users',               icon: Users,           label: 'Users',              badge: 0 },
     { path: '/admin/moderation',          icon: ShieldCheck,     label: 'Moderation',         badge: openFlagCount },
+    { path: '/admin/safety',              icon: ShieldAlert,     label: 'Safety Escalation',  badge: 0 },
     { path: '/admin/recurring-sessions',  icon: CalendarRange,   label: 'Recurring Sessions', badge: 0 },
     { path: '/admin/analytics',           icon: BarChart3,       label: 'Analytics',          badge: 0 },
     { path: '/admin/logs',                icon: ScrollText,      label: 'Activity Logs',      badge: 0 },

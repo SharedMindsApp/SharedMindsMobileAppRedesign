@@ -24,8 +24,21 @@ interface ModerationRequest {
 
 interface ModerationResponse {
   approved: boolean;
+  /** Detailed verdict: which gate did the image fail at? */
+  status?: 'approved' | 'rejected_face' | 'rejected_safety' | 'error';
+  /** Short human-readable reason (shown to user when rejected) */
+  reason?: string;
+  /** Legacy field — kept for backward compatibility with old clients */
   reasons?: string[];
   error?: string;
+}
+
+interface FaceCheckResult {
+  is_real_photo_of_person: boolean;
+  single_person: boolean;
+  face_clearly_visible: boolean;
+  appropriate_for_profile: boolean;
+  reason: string;
 }
 
 interface OpenAIModerationResult {
@@ -149,9 +162,103 @@ Deno.serve(async (req: Request) => {
   }
 
   if (flaggedReasons.length > 0) {
-    console.log('Image rejected:', flaggedReasons.join(', '));
-    return ok({ approved: false, reasons: flaggedReasons });
+    console.log('Image rejected (safety):', flaggedReasons.join(', '));
+    return ok({
+      approved: false,
+      status: 'rejected_safety',
+      reason: 'Image flagged for inappropriate content.',
+      reasons: flaggedReasons,
+    });
   }
 
-  return ok({ approved: true });
+  // ── Face verification ─────────────────────────────────────────────────────
+  // Safety passed — now verify it's actually a real photograph of a single
+  // human face. This is what prevents people from staying anonymous behind
+  // cartoons, logos, AI-generated images, or pet photos.
+  let faceResult: FaceCheckResult;
+  try {
+    const visionResp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        // gpt-5.4-nano — cheapest OpenAI model with vision support
+        // ($0.20/1M input tokens). Plenty smart for a single-image
+        // face-presence check. Falls through to fail-open below if the
+        // model name ever drifts, so user uploads aren't blocked.
+        model: 'gpt-5.4-nano',
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You evaluate profile photos for a professional coworking platform. ' +
+              'Profile photos must be REAL photographs of a single, clearly identifiable human face. ' +
+              'Reject: illustrations, drawings, cartoons, anime, AI-generated faces, animals, ' +
+              'logos, scenery, multiple people, severely obscured faces (sunglasses + hat + mask), ' +
+              'photos of photos, screenshots from media. ' +
+              'Accept: clear unedited photographs of one real person\'s face, well-lit, suitable as a headshot.',
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text:
+                  'Reply ONLY with this JSON shape (no prose):\n' +
+                  '{\n' +
+                  '  "is_real_photo_of_person": boolean,\n' +
+                  '  "single_person": boolean,\n' +
+                  '  "face_clearly_visible": boolean,\n' +
+                  '  "appropriate_for_profile": boolean,\n' +
+                  '  "reason": "short explanation (max 80 chars)"\n' +
+                  '}',
+              },
+              { type: 'image_url', image_url: { url: body.image } },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!visionResp.ok) {
+      console.error('Face check non-200:', visionResp.status);
+      // Fail-open on infrastructure errors — better to approve a doubtful
+      // photo than to block legitimate users when our API is down.
+      return ok({
+        approved: true,
+        status: 'approved',
+        reason: 'Verification service unavailable; approved provisionally.',
+      });
+    }
+
+    const visionJson = await visionResp.json();
+    const content = visionJson?.choices?.[0]?.message?.content ?? '{}';
+    faceResult = JSON.parse(content) as FaceCheckResult;
+  } catch (e) {
+    console.error('Face check failed:', e);
+    return ok({
+      approved: true,
+      status: 'approved',
+      reason: 'Verification service error; approved provisionally.',
+    });
+  }
+
+  const facePassed =
+    faceResult.is_real_photo_of_person &&
+    faceResult.single_person &&
+    faceResult.face_clearly_visible;
+
+  if (!facePassed) {
+    console.log('Image rejected (face):', faceResult.reason);
+    return ok({
+      approved: false,
+      status: 'rejected_face',
+      reason: faceResult.reason || 'Please upload a clear photo of your face.',
+    });
+  }
+
+  return ok({ approved: true, status: 'approved' });
 });

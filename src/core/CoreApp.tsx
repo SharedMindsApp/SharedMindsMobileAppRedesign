@@ -13,7 +13,7 @@ import { MessageThreadPage } from './features/messages/MessageThreadPage';
 import { CommunityFeedPage } from './features/community/CommunityFeedPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { ProfileSettingsPage } from './features/profile/ProfileSettingsPage';
-import { OnboardingModal } from './features/onboarding/OnboardingModal';
+import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
 import { ProgressPage } from './features/progress/ProgressPage';
 import { TasksPage } from './features/tasks/TasksPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
@@ -34,6 +34,8 @@ import { AdminLogs } from '../components/admin/AdminLogs';
 import { AdminSettings } from '../components/admin/AdminSettings';
 import { AdminRecurringSessions } from '../components/admin/AdminRecurringSessions';
 import { AdminModerationQueue } from '../components/admin/AdminModerationQueue';
+import { AdminSafetyEscalation } from '../components/admin/AdminSafetyEscalation';
+import { TermsOfServicePage, PrivacyPolicyPage } from './features/legal/LegalPages';
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
 import { ViewAsProvider } from '../contexts/ViewAsContext';
 import { ActiveDataProvider } from '../contexts/ActiveDataContext';
@@ -108,9 +110,12 @@ function AppContent() {
     return <AuthPage />;
   }
 
-  // Show onboarding for new users once profile is loaded
-  if (profileReady && profile && profile.onboarding_completed === false) {
-    return <OnboardingModal onComplete={refreshProfile} />;
+  // Show the compulsory v2 wizard for any user who hasn't completed it.
+  // `wizard_v2_completed_at` is NULL for all existing users (new column) so
+  // this catches both brand-new signups and existing users who haven't gone
+  // through the new setup flow yet.
+  if (profileReady && profile && !profile.wizard_v2_completed_at) {
+    return <OnboardingWizard onComplete={refreshProfile} />;
   }
 
   return (
@@ -127,7 +132,7 @@ function AppContent() {
             <Route path="session/:sessionId/summary" element={<SessionSummaryPage />} />
             <Route path="join/:joinCode" element={<JoinSessionPage />} />
             <Route path="connections" element={<ConnectionsPage />} />
-            <Route path="people" element={<MembersDirectoryPage />} />
+            <Route path="people" element={<ConnectionsPage />} />
             <Route path="messages" element={<MessagesPage />} />
             <Route path="messages/:conversationId" element={<MessageThreadPage />} />
             <Route path="community" element={<CommunityFeedPage />} />
@@ -164,6 +169,8 @@ function AppContent() {
             />
             {/* Settings merged into /profile. Old links redirect to the Edit tab. */}
             <Route path="settings" element={<Navigate to="/profile?tab=edit" replace />} />
+            <Route path="terms" element={<TermsOfServicePage />} />
+            <Route path="privacy" element={<PrivacyPolicyPage />} />
             <Route path="*" element={<Navigate to="/sessions" replace />} />
           </Route>
 
@@ -175,6 +182,7 @@ function AppContent() {
                   <Route index element={<AdminDashboard />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="moderation" element={<AdminModerationQueue />} />
+                  <Route path="safety" element={<AdminSafetyEscalation />} />
                   <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
                   <Route path="analytics" element={<AdminAnalytics />} />
                   <Route path="logs" element={<AdminLogs />} />

@@ -10,8 +10,9 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, Users, UserPlus, MicOff, ArrowRight, Sparkles, Globe2 } from 'lucide-react';
+import { Calendar, Clock, ArrowRight, Sparkles, Globe2 } from 'lucide-react';
 import type { ScheduledSessionWithProfile } from '../../services/SessionService';
+import { SessionTagPills } from '../sessions/SessionTagPills';
 
 const PURPOSE_META: Record<string, { label: string; cls: string; Icon: typeof Sparkles }> = {
   weekly_review: { label: 'Weekly review', cls: 'bg-violet-100 text-violet-700', Icon: Sparkles },
@@ -134,27 +135,13 @@ export function UpcomingPublicSessionsStrip({
                 {s.session_title ?? s.session_goal ?? 'Focus session'}
               </p>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${
-                  isOneOnOne ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {isOneOnOne ? <UserPlus size={8} /> : <Users size={8} />}
-                  {isOneOnOne ? '1-on-1' : 'Group'}
-                </span>
-                {isQuiet && (
-                  <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider bg-slate-100 text-slate-700">
-                    <MicOff size={8} /> Quiet
-                  </span>
-                )}
-                {partnerOpen && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">
-                    Slot open
-                  </span>
-                )}
-                <span className="text-[10px] stitch-text-secondary ml-auto">
-                  {s.intended_duration_minutes}m
-                </span>
-              </div>
+              <SessionTagPills
+                mode={isOneOnOne ? 'one_on_one' : 'group'}
+                quietMode={isQuiet}
+                partnerOpen={partnerOpen}
+                durationMinutes={s.intended_duration_minutes}
+                size="sm"
+              />
             </button>
           );
         })}

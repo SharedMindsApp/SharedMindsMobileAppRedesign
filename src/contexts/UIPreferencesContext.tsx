@@ -11,7 +11,28 @@ import type {
   WidgetTypeId,
   WidgetColorPreferences,
 } from '../lib/uiPreferencesTypes';
-import { DEFAULT_WIDGET_COLORS } from '../lib/uiPreferencesTypes';
+import { DEFAULT_WIDGET_COLORS, FONT_SCALE_MAP } from '../lib/uiPreferencesTypes';
+import type { FontScale } from '../lib/uiPreferencesTypes';
+
+// ── font_scale persistence helpers ──────────────────────────────────────
+// DB column is numeric(3,2); app config uses 's'|'m'|'l'|'xl'. We convert
+// at the persistence boundary so the rest of the code can stay symbolic.
+
+function fontScaleToNumber(fs: FontScale): number {
+  return FONT_SCALE_MAP[fs] ?? 1.0;
+}
+
+function fontScaleFromNumber(n: number | string | null | undefined): FontScale {
+  const num = typeof n === 'string' ? parseFloat(n) : (n ?? 1.0);
+  // Reverse lookup with a tolerance for float precision.
+  let best: FontScale = 'm';
+  let bestDelta = Infinity;
+  for (const [k, v] of Object.entries(FONT_SCALE_MAP) as [FontScale, number][]) {
+    const d = Math.abs(v - num);
+    if (d < bestDelta) { best = k; bestDelta = d; }
+  }
+  return best;
+}
 
 interface UIPreferencesContextType {
   config: UIPreferencesConfig;
@@ -60,9 +81,11 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
   const [neurotype, setNeurotype] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadNeurotypeProfiles();
-  }, []);
+  // NOTE: neurotype_profiles is a legacy table from the household/wellness era.
+  // It's only consumed by the admin-only View As feature. We used to fetch it
+  // on every app boot for every user — pure waste, plus a contributor to the
+  // disk-IO budget pressure on Supabase. Now we fetch lazily: only when an
+  // admin actually activates a "view as neurotype" override.
 
   useEffect(() => {
     if (user) {
@@ -75,24 +98,44 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    if (viewAsNeurotype && neurotypeProfiles.length > 0) {
-      const profile = neurotypeProfiles.find((p) => p.name === viewAsNeurotype);
-      if (profile) {
-        setConfig({
-          layoutMode: profile.default_layout,
-          uiDensity: profile.default_density,
-          fontScale: profile.default_theme.fontScale,
-          colorTheme: profile.default_theme.colorTheme,
-          contrastLevel: profile.default_theme.contrastLevel,
-          reducedMotion: false,
-          appTheme: config.appTheme,
-        });
-        setNeurotype(profile.name);
-      }
+    if (viewAsNeurotype) {
+      // Lazy-load the profile list on first View As activation.
+      (async () => {
+        let profiles = neurotypeProfiles;
+        if (profiles.length === 0) {
+          await loadNeurotypeProfiles();
+          // Local snapshot — setState above is async, but loadNeurotypeProfiles
+          // pushes into state which we'll observe on re-render. The inline
+          // resolution below uses a fresh fetch to avoid a render bounce.
+          try {
+            const { data } = await supabase
+              .from('neurotype_profiles')
+              .select('*')
+              .eq('is_active', true);
+            profiles = (data || []) as NeurotypeProfile[];
+          } catch {
+            profiles = [];
+          }
+        }
+        const profile = profiles.find((p) => p.name === viewAsNeurotype);
+        if (profile) {
+          setConfig({
+            layoutMode: profile.default_layout,
+            uiDensity: profile.default_density,
+            fontScale: profile.default_theme.fontScale,
+            colorTheme: profile.default_theme.colorTheme,
+            contrastLevel: profile.default_theme.contrastLevel,
+            reducedMotion: false,
+            appTheme: config.appTheme,
+          });
+          setNeurotype(profile.name);
+        }
+      })();
     } else if (user) {
       loadUserPreferences();
     }
-  }, [viewAsNeurotype, neurotypeProfiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewAsNeurotype]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -120,9 +163,14 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
 
     try {
       setLoading(true);
+      // Dropped the `neurotype_profiles(*)` join — the legacy wellness app
+      // used it to resolve the saved profile name on every load, but the
+      // current product never reads `neurotype` from this code path.
+      // View As (admin-only) lazy-resolves via the viewAsNeurotype effect
+      // above instead.
       const { data, error } = await supabase
         .from('user_ui_preferences')
-        .select('*, neurotype_profiles(*)')
+        .select('*')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -133,7 +181,7 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
         setConfig({
           layoutMode: data.layout_mode,
           uiDensity: data.ui_density,
-          fontScale: data.font_scale,
+          fontScale: fontScaleFromNumber(data.font_scale),
           colorTheme: data.color_theme,
           contrastLevel: data.contrast_level,
           reducedMotion: data.reduced_motion,
@@ -143,7 +191,10 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
           recipeLocationOverride: data.recipe_location_override || null,
           includeLocationInAI: data.include_location_in_ai !== false, // Default to true if not set
         });
-        setNeurotype(data.neurotype_profiles?.name || null);
+        // Used to be: setNeurotype(data.neurotype_profiles?.name || null)
+        // — but we no longer join that table on the boot path. setNeurotype
+        // remains here so the View-As effect can still write to it.
+        setNeurotype(null);
       } else {
         setConfig(DEFAULT_CONFIG);
         setNeurotype(null);
@@ -167,7 +218,7 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
         user_id: user.id,
         layout_mode: newConfig.layoutMode,
         ui_density: newConfig.uiDensity,
-        font_scale: newConfig.fontScale,
+        font_scale: fontScaleToNumber(newConfig.fontScale),
         color_theme: newConfig.colorTheme,
         contrast_level: newConfig.contrastLevel,
         reduced_motion: newConfig.reducedMotion,
@@ -230,7 +281,7 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
         neurotype_profile_id: profileId,
         layout_mode: newConfig.layoutMode,
         ui_density: newConfig.uiDensity,
-        font_scale: newConfig.fontScale,
+        font_scale: fontScaleToNumber(newConfig.fontScale),
         color_theme: newConfig.colorTheme,
         contrast_level: newConfig.contrastLevel,
         reduced_motion: newConfig.reducedMotion,
@@ -293,7 +344,7 @@ export function UIPreferencesProvider({ children }: { children: ReactNode }) {
         user_id: user.id,
         layout_mode: config.layoutMode,
         ui_density: config.uiDensity,
-        font_scale: config.fontScale,
+        font_scale: fontScaleToNumber(config.fontScale),
         color_theme: config.colorTheme,
         contrast_level: config.contrastLevel,
         reduced_motion: config.reducedMotion,

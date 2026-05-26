@@ -68,7 +68,10 @@ function useOnlineCount() {
       if (typeof data === 'number') setCount(data);
     };
     fetch();
-    const t = setInterval(fetch, 60_000);
+    // 5-minute poll — the dock pill is a passive indicator, not real-time.
+    // Was 60s (1,440 RPCs/user/day) which over-burdened the free-tier DB.
+    // 5min = 288 RPCs/user/day — same UX, 5× cheaper.
+    const t = setInterval(fetch, 5 * 60_000);
     return () => clearInterval(t);
   }, []);
   return count;

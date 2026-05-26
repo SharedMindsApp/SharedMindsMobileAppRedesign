@@ -495,25 +495,22 @@ export async function getFocusSessionSummary(
     throw new Error('Focus session not found');
   }
 
-  const { data: events, error: eventsError } = await supabase
+  // focus_events and focus_drift_log are legacy guardrails-era tables that
+  // may not exist anymore. Community sessions don't use them — fail soft
+  // so the summary still renders for the new session flow.
+  const eventsResult = await supabase
     .from('focus_events')
     .select('*')
     .eq('session_id', sessionId)
     .order('timestamp', { ascending: true });
+  const events = eventsResult.error ? [] : (eventsResult.data ?? []);
 
-  if (eventsError) {
-    throw new Error(`Failed to fetch events: ${eventsError.message}`);
-  }
-
-  const { data: driftLogs, error: driftError } = await supabase
+  const driftResult = await supabase
     .from('focus_drift_log')
     .select('*')
     .eq('session_id', sessionId)
     .order('started_at', { ascending: true });
-
-  if (driftError) {
-    throw new Error(`Failed to fetch drift logs: ${driftError.message}`);
-  }
+  const driftLogs = driftResult.error ? [] : (driftResult.data ?? []);
 
   const driftTypeCounts: Record<DriftType, number> = {
     offshoot: 0,

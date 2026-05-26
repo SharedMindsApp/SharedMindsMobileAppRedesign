@@ -32,6 +32,12 @@ export interface StartCommunitySessionInput {
   durationMinutes: 25 | 50 | 90;
   sessionMode?: 'group' | 'one_on_one' | 'solo';
   quietMode?: boolean;
+  /**
+   * Solo body-double mode — opt-in for solo sessions. User joins a shared
+   * persistent Daily.co room with mic permanently off; sees other body-
+   * doublers' cameras silently. Requires camera permission.
+   */
+  bodyDouble?: boolean;
 }
 
 export async function startCommunitySession(
@@ -56,6 +62,7 @@ export async function startCommunitySession(
       project_id: input.projectId ?? null,
       session_mode: input.sessionMode ?? 'group',
       quiet_mode: input.quietMode ?? false,
+      body_double: input.sessionMode === 'solo' && !!input.bodyDouble,
       drift_count: 0,
       distraction_count: 0,
     })
@@ -96,6 +103,258 @@ export async function joinOneOnOneSession(sessionId: string): Promise<FocusSessi
     throw error;
   }
   return data as FocusSession;
+}
+
+/**
+ * Promote a scheduled session to active — used when the start time arrives
+ * OR a moderator clicks "Start now" from the waiting room.
+ *
+ * Idempotent: if the session is already active we just no-op. Returns the
+ * updated row so the caller can refresh local state.
+ */
+export async function markScheduledSessionActive(sessionId: string): Promise<void> {
+  // Fetch the duration so we can recompute target_end_time from "now". Without
+  // this, the timer reads as 0:00 immediately for any session promoted after
+  // its originally-scheduled time, and the debrief fires the moment the user
+  // joins the live call.
+  const { data: existing } = await supabase
+    .from('focus_sessions')
+    .select('intended_duration_minutes')
+    .eq('id', sessionId)
+    .maybeSingle();
+  const duration = existing?.intended_duration_minutes ?? 50;
+  const startMs = Date.now();
+  const endMs = startMs + duration * 60 * 1000;
+
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({
+      status: 'active',
+      start_time: new Date(startMs).toISOString(),
+      target_end_time: new Date(endMs).toISOString(),
+    })
+    .eq('id', sessionId)
+    .eq('status', 'scheduled');  // only flip if still scheduled — no-op otherwise
+  if (error) throw error;
+}
+
+/**
+ * Mark a session as ended without picking an outcome.
+ * Used by the End button — the outcome (finished/partially/something_came_up)
+ * is picked separately on the summary page.
+ */
+export async function markSessionEnded(sessionId: string): Promise<void> {
+  const now = new Date();
+  const { data: session, error: fetchError } = await supabase
+    .from('focus_sessions')
+    .select('start_time')
+    .eq('id', sessionId)
+    .single();
+  if (fetchError) throw fetchError;
+
+  const startTime = new Date(session.start_time);
+  const actualMinutes = Math.round((now.getTime() - startTime.getTime()) / 60000);
+
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({
+      status: 'completed',
+      end_time: now.toISOString(),
+      ended_at: now.toISOString(),
+      actual_duration_minutes: actualMinutes,
+    })
+    .eq('id', sessionId);
+  if (error) throw error;
+}
+
+// ── Live debrief ──────────────────────────────────────────────────────────────
+//
+// Each participant submits an outcome from inside the video call. Outcomes
+// stream in via Realtime so everyone sees each other's answers as they happen.
+
+export type DebriefOutcome = 'finished' | 'partially' | 'something_came_up' | 'no_answer';
+
+export interface SessionOutcomeRow {
+  id: string;
+  session_id: string;
+  user_id: string;
+  outcome: DebriefOutcome;
+  declared_goal: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Ambient peers ──────────────────────────────────────────────────────────────
+//
+// For solo sessions: lets us show OTHER members who are also doing solo
+// sessions right now, so the user doesn't feel alone. No video, no chat —
+// just an "I'm not the only one working" presence cue. Mirrors the ADHD
+// "body double" effect.
+
+export interface AmbientSoloPeer {
+  id: string;
+  user_id: string;
+  session_goal: string | null;
+  start_time: string;
+  intended_duration_minutes: number | null;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+/**
+ * Returns up to N other members currently in active solo sessions. Excludes
+ * the calling user. RLS is expected to allow reading solo session rows since
+ * they're already public-readable for the community feed pivot, just filtered
+ * out at the query level by other callers.
+ */
+export async function fetchActiveSoloPeers(limit = 10): Promise<AmbientSoloPeer[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // Two-query approach: avoids relying on a PostgREST relationship hint
+  // that may not be present (same pattern we use for session_outcomes).
+  const { data: sessions, error } = await supabase
+    .from('focus_sessions')
+    .select('id, user_id, session_goal, start_time, intended_duration_minutes')
+    .eq('session_mode', 'solo')
+    .eq('status', 'active')
+    .is('ended_at', null)
+    .neq('user_id', user.id)
+    .order('start_time', { ascending: false })
+    .limit(limit);
+  if (error || !sessions || sessions.length === 0) return [];
+
+  const userIds = Array.from(new Set(sessions.map((s) => s.user_id)));
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', userIds);
+
+  const byId = new Map(
+    (profiles ?? []).map((p) => [p.id as string, {
+      display_name: p.display_name as string,
+      avatar_url: (p.avatar_url as string | null) ?? null,
+    }]),
+  );
+
+  return sessions.map((s) => ({
+    id: s.id as string,
+    user_id: s.user_id as string,
+    session_goal: (s.session_goal as string | null) ?? null,
+    start_time: s.start_time as string,
+    intended_duration_minutes: (s.intended_duration_minutes as number | null) ?? null,
+    display_name: byId.get(s.user_id as string)?.display_name ?? 'Member',
+    avatar_url: byId.get(s.user_id as string)?.avatar_url ?? null,
+  }));
+}
+
+/**
+ * Triggers the live debrief for ALL participants at once. Sets
+ * `focus_sessions.debrief_started_at = now()`, which the other clients
+ * are subscribed to via Realtime — they each open the debrief overlay
+ * the moment the row updates.
+ *
+ * Idempotent: if debrief_started_at is already set, this is a no-op.
+ * Called by the host's End button AND by the timer-zero auto-trigger.
+ */
+export async function triggerDebriefForSession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({ debrief_started_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .is('debrief_started_at', null);
+  if (error) throw error;
+}
+
+/**
+ * Records the local user's declared intention for a session — typed in the
+ * waiting room before the session starts. Each participant gets their own
+ * row in session_outcomes, with the outcome filled in later by the debrief.
+ *
+ * Upserts on (session_id, user_id) so users can edit their intention in the
+ * lobby up until the session starts.
+ */
+export async function setDeclaredIntention(input: {
+  sessionId: string;
+  declaredGoal: string;
+}): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const trimmed = input.declaredGoal.trim();
+  if (!trimmed) return;
+
+  const { error } = await supabase
+    .from('session_outcomes')
+    .upsert(
+      {
+        session_id: input.sessionId,
+        user_id: user.id,
+        declared_goal: trimmed,
+      },
+      { onConflict: 'session_id,user_id' },
+    );
+  if (error) throw error;
+}
+
+/**
+ * Records the local user's outcome for a session. Upserts on (session_id,
+ * user_id) so retries are idempotent and users can change their mind during
+ * the debrief window.
+ */
+export async function submitSessionOutcome(input: {
+  sessionId: string;
+  outcome: DebriefOutcome;
+  declaredGoal: string | null;
+}): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('session_outcomes')
+    .upsert(
+      {
+        session_id: input.sessionId,
+        user_id: user.id,
+        outcome: input.outcome,
+        declared_goal: input.declaredGoal,
+      },
+      { onConflict: 'session_id,user_id' },
+    );
+  if (error) throw error;
+}
+
+/**
+ * Fetches all outcomes for a session (with joined profile info so the UI
+ * can show display_name + avatar without an extra round-trip).
+ */
+export async function fetchSessionOutcomes(
+  sessionId: string,
+): Promise<Array<SessionOutcomeRow & { profile: { display_name: string; avatar_url: string | null } | null }>> {
+  // Fetch outcomes + profiles in two queries and join client-side. PostgREST
+  // can't infer the relationship because session_outcomes.user_id FKs to
+  // auth.users, not profiles (even though profiles.id mirrors auth.users.id).
+  const { data: outcomes, error } = await supabase
+    .from('session_outcomes')
+    .select('*')
+    .eq('session_id', sessionId);
+  if (error) throw error;
+  if (!outcomes || outcomes.length === 0) return [];
+
+  const userIds = Array.from(new Set(outcomes.map((o) => o.user_id)));
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', userIds);
+
+  const profilesById = new Map(
+    (profiles ?? []).map((p) => [p.id, { display_name: p.display_name as string, avatar_url: (p.avatar_url as string | null) ?? null }]),
+  );
+
+  return outcomes.map((o) => ({
+    ...(o as SessionOutcomeRow),
+    profile: profilesById.get(o.user_id) ?? null,
+  }));
 }
 
 export async function endCommunitySession(input: {

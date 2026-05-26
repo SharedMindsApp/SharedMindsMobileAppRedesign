@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -7,7 +8,14 @@ import { ConnectButton } from '../connections/ConnectButton';
 import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
-import { JitsiMeeting } from './JitsiMeeting';
+import { DailyMeeting } from './DailyMeeting';
+import { markSessionEnded, triggerDebriefForSession } from '../../services/SessionService';
+import { DebriefOverlay } from './DebriefOverlay';
+import { WaitingRoom } from './WaitingRoom';
+import { AmbientPeersStrip } from './AmbientPeersStrip';
+
+// Sessions become joinable 5 minutes before their scheduled start.
+const JOIN_WINDOW_MS = 5 * 60 * 1000;
 
 // Daily shared room — everyone in a group session today joins the same Jitsi room.
 function dailyRoomName(): string {
@@ -65,10 +73,13 @@ export function ActiveSessionPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, user } = useAuth();
-  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession } = useFocusSession();
+  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, clearSession } = useFocusSession();
   const { sessions: otherSessions } = useCommunitySessionsSubscription();
   const [showParticipants, setShowParticipants] = useState(true);
   const [ending, setEnding] = useState(false);
+  // Debrief is shown when the user clicks End OR the timer reaches 0.
+  // It overlays the live video; only after it finalizes do we navigate.
+  const [showDebrief, setShowDebrief] = useState(false);
 
   // Prefer router state (passed by DeclareSessionModal) → context → null.
   // Router state is synchronously available on first render and avoids the
@@ -107,7 +118,21 @@ export function ActiveSessionPage() {
         .eq('id', sessionId)
         .single();
 
-      if (!data || data.status !== 'active') {
+      if (!data) {
+        navigate('/sessions', { replace: true });
+        return;
+      }
+
+      // Allow loading scheduled sessions only inside the join window so a
+      // stale URL doesn't dump someone into a lobby for a session two days out.
+      if (data.status === 'scheduled') {
+        const startMs = new Date(data.scheduled_at ?? data.start_time).getTime();
+        const earliestJoin = startMs - JOIN_WINDOW_MS;
+        if (Date.now() < earliestJoin) {
+          navigate('/sessions', { replace: true });
+          return;
+        }
+      } else if (data.status !== 'active') {
         navigate('/sessions', { replace: true });
         return;
       }
@@ -166,11 +191,48 @@ export function ActiveSessionPage() {
     return () => clearTimeout(id);
   }, [session?.id, session?.session_mode, partnerJoined]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Clicking "End" broadcasts the debrief to ALL participants by writing
+  // debrief_started_at to the DB. Their clients listen via the existing
+  // focus_sessions UPDATE Realtime stream and open their own debrief
+  // simultaneously. Same write happens when the timer hits zero — first
+  // person to reach 0 sets the timestamp; everyone else sees it instantly.
   const handleEnd = useCallback(() => {
+    if (!session || ending || showDebrief) return;
+    setShowDebrief(true);
+    triggerDebriefForSession(session.id).catch((err) =>
+      console.warn('[ActiveSessionPage] triggerDebrief failed:', err),
+    );
+  }, [session, ending, showDebrief]);
+
+  // Watch for debrief broadcasts from any participant (host's End click,
+  // timer-zero trigger, or another user reaching 0 first). The session
+  // row updates via Realtime → context updates → this effect fires.
+  useEffect(() => {
+    if (session?.debrief_started_at && !showDebrief && !ending) {
+      setShowDebrief(true);
+    }
+  }, [session?.debrief_started_at, showDebrief, ending]);
+
+  // Auto-open the debrief when the session timer hits zero
+  useEffect(() => {
+    if (timerSecondsRemaining === 0 && session && !showDebrief && !ending && !session.debrief_started_at) {
+      setShowDebrief(true);
+      triggerDebriefForSession(session.id).catch(() => { /* idempotent — safe */ });
+    }
+  }, [timerSecondsRemaining, session, showDebrief, ending]);
+
+  // Called by DebriefOverlay once everyone has answered OR the 60s timer expires
+  const handleDebriefFinalized = useCallback(async () => {
     if (!session || ending) return;
     setEnding(true);
+    try {
+      await markSessionEnded(session.id);
+    } catch {
+      // Best-effort — the row was at least flagged via the outcome insert
+    }
+    clearSession();
     navigate(`/session/${session.id}/summary`, { replace: true });
-  }, [session, ending, navigate]);
+  }, [session, ending, navigate, clearSession]);
 
   const currentGoal = sessionGoal ?? session?.session_goal ?? '';
   const totalSeconds = (session?.intended_duration_minutes ?? 50) * 60;
@@ -181,6 +243,21 @@ export function ActiveSessionPage() {
   const isSolo = session?.session_mode === 'solo';
   const isOneOnOne = session?.session_mode === 'one_on_one';
   const isQuiet = session?.quiet_mode === true;
+
+  // ── Waiting-room state ─────────────────────────────────────────────────────
+  // A session is in "waiting room" mode if it's still scheduled (not promoted
+  // to active yet). The WaitingRoom component drives the auto-transition: when
+  // the clock hits the start time it marks the row active and re-fetches.
+  const isPreStart = session?.status === 'scheduled';
+  const [waitingRoomDismissed, setWaitingRoomDismissed] = useState(false);
+
+  // When the parent of the waiting room signals "session started", we flip
+  // the local copy to status='active' so DailyMeeting takes over without
+  // waiting on a Supabase refetch.
+  const handleSessionStarted = useCallback(() => {
+    setSession((prev) => prev ? { ...prev, status: 'active' } : prev);
+    setWaitingRoomDismissed(true);
+  }, []);
 
   // In solo or 1-on-1 the community peers panel is irrelevant.
   const peers = (isSolo || isOneOnOne) ? [] : otherSessions.filter((s) => s.id !== session?.id);
@@ -211,8 +288,23 @@ export function ActiveSessionPage() {
     return null;
   }
 
-  return (
-    <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-[#1a1a2e] flex flex-col z-[55] overflow-hidden">
+  // Portal to document.body so we escape Layout's <main> containing block.
+  // (.core-main has a CSS animation, which traps position:fixed descendants.)
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        top: 56,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#1a1a2e',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 55,
+        overflow: 'hidden',
+      }}
+    >
 
       {/* ── Top bar ─────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center justify-between gap-4 px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm">
@@ -294,27 +386,109 @@ export function ActiveSessionPage() {
         </div>
       )}
 
+      {/* ── Waiting room (scheduled, not yet started) ───────────── */}
+      {isPreStart && !waitingRoomDismissed && user && (
+        <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
+          <WaitingRoom
+            sessionId={session.id}
+            sessionTitle={(session as { session_title?: string }).session_title ?? currentGoal ?? 'Session'}
+            declaredGoal={currentGoal || null}
+            scheduledStart={(session as { scheduled_at?: string }).scheduled_at ?? session.start_time}
+            isModerator={isModerator}
+            currentUserId={user.id}
+            displayName={profile?.display_name ?? 'Member'}
+            avatarUrl={profile?.avatar_url ?? null}
+            onLeave={() => navigate('/sessions')}
+            onSessionStart={handleSessionStarted}
+          />
+        </div>
+      )}
+
       {/* ── Body: Jitsi for group/1-on-1, focused view for solo ── */}
-      {isSolo ? (
-        <SoloFocusView
-          goal={currentGoal}
-          secondsRemaining={timerSecondsRemaining}
-          totalSeconds={totalSeconds}
-        />
+      {/* Skip rendering the live body until the waiting room finishes —
+          we don't want to burn Daily.co minutes during the pre-start lobby. */}
+      {(isPreStart && !waitingRoomDismissed) ? null : isSolo ? (
+        <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
+          <SoloFocusView
+            goal={currentGoal}
+            secondsRemaining={timerSecondsRemaining}
+            totalSeconds={totalSeconds}
+            hideAmbientStrip={!!session.body_double}
+          />
+
+          {/* Body-double mode: silent video grid sidebar.
+              All body-doublers share the same persistent Daily room
+              (mic forced off via Daily token permissions, camera required). */}
+          {session.body_double && user && profile && (
+            <aside
+              className="absolute right-0 top-0 bottom-0 w-72 md:w-80 z-10 bg-black/30 backdrop-blur-sm border-l border-white/5 hidden md:block"
+              aria-label="Silent body-double video"
+            >
+              <div className="px-3 pt-3 pb-2 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/80">
+                  Body double · silent
+                </p>
+                <p className="text-[10px] text-white/40 leading-snug mt-0.5">
+                  Mic is locked off. Just presence.
+                </p>
+              </div>
+              <div className="absolute inset-0 top-12">
+                <DailyMeeting
+                  roomName="sharedminds-bodydouble"
+                  displayName={profile.display_name ?? 'Member'}
+                  isModerator={false}
+                  startAudioMuted
+                  startVideoMuted={false}
+                  avatarVerified={profile.avatar_status === 'approved'}
+                  bodyDouble
+                  chromeless
+                  onLeave={() => navigate('/sessions')}
+                />
+              </div>
+            </aside>
+          )}
+
+          {/* Solo debrief renders inline over the focus view */}
+          {showDebrief && user && (
+            <DebriefOverlay
+              sessionId={session.id}
+              declaredGoal={currentGoal || null}
+              currentUserId={user.id}
+              taskId={session.session_task_id ?? null}
+              onFinalized={handleDebriefFinalized}
+            />
+          )}
+        </div>
       ) : (
-        <div className="flex-1 relative min-h-0">
-          <JitsiMeeting
+        <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
+          <DailyMeeting
             roomName={roomName}
             displayName={profile?.display_name ?? 'Member'}
             isModerator={isModerator}
             startAudioMuted={isQuiet}
             startVideoMuted={false}
+            avatarVerified={profile?.avatar_status === 'approved'}
+            focusSessionId={session.id}
             onParticipantJoined={() => {
               setPartnerJoined(true);
               setShowNoShowBanner(false);
             }}
-            onHangup={handleEnd}
+            // Just-leave-the-call: navigate this user out without ending
+            // the session for everyone else. The host uses the top-bar
+            // "End" button (handleEnd) to trigger the debrief.
+            onLeave={() => navigate('/sessions')}
           />
+          {/* Group/1-on-1 debrief renders over the live video so everyone
+              sees each other's answers while still in the call */}
+          {showDebrief && user && (
+            <DebriefOverlay
+              sessionId={session.id}
+              declaredGoal={currentGoal || null}
+              currentUserId={user.id}
+              taskId={session.session_task_id ?? null}
+              onFinalized={handleDebriefFinalized}
+            />
+          )}
         </div>
       )}
 
@@ -386,7 +560,8 @@ export function ActiveSessionPage() {
           )}
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -400,10 +575,14 @@ function SoloFocusView({
   goal,
   secondsRemaining,
   totalSeconds,
+  hideAmbientStrip = false,
 }: {
   goal: string;
   secondsRemaining: number;
   totalSeconds: number;
+  /** Hide the avatars-only ambient peers strip — used when body-double
+      mode is on and the silent video grid already provides presence. */
+  hideAmbientStrip?: boolean;
 }) {
   const progress = totalSeconds > 0 ? Math.max(0, 1 - secondsRemaining / totalSeconds) : 0;
   const elapsedMin = Math.max(0, Math.floor((totalSeconds - secondsRemaining) / 60));
@@ -428,6 +607,13 @@ function SoloFocusView({
       <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e] via-[#16213e] to-[#0f3460]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.18),transparent_60%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.12),transparent_60%)]" />
+
+      {/* Ambient peers strip — recreates the "body double" effect by
+          showing other members currently working solo. Pure presence,
+          no interaction. Hidden on mobile to keep the focus circle
+          breathing room. Also hidden when body-double video mode is on
+          (the silent video grid already serves the presence purpose). */}
+      {!hideAmbientStrip && <AmbientPeersStrip />}
 
       <div className="relative h-full flex flex-col items-center justify-center px-6 py-8 text-center">
         {/* Circular progress + elapsed/total in centre */}

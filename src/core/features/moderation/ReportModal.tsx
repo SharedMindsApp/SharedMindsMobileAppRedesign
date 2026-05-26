@@ -15,12 +15,14 @@
  */
 
 import { useState } from 'react';
-import { X, Flag, AlertTriangle, MessageSquareWarning, Ban, ShieldAlert, HelpCircle, ChevronRight, CheckCircle2, Loader2, UserX } from 'lucide-react';
+import { X, Flag, AlertTriangle, MessageSquareWarning, Ban, ShieldAlert, HelpCircle, ChevronRight, CheckCircle2, Loader2, UserX, Camera } from 'lucide-react';
 import {
   flagContent, blockUser,
   FLAG_REASON_LABELS, CONTENT_TYPE_LABELS,
   type ContentType, type FlagReason,
 } from '../../services/ModerationService';
+import { attachSessionEvidence } from '../../../lib/evidenceCapture';
+import { supabase } from '../../../lib/supabase';
 
 interface ReportModalProps {
   contentType:      ContentType;
@@ -28,6 +30,15 @@ interface ReportModalProps {
   flaggedUserId:    string;
   contentSnapshot?: string;
   onClose:          () => void;
+  /** Session context — when set, we capture a screenshot of the reported
+   *  user's video tile + the last 5 minutes of session chat as evidence.
+   *  Only meaningful when the report is fired from inside an active session. */
+  sessionContext?: {
+    /** Daily.co participant session_id used to find the video element. */
+    dailyParticipantId?: string;
+    /** SharedMinds focus_sessions.id used to scope chat transcript. */
+    focusSessionId?:     string;
+  };
 }
 
 type Step = 'reason' | 'notes' | 'done';
@@ -42,7 +53,7 @@ const REASON_OPTIONS: { value: FlagReason; icon: typeof Flag; description: strin
 ];
 
 export function ReportModal({
-  contentType, contentId, flaggedUserId, contentSnapshot, onClose,
+  contentType, contentId, flaggedUserId, contentSnapshot, onClose, sessionContext,
 }: ReportModalProps) {
   const [step, setStep] = useState<Step>('reason');
   const [reason, setReason] = useState<FlagReason | null>(null);
@@ -50,13 +61,20 @@ export function ReportModal({
   const [submitting, setSubmitting] = useState(false);
   const [alsoBlock, setAlsoBlock] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reflects what was actually captured at submit time — drives the
+  // confirmation copy on the 'done' step so the reporter knows what was
+  // preserved.
+  const [evidenceSaved, setEvidenceSaved] = useState<{ screenshot: boolean; transcript: boolean }>({
+    screenshot: false,
+    transcript: false,
+  });
 
   async function handleSubmit() {
     if (!reason) return;
     setSubmitting(true);
     setError(null);
     try {
-      await flagContent({
+      const flagId = await flagContent({
         contentType,
         contentId,
         flaggedUserId,
@@ -64,6 +82,27 @@ export function ReportModal({
         notes: notes.trim() || undefined,
         contentSnapshot,
       });
+
+      // If the report came from inside an active session, attach evidence.
+      // Best-effort — we don't fail the report submission if capture fails.
+      if (sessionContext) {
+        // Run in parallel; track what landed via a quick re-query.
+        await attachSessionEvidence({
+          flagId,
+          reportedUserId: flaggedUserId,
+          participantSessionId: sessionContext.dailyParticipantId,
+          focusSessionId: sessionContext.focusSessionId,
+        });
+        const { data } = await supabase
+          .from('flag_evidence')
+          .select('evidence_type')
+          .eq('flag_id', flagId);
+        setEvidenceSaved({
+          screenshot: !!data?.some((r) => r.evidence_type === 'screenshot'),
+          transcript: !!data?.some((r) => r.evidence_type === 'chat_transcript'),
+        });
+      }
+
       if (alsoBlock) {
         await blockUser(flaggedUserId).catch(() => {}); // non-fatal
       }
@@ -244,6 +283,23 @@ export function ReportModal({
                   {alsoBlock && ' The user has been blocked.'}
                 </p>
               </div>
+              {/* Evidence-captured confirmation — only shown when something
+                  was actually preserved. Reassures the reporter that the
+                  context is on file even if the other party logs off. */}
+              {(evidenceSaved.screenshot || evidenceSaved.transcript) && (
+                <div className="px-3 py-2 rounded-xl bg-blue-50 ring-1 ring-blue-100 max-w-[280px]">
+                  <p className="text-[11px] font-bold text-blue-800 inline-flex items-center gap-1.5 mb-0.5">
+                    <Camera size={11} /> Evidence preserved
+                  </p>
+                  <p className="text-[11px] text-blue-700 leading-snug">
+                    {evidenceSaved.screenshot && evidenceSaved.transcript
+                      ? 'Captured a video frame and the session chat. Admins can review both.'
+                      : evidenceSaved.screenshot
+                      ? 'Captured a video frame for admin review.'
+                      : 'Saved a snapshot of the session chat.'}
+                  </p>
+                </div>
+              )}
               <p className="text-xs stitch-text-secondary max-w-[260px] leading-relaxed">
                 SharedMinds keeps a full record of all reports to ensure
                 community safety and meet our legal obligations.

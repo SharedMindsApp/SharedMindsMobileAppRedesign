@@ -110,7 +110,7 @@ export interface NavigationTab {
 
 export const ALL_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'home', label: 'Home', path: '/home', icon: 'Home' },
-  { id: 'sessions', label: 'Sessions', path: '/sessions', icon: 'Users' },
+  { id: 'sessions', label: 'Sessions', path: '/sessions', icon: 'Calendar' },
   { id: 'progress', label: 'Progress', path: '/progress', icon: 'TrendingUp' },
   { id: 'tasks', label: 'Tasks', path: '/tasks', icon: 'Target' },
   { id: 'projects', label: 'Projects', path: '/projects', icon: 'Zap' },

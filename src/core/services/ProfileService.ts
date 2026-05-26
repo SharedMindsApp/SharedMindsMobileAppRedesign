@@ -80,6 +80,130 @@ export async function fetchPublicProfile(userId: string): Promise<PublicProfile 
   return data as PublicProfile;
 }
 
+// ── Weekly stats for the Stats tab ──────────────────────────────────────────
+//
+// Returns daily focus minutes for the last 14 days (this week + last week)
+// so the dashboard can render a sparkline, a "↑ vs last week" delta, and a
+// per-day breakdown. Tracks finishes and intentions separately for the
+// "things shipped this week" counter.
+
+export interface WeeklyStats {
+  /** Day-by-day minutes for the trailing 14 days, oldest first. Length = 14. */
+  dailyMinutes: number[];
+  /** Sum of dailyMinutes for the last 7 days. */
+  thisWeekMinutes: number;
+  /** Sum of dailyMinutes for the 7 days before that. */
+  lastWeekMinutes: number;
+  /** Count of sessions completed in the last 7 days. */
+  thisWeekSessions: number;
+  /** Count of session_outcomes with outcome='finished' in the last 7 days. */
+  thisWeekFinished: number;
+  /** Count of weekly_intentions completed this calendar week. */
+  thisWeekIntentionsDone: number;
+  /** Total weekly_intentions set this calendar week (≤ 3). */
+  thisWeekIntentionsTotal: number;
+  /** Project breakdown: project_id → minutes (last 7 days). Empty if none linked. */
+  projectMinutes: Record<string, number>;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+export async function fetchWeeklyStats(userId: string): Promise<WeeklyStats> {
+  const now = new Date();
+  const startOf14d = new Date(now);
+  startOf14d.setDate(startOf14d.getDate() - 13);
+  startOf14d.setHours(0, 0, 0, 0);
+
+  const [sessionsRes, outcomesRes, intentionsRes] = await Promise.all([
+    supabase
+      .from('focus_sessions')
+      .select('actual_duration_minutes, intended_duration_minutes, ended_at, project_id')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .gte('ended_at', startOf14d.toISOString()),
+    supabase
+      .from('session_outcomes')
+      .select('outcome, created_at')
+      .eq('user_id', userId)
+      .eq('outcome', 'finished')
+      .gte('created_at', startOf14d.toISOString()),
+    supabase
+      .from('weekly_intentions')
+      .select('completed_at, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', startOfWeekIso()),
+  ]);
+
+  const sessions = sessionsRes.data ?? [];
+  const finishedOutcomes = outcomesRes.data ?? [];
+  const intentions = intentionsRes.data ?? [];
+
+  // Daily minutes — 14 buckets keyed by ISO date
+  const dailyMap = new Map<string, number>();
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(startOf14d);
+    d.setDate(d.getDate() + i);
+    dailyMap.set(isoDate(d), 0);
+  }
+  for (const s of sessions) {
+    const when = s.ended_at as string | null;
+    if (!when) continue;
+    const key = isoDate(new Date(when));
+    if (!dailyMap.has(key)) continue;
+    const mins = (s.actual_duration_minutes as number | null) ?? (s.intended_duration_minutes as number | null) ?? 0;
+    dailyMap.set(key, (dailyMap.get(key) ?? 0) + mins);
+  }
+  const dailyMinutes = Array.from(dailyMap.values());
+
+  const thisWeekMinutes = dailyMinutes.slice(7).reduce((a, b) => a + b, 0);
+  const lastWeekMinutes = dailyMinutes.slice(0, 7).reduce((a, b) => a + b, 0);
+
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const thisWeekSessions = sessions.filter(
+    (s) => s.ended_at && new Date(s.ended_at as string) >= sevenDaysAgo,
+  ).length;
+  const thisWeekFinished = finishedOutcomes.filter(
+    (o) => new Date(o.created_at as string) >= sevenDaysAgo,
+  ).length;
+
+  // Calendar-week intentions: created since Monday 00:00 local
+  const thisWeekIntentionsTotal = intentions.length;
+  const thisWeekIntentionsDone = intentions.filter((i) => i.completed_at).length;
+
+  // Project minutes (last 7 days)
+  const projectMinutes: Record<string, number> = {};
+  for (const s of sessions) {
+    if (!s.ended_at || new Date(s.ended_at as string) < sevenDaysAgo) continue;
+    const pid = s.project_id as string | null;
+    if (!pid) continue;
+    const mins = (s.actual_duration_minutes as number | null) ?? (s.intended_duration_minutes as number | null) ?? 0;
+    projectMinutes[pid] = (projectMinutes[pid] ?? 0) + mins;
+  }
+
+  return {
+    dailyMinutes,
+    thisWeekMinutes,
+    lastWeekMinutes,
+    thisWeekSessions,
+    thisWeekFinished,
+    thisWeekIntentionsDone,
+    thisWeekIntentionsTotal,
+    projectMinutes,
+  };
+}
+
+function startOfWeekIso(): string {
+  // Monday 00:00 local
+  const d = new Date();
+  const day = d.getDay() || 7;  // Sun=0 → 7
+  d.setDate(d.getDate() - (day - 1));
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
   const { data: sessions } = await supabase
     .from('focus_sessions')
@@ -256,6 +380,10 @@ export async function updateProfile(patch: {
   work_type?: string | null;
   work_types?: string[] | null;
   skills?: string[] | null;
+  skill_levels?: Record<string, number> | null;
+  offering?: string[] | null;
+  seeking?: string[] | null;
+  wanted_skills?: string[] | null;
 }): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -271,10 +399,13 @@ export async function updateProfile(patch: {
 /** Custom error thrown when an avatar is rejected by moderation. */
 export class AvatarRejectedError extends Error {
   reasons: string[];
-  constructor(reasons: string[]) {
+  /** Which gate the image failed at — drives the UI copy shown to the user */
+  status: 'rejected_face' | 'rejected_safety';
+  constructor(reasons: string[], status: 'rejected_face' | 'rejected_safety' = 'rejected_safety') {
     super(`Image rejected: ${reasons.join(', ')}`);
     this.name = 'AvatarRejectedError';
     this.reasons = reasons;
+    this.status = status;
   }
 }
 
@@ -339,46 +470,63 @@ async function processAvatarImage(file: File, size = 512): Promise<{
  *   before OPENAI_API_KEY is configured on the Supabase project. Once the
  *   function IS deployed and returns flagged content, this still blocks it.
  */
-async function moderateAvatar(dataUrl: string): Promise<void> {
+export type AvatarStatus = 'none' | 'pending' | 'approved' | 'rejected_face' | 'rejected_safety';
+
+interface ModerateResult {
+  status: AvatarStatus;
+  reason: string | null;
+}
+
+/**
+ * Runs the moderation Edge Function and returns the verdict.
+ * Throws AvatarRejectedError on rejection so the upload flow can stop
+ * before writing to storage — but ALSO returns the structured verdict
+ * via callers that need it (e.g. background re-verification).
+ */
+async function moderateAvatar(dataUrl: string): Promise<ModerateResult> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
-  let data: { approved: boolean; reasons?: string[]; error?: string } | null = null;
+  let data: { approved: boolean; status?: AvatarStatus; reason?: string; reasons?: string[]; error?: string } | null = null;
   let error: { message?: string } | null = null;
 
   try {
     const result = await supabase.functions.invoke<{
       approved: boolean;
+      status?: AvatarStatus;
+      reason?: string;
       reasons?: string[];
       error?: string;
     }>('moderate-avatar', { body: { image: dataUrl } });
     data = result.data;
     error = result.error;
   } catch (e) {
-    // Network / function-not-deployed errors land here.
     console.warn('[moderateAvatar] moderation unavailable — proceeding without it:', e);
-    return;
+    return { status: 'pending', reason: 'Verification service unavailable.' };
   }
 
   if (error) {
-    // Function exists but errored. Most common cause: not deployed yet, missing
-    // OPENAI_API_KEY, or transient network. Fail-open with a warning.
     console.warn('[moderateAvatar] moderation function error — proceeding without it:', error.message);
-    return;
+    return { status: 'pending', reason: 'Verification service error.' };
   }
 
   if (!data) {
-    console.warn('[moderateAvatar] moderation returned no result — proceeding without it');
-    return;
+    console.warn('[moderateAvatar] moderation returned no result');
+    return { status: 'pending', reason: null };
   }
 
-  // Function explicitly rejected the image — this IS a hard block.
+  // Rejected — throw so upload flow halts. Caller can catch and decide how
+  // to surface the reason. Status comes through on the error object too.
   if (data.approved === false) {
     if (data.error) throw new Error(data.error);
-    throw new AvatarRejectedError(data.reasons ?? ['flagged']);
+    const status = (data.status ?? 'rejected_safety') as AvatarStatus;
+    throw new AvatarRejectedError(
+      data.reason ? [data.reason] : (data.reasons ?? ['flagged']),
+      status,
+    );
   }
 
-  // approved === true (or anything truthy) → proceed.
+  return { status: data.status ?? 'approved', reason: data.reason ?? null };
 }
 
 /**
@@ -392,8 +540,27 @@ export async function uploadAvatar(file: File): Promise<string> {
   // 1. Process (resize + re-encode as JPEG)
   const { dataUrl, blob } = await processAvatarImage(file);
 
-  // 2. Moderate — throws AvatarRejectedError if flagged
-  await moderateAvatar(dataUrl);
+  // 2. Moderate — throws AvatarRejectedError if flagged (face or safety).
+  //    We catch and surface the failure with status info so the caller
+  //    can show the right message.
+  let verdict: ModerateResult;
+  try {
+    verdict = await moderateAvatar(dataUrl);
+  } catch (err) {
+    if (err instanceof AvatarRejectedError) {
+      // Persist the rejection so future sessions remember the verdict
+      // (and the user sees the banner on their profile until they re-upload).
+      await supabase
+        .from('profiles')
+        .update({
+          avatar_status: err.status,
+          avatar_rejection_reason: err.reasons.join('; '),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    }
+    throw err;
+  }
 
   // 3. Upload
   const path = `${user.id}.jpg`;
@@ -406,14 +573,71 @@ export async function uploadAvatar(file: File): Promise<string> {
   const { data } = supabase.storage.from('avatars').getPublicUrl(path);
   const cacheBustedUrl = `${data.publicUrl}?t=${Date.now()}`;
 
-  // 4. Save to profile
+  // 4. Save to profile with verification status
   const { error: profileError } = await supabase
     .from('profiles')
-    .update({ avatar_url: cacheBustedUrl, updated_at: new Date().toISOString() })
+    .update({
+      avatar_url: cacheBustedUrl,
+      avatar_status: verdict.status,
+      avatar_rejection_reason: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', user.id);
   if (profileError) throw profileError;
 
   return cacheBustedUrl;
+}
+
+/**
+ * Re-runs face verification on the user's existing avatar (without re-uploading).
+ * Called once on login for users whose avatars predate the verification system
+ * (status='pending') so we don't grandfather a two-tier identity standard.
+ *
+ * Failures are non-fatal — we just leave the status as 'pending' for retry later.
+ */
+export async function reverifyExistingAvatar(userId: string, avatarUrl: string): Promise<void> {
+  try {
+    // Fetch the image and re-encode it as a data URL so the Edge Function
+    // accepts it (it requires data:image/... format).
+    const res = await fetch(avatarUrl);
+    if (!res.ok) return;
+    const blob = await res.blob();
+
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+
+    try {
+      const verdict = await moderateAvatar(dataUrl);
+      await supabase
+        .from('profiles')
+        .update({
+          avatar_status: verdict.status,
+          avatar_rejection_reason: verdict.reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+    } catch (err) {
+      if (err instanceof AvatarRejectedError) {
+        await supabase
+          .from('profiles')
+          .update({
+            avatar_status: err.status,
+            avatar_rejection_reason: err.reasons.join('; '),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId);
+      } else {
+        // Network/transient error — leave as 'pending' for the next retry.
+        console.warn('[reverifyExistingAvatar] non-fatal failure:', err);
+      }
+    }
+  } catch (err) {
+    console.warn('[reverifyExistingAvatar] could not fetch avatar:', err);
+  }
 }
 
 export async function fetchProfileFull(userId: string): Promise<PublicProfile | null> {

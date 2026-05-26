@@ -241,15 +241,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const openRouterApiKey =
-      Deno.env.get('OPENROUTER_API_KEY') ||
-      Deno.env.get('VITE_OPENROUTER_API_KEY');
+    const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
 
     if (!openRouterApiKey || openRouterApiKey.trim().length === 0) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'OpenRouter API key missing on server. Set OPENROUTER_API_KEY or VITE_OPENROUTER_API_KEY in Supabase Edge Function secrets.',
+          error: 'OpenRouter API key missing on server. Set OPENROUTER_API_KEY in Supabase Edge Function secrets.',
         } as PantryVisionResponse),
         {
           status: 500,

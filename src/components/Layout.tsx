@@ -407,153 +407,161 @@ export function Layout({ children }: LayoutProps) {
 
                         {showMoreMenu && createPortal(
                           <>
+                            {/* Backdrop — dim + click-to-close. */}
                             <div
-                              className="fixed inset-0 z-[90]"
+                              className="fixed inset-0 z-[90] bg-black/30 backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
                               onClick={() => setShowMoreMenu(false)}
                             />
+
+                            {/* Right-side slide-in panel — full height, generous
+                                spacing. FLOWN-style "this is YOUR drawer" feel
+                                rather than a quick-access dropdown. Width caps
+                                at 360px so it doesn't dominate small laptop screens. */}
                             <div
                               ref={moreMenuRef}
-                              className={`fixed w-64 rounded-2xl shadow-xl border py-1.5 z-[95] overflow-hidden ${
-                                isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
+                              role="dialog"
+                              aria-label="Profile menu"
+                              className={`fixed top-0 right-0 bottom-0 w-[88vw] max-w-[360px] z-[95] flex flex-col overflow-y-auto shadow-2xl border-l animate-[slideInFromRight_220ms_cubic-bezier(0.16,1,0.3,1)] ${
+                                isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'
                               }`}
-                              style={{
-                                top: `${moreMenuPosition.top}px`,
-                                right: `${moreMenuPosition.right}px`,
-                              }}
+                              style={{ paddingTop: 'env(safe-area-inset-top)' }}
                             >
-                              {/* ── Profile header — click to view profile ── */}
-                              <button
-                                type="button"
-                                onClick={() => { setShowMoreMenu(false); navigate('/profile'); }}
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors ${
-                                  isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                                }`}
-                              >
-                                {profile?.avatar_url ? (
-                                  <img
-                                    src={profile.avatar_url}
-                                    alt={profile?.display_name ?? 'Profile'}
-                                    className="w-10 h-10 rounded-full object-cover shrink-0"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full stitch-card--accent flex items-center justify-center text-white font-bold shrink-0">
-                                    {initial}
-                                  </div>
-                                )}
-                                <div className="flex-1 min-w-0 text-left">
-                                  <p className={`text-sm font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {profile?.display_name ?? 'Your Profile'}
-                                  </p>
-                                  <p className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                    {workTypeLabel ?? 'View profile'}
-                                  </p>
-                                </div>
-                              </button>
+                              {/* Close X */}
+                              <div className="flex items-center justify-end px-4 pt-4 pb-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMoreMenu(false)}
+                                  aria-label="Close menu"
+                                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                                    isDark ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-500'
+                                  }`}
+                                >
+                                  <X size={18} />
+                                </button>
+                              </div>
 
-                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+                              {/* ── Profile header — big avatar, name, role, View profile CTA ── */}
+                              <div className="px-5 pb-4">
+                                <button
+                                  type="button"
+                                  onClick={() => { setShowMoreMenu(false); navigate('/profile'); }}
+                                  className="flex items-center gap-4 w-full text-left group"
+                                >
+                                  {profile?.avatar_url ? (
+                                    <img
+                                      src={profile.avatar_url}
+                                      alt={profile?.display_name ?? 'Profile'}
+                                      className="w-16 h-16 rounded-full object-cover shrink-0 ring-2 ring-transparent group-hover:ring-primary/30 transition-all"
+                                    />
+                                  ) : (
+                                    <div className="w-16 h-16 rounded-full stitch-card--accent flex items-center justify-center text-white font-extrabold text-2xl shrink-0 ring-2 ring-transparent group-hover:ring-primary/30 transition-all">
+                                      {initial}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className={`text-lg font-extrabold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                      {profile?.display_name ?? 'Your Profile'}
+                                    </p>
+                                    <p className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {workTypeLabel ?? user?.email ?? 'View profile'}
+                                    </p>
+                                    <p className="text-[11px] font-bold text-primary mt-1 inline-flex items-center gap-1">
+                                      View profile →
+                                    </p>
+                                  </div>
+                                </button>
+                              </div>
+
+                              <div className={`mx-5 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
 
                               {/* ── DM Privacy / Do Not Disturb ── */}
-                              <DmPrivacyToggle
-                                current={(profile as any)?.dm_privacy ?? 'open'}
-                                isDark={isDark}
-                              />
+                              <div className="px-2 py-2">
+                                <DmPrivacyToggle
+                                  current={(profile as any)?.dm_privacy ?? 'open'}
+                                  isDark={isDark}
+                                />
+                              </div>
 
-                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+                              <div className={`mx-5 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
 
-                              {/* ── Weekly review (pinned, ritual entry point) ── */}
-                              <button
-                                type="button"
-                                onClick={() => { setShowMoreMenu(false); navigate('/reflection'); }}
-                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
-                                  isTabActive('/reflection')
-                                    ? (isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50')
-                                    : (isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50')
-                                }`}
-                              >
-                                <Sparkles size={15} />
-                                Weekly review
-                              </button>
-
-                              {/* Settings merged into /profile — no separate entry needed */}
-
-                              {/* ── Secondary tabs (Tasks / Projects / Progress / Calendar / etc) ── */}
-                              {moreTabs.filter((t) => t.id !== 'settings').length > 0 && (
-                                <>
-                                  <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
-                                  {moreTabs.filter((t) => t.id !== 'settings').map((tab) => {
-                                    const Icon = ICON_MAP[tab.icon];
-                                    return (
-                                      <button
-                                        key={tab.id}
-                                        onClick={() => { setShowMoreMenu(false); navigate(tab.path); }}
-                                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
-                                          isTabActive(tab.path)
-                                            ? (isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50')
-                                            : (isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50')
-                                        }`}
-                                      >
-                                        {Icon && <Icon size={15} />}
-                                        {tab.label}
-                                      </button>
-                                    );
-                                  })}
-                                </>
-                              )}
+                              {/* ── Primary actions: ritual + secondary tabs ── */}
+                              <div className="py-2 px-2">
+                                <PanelRow
+                                  icon={<Sparkles size={18} />}
+                                  label="Weekly review"
+                                  active={isTabActive('/reflection')}
+                                  isDark={isDark}
+                                  onClick={() => { setShowMoreMenu(false); navigate('/reflection'); }}
+                                />
+                                {moreTabs.filter((t) => t.id !== 'settings').map((tab) => {
+                                  const Icon = ICON_MAP[tab.icon];
+                                  return (
+                                    <PanelRow
+                                      key={tab.id}
+                                      icon={Icon ? <Icon size={18} /> : null}
+                                      label={tab.label}
+                                      active={isTabActive(tab.path)}
+                                      isDark={isDark}
+                                      onClick={() => { setShowMoreMenu(false); navigate(tab.path); }}
+                                    />
+                                  );
+                                })}
+                              </div>
 
                               {/* ── Admin section ── */}
                               {showAdmin && (
                                 <>
-                                  <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
-                                  <p className={`px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                    Admin
-                                  </p>
-                                  {[
-                                    { path: '/admin', icon: Shield, label: 'Admin Panel' },
-                                    { path: '/pantry', icon: Package, label: 'Pantry' },
-                                    { path: '/journal', icon: BookOpen, label: 'Journal' },
-                                  ].map(({ path, icon: Icon, label }) => (
-                                    <button
-                                      key={path}
-                                      onClick={() => { setShowMoreMenu(false); navigate(path); }}
-                                      className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
-                                        isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50'
-                                      }`}
-                                    >
-                                      <Icon size={15} />
-                                      {label}
-                                    </button>
-                                  ))}
+                                  <div className={`mx-5 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+                                  <div className="py-2 px-2">
+                                    <p className={`px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                      Admin
+                                    </p>
+                                    {[
+                                      { path: '/admin', icon: Shield, label: 'Admin Panel' },
+                                      { path: '/pantry', icon: Package, label: 'Pantry' },
+                                      { path: '/journal', icon: BookOpen, label: 'Journal' },
+                                    ].map(({ path, icon: Icon, label }) => (
+                                      <PanelRow
+                                        key={path}
+                                        icon={<Icon size={18} />}
+                                        label={label}
+                                        active={isTabActive(path)}
+                                        isDark={isDark}
+                                        onClick={() => { setShowMoreMenu(false); navigate(path); }}
+                                      />
+                                    ))}
+                                  </div>
                                 </>
                               )}
 
-                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
+                              <div className={`mx-5 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
 
-                              {/* Link out to the marketing site — useful for users who want to
-                                  read /how-it-works, /calendar, /about, etc. without losing their
-                                  session. Configurable via VITE_MARKETING_URL. */}
-                              <a
-                                href={(import.meta.env.VITE_MARKETING_URL as string | undefined) || 'https://sharedminds.app'}
-                                onClick={() => setShowMoreMenu(false)}
-                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
-                                  isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50'
-                                }`}
-                              >
-                                <Globe size={15} />
-                                <span className="flex-1">View website</span>
-                                <ExternalLink size={11} className="opacity-50" />
-                              </a>
+                              {/* ── External link + Sign out, anchored to the bottom
+                                  via mt-auto so the panel feels like a proper drawer
+                                  even when content is short. ── */}
+                              <div className="py-2 px-2 mt-auto">
+                                <a
+                                  href={(import.meta.env.VITE_MARKETING_URL as string | undefined) || 'https://sharedminds.app'}
+                                  onClick={() => setShowMoreMenu(false)}
+                                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${
+                                    isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <Globe size={18} />
+                                  <span className="flex-1">View website</span>
+                                  <ExternalLink size={12} className="opacity-50" />
+                                </a>
 
-                              <div className={`my-1 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`} />
-
-                              <button
-                                onClick={() => { setShowMoreMenu(false); handleLogout(); }}
-                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors ${
-                                  isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'
-                                }`}
-                              >
-                                <LogOut size={15} />
-                                Sign out
-                              </button>
+                                <button
+                                  onClick={() => { setShowMoreMenu(false); handleLogout(); }}
+                                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-colors ${
+                                    isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'
+                                  }`}
+                                >
+                                  <LogOut size={18} />
+                                  Sign out
+                                </button>
+                              </div>
                             </div>
                           </>,
                           document.body
@@ -880,10 +888,43 @@ export function Layout({ children }: LayoutProps) {
       )}
 
       {/* Persistent floating chat dock — portals to body so it sits above
-          all page content including active session/Jitsi overlays. */}
-      <MessagingDock />
+          all page content. Hidden during active video sessions so users
+          can focus on their work without two competing chat surfaces. */}
+      {!location.pathname.startsWith('/session/') && <MessagingDock />}
 
     </div>
+  );
+}
+
+// ── Panel row helper ─────────────────────────────────────────────────────────
+//
+// Single source for the slide-in panel's nav rows so we don't repeat the
+// active/inactive/dark styling at every call-site. Generous padding (py-3,
+// gap-3) is deliberate — the panel is a "this is your space" surface, not
+// a cramped dropdown.
+
+function PanelRow({
+  icon, label, active, isDark, onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  isDark: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${
+        active
+          ? isDark ? 'text-blue-400 bg-blue-900/20' : 'text-blue-700 bg-blue-50'
+          : isDark ? 'text-gray-200 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      {icon}
+      <span className="text-left">{label}</span>
+    </button>
   );
 }
 

@@ -225,11 +225,21 @@ export const ReflectionService = {
   },
 
   async deleteIntention(intentionId: string): Promise<void> {
-    const { error } = await supabase
+    // Defense in depth: `.select()` so PostgREST returns the deleted rows.
+    // If RLS silently filters the delete to zero rows we throw rather than
+    // pretend it worked (same pattern as TaskService.deleteTask — see
+    // src/core/services/TaskService.ts for the original write-up).
+    const { data, error } = await supabase
       .from('weekly_intentions')
       .delete()
-      .eq('id', intentionId);
+      .eq('id', intentionId)
+      .select('id');
     if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error(
+        `[ReflectionService] Delete returned 0 rows — likely an RLS denial for weekly_intention ${intentionId}`,
+      );
+    }
   },
 
   async toggleIntentionComplete(intention: WeeklyIntention): Promise<WeeklyIntention> {

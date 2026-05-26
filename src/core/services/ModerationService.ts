@@ -12,7 +12,34 @@ import { supabase } from '../../lib/supabase';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type ContentType = 'chat' | 'dm' | 'post' | 'reply' | 'session';
+export type ContentType = 'chat' | 'dm' | 'post' | 'reply' | 'session' | 'user';
+
+export type WarningSeverity = 'warning' | 'final_warning' | 'suspension' | 'ban';
+
+export interface UserWarning {
+  id: string;
+  user_id: string;
+  issued_by: string;
+  severity: WarningSeverity;
+  reason: string;
+  related_flag_id: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface UserSafetySummary {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  warning_count: number;
+  suspended_until: string | null;
+  open_flag_count: number;
+  total_flag_count: number;
+  warning_history_count: number;
+  latest_flag_at: string | null;
+  latest_warning_severity: WarningSeverity | null;
+  latest_warning_at: string | null;
+}
 
 export type FlagReason =
   | 'harassment'
@@ -87,6 +114,8 @@ export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
 // ── User reporting ─────────────────────────────────────────────────────────────
 
 /** Submit a content flag from the current user. */
+/** Submit a content flag. Returns the new flag id so callers can attach
+ *  evidence (screenshots, transcripts) referencing it. */
 export async function flagContent(opts: {
   contentType:      ContentType;
   contentId:        string;
@@ -94,31 +123,35 @@ export async function flagContent(opts: {
   reason:           FlagReason;
   notes?:           string;
   contentSnapshot?: string;
-}): Promise<void> {
+}): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const colMap: Record<ContentType, string> = {
+  // The 'user' content type isn't tied to a specific FK column — we just
+  // rely on flagged_user_id + content_type='user' to identify it.
+  const colMap: Partial<Record<ContentType, string>> = {
     chat:    'flagged_chat_id',
     dm:      'flagged_dm_id',
     post:    'flagged_post_id',
     reply:   'flagged_reply_id',
     session: 'flagged_session_id',
   };
+  const fkCol = colMap[opts.contentType];
 
-  const { error } = await supabase.from('content_flags').insert({
+  const { data, error } = await supabase.from('content_flags').insert({
     reporter_id:       user.id,
     flagged_user_id:   opts.flaggedUserId,
-    [colMap[opts.contentType]]: opts.contentId,
+    ...(fkCol ? { [fkCol]: opts.contentId } : {}),
     content_type:      opts.contentType,
     reason:            opts.reason,
     notes:             opts.notes ?? null,
     content_snapshot:  opts.contentSnapshot?.slice(0, 500) ?? null,
     auto_flagged:      false,
     status:            'open',
-  });
+  }).select('id').single();
 
   if (error) throw error;
+  return (data as { id: string }).id;
 }
 
 // ── Admin: list + action ───────────────────────────────────────────────────────
@@ -337,4 +370,134 @@ export async function moderateText(opts: {
   } catch {
     return true; // fail open
   }
+}
+
+// ── Escalation: warnings + suspensions (admin only) ────────────────────────
+
+/**
+ * Report a member as a whole (not a specific message). Convenience wrapper
+ * around flagContent — uses content_type='user' and synthesises the
+ * content_id from the user id so the admin queue can group reports by user.
+ */
+export async function reportUser(opts: {
+  flaggedUserId: string;
+  reason:        FlagReason;
+  notes?:        string;
+  contextUrl?:   string;
+}): Promise<void> {
+  return flagContent({
+    contentType:     'user',
+    // For user-level reports there's no specific content row to reference,
+    // so we pass the flagged user id as the contentId. The schema treats it
+    // as an opaque uuid — it just needs to be there so the row links back.
+    contentId:       opts.flaggedUserId,
+    flaggedUserId:   opts.flaggedUserId,
+    reason:          opts.reason,
+    notes:           opts.notes,
+    contentSnapshot: opts.contextUrl,
+  });
+}
+
+/**
+ * Issue a warning, suspension, or ban. Trigger on user_warnings INSERT
+ * handles updating profiles.warning_count + suspended_until + the
+ * notification fan-out to the user.
+ */
+export async function issueWarning(opts: {
+  userId:         string;
+  severity:       WarningSeverity;
+  reason:         string;
+  relatedFlagId?: string;
+  /** Only used when severity = 'suspension'. Defaults to 7 days from now. */
+  expiresAt?:     string;
+}): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase.from('user_warnings').insert({
+    user_id:         opts.userId,
+    issued_by:       user.id,
+    severity:        opts.severity,
+    reason:          opts.reason,
+    related_flag_id: opts.relatedFlagId ?? null,
+    expires_at:      opts.expiresAt ?? null,
+  });
+
+  if (error) throw error;
+}
+
+/** Lift a suspension early. */
+export async function liftSuspension(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ suspended_until: null })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
+/** Admin: top-N users by open flag count + warning history. */
+export async function listFlaggedUsers(limit = 50): Promise<UserSafetySummary[]> {
+  const { data, error } = await supabase.rpc('admin_user_safety_summary', { _limit: limit });
+  if (error) {
+    console.warn('[ModerationService] listFlaggedUsers failed:', error.message);
+    return [];
+  }
+  return (data ?? []) as UserSafetySummary[];
+}
+
+/** Evidence attached to a flag (admin view). Resolves storage paths into
+ *  signed URLs valid for 5 minutes so admins can preview screenshots
+ *  without exposing them publicly. */
+export interface FlagEvidence {
+  id: string;
+  flag_id: string;
+  evidence_type: 'screenshot' | 'chat_transcript';
+  storage_path: string | null;
+  transcript: Array<{ user_id: string; content: string; created_at: string }> | null;
+  captured_at: string;
+  auto_delete_at: string;
+  legal_hold: boolean;
+  /** Populated by getFlagEvidence — short-lived signed URL for screenshots. */
+  signed_url?: string;
+}
+
+export async function getFlagEvidence(flagId: string): Promise<FlagEvidence[]> {
+  const { data, error } = await supabase
+    .from('flag_evidence')
+    .select('*')
+    .eq('flag_id', flagId)
+    .order('captured_at', { ascending: true });
+  if (error) {
+    console.warn('[ModerationService] getFlagEvidence failed:', error.message);
+    return [];
+  }
+  const rows = (data ?? []) as FlagEvidence[];
+  // Resolve signed URLs for screenshots in parallel. Five-minute lifetime
+  // is long enough for admin to view + short enough that a copied URL
+  // expires before it spreads.
+  await Promise.all(
+    rows
+      .filter((r) => r.evidence_type === 'screenshot' && r.storage_path)
+      .map(async (r) => {
+        const { data: signed } = await supabase.storage
+          .from('flag-evidence')
+          .createSignedUrl(r.storage_path!, 300);
+        if (signed) r.signed_url = signed.signedUrl;
+      }),
+  );
+  return rows;
+}
+
+/** All warnings issued to a single user (admin or self). */
+export async function getWarningHistory(userId: string): Promise<UserWarning[]> {
+  const { data, error } = await supabase
+    .from('user_warnings')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.warn('[ModerationService] getWarningHistory failed:', error.message);
+    return [];
+  }
+  return (data ?? []) as UserWarning[];
 }

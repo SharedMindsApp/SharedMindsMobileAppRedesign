@@ -1,17 +1,21 @@
 /**
  * ProfileSettingsPage — /profile (own view)
  *
- * Merges the old Settings page into Profile. Tabs:
- *   • View          — what others see (renders <ProfilePage />)
- *   • Edit          — name, bio, avatar, country, city, work types, skills
- *   • Notifications — per-category email toggles + digest mode
- *   • Account       — directory privacy, email, sign out
+ * Single scrolling page (no tabs). Sections in order:
+ *   1. Public preview — what others see (renders <ProfilePage />)
+ *   2. Edit — name, bio, avatar, country, city, work types, skills
+ *   3. Notifications — per-category email toggles + digest mode
+ *   4. Account — directory privacy, email, sign out
  *
- * Public visits to /profile/:userId still hit <ProfilePage /> directly —
- * they never see this tabbed shell.
+ * Previously this was a 4-tab UI; the user fragmented their identity into
+ * separate pages and the design felt heavier than it needed to be. With
+ * stats moved to Home → Stats, the profile page has less content overall
+ * and works better as one continuous scroll.
  *
- * Tab state is in the URL (?tab=edit) so we can deep-link from the dropdown
- * and so the old /settings route can redirect into a specific tab.
+ * Public visits to /profile/:userId still hit <ProfilePage /> directly.
+ *
+ * The old ?tab= query param is honoured for back-compat: instead of
+ * switching tabs we scroll-to the matching section anchor.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -52,68 +56,96 @@ const WORK_TYPES = [
 
 const MAX_WORK_TYPES = 3;
 
-type TabId = 'view' | 'edit' | 'notifications' | 'account';
-
-const TABS: { id: TabId; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: 'view',          label: 'View',          icon: UserRound    },
-  { id: 'edit',          label: 'Edit',          icon: SettingsIcon },
-  { id: 'notifications', label: 'Notifications', icon: Bell         },
-  { id: 'account',       label: 'Account',       icon: Shield       },
-];
-
 function arraysEqual(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
 }
 
+// Section ids — used for ?tab= deep-link back-compat (we scroll-to instead
+// of switching, since there are no tabs anymore).
+const SECTION_ANCHORS: Record<string, string> = {
+  edit:          'profile-edit',
+  notifications: 'profile-notifications',
+  account:       'profile-account',
+};
+
 // ── ProfileSettingsPage ───────────────────────────────────────────────────
 
 export function ProfileSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = (searchParams.get('tab') ?? 'view') as TabId;
-  const tab = TABS.find((t) => t.id === tabParam) ? tabParam : 'view';
 
-  function setTab(next: TabId) {
-    const params = new URLSearchParams(searchParams);
-    if (next === 'view') params.delete('tab');
-    else params.set('tab', next);
-    setSearchParams(params, { replace: true });
-  }
+  // Back-compat: if the URL has ?tab=edit (or notifications/account) from
+  // an old link, scroll to that section on mount and strip the param.
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && SECTION_ANCHORS[tab]) {
+      // Defer to let layout settle before scrolling.
+      const t = setTimeout(() => {
+        document.getElementById(SECTION_ANCHORS[tab])?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        const params = new URLSearchParams(searchParams);
+        params.delete('tab');
+        setSearchParams(params, { replace: true });
+      }, 80);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className="space-y-5">
-      {/* Tab strip */}
-      <div className="flex p-1 bg-surface-container-low rounded-full gap-1 overflow-x-auto">
-        {TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`flex-1 min-w-[80px] inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-full text-xs font-semibold transition-all ${
-                active ? 'bg-white shadow-sm text-primary' : 'stitch-text-secondary'
-              }`}
-            >
-              <Icon size={12} />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className="space-y-6">
+      {/* 1. Public preview — what people see when they hit /profile/:you */}
+      <section>
+        <SectionHeading
+          icon={<UserRound size={12} />}
+          title="How others see you"
+        />
+        <ProfilePage />
+      </section>
 
-      {/* Tab body */}
-      {tab === 'view' && <ProfilePage />}
-      {tab === 'edit' && <EditTab />}
-      {tab === 'notifications' && (
+      {/* 2. Edit — the main job of this page */}
+      <section id={SECTION_ANCHORS.edit} className="scroll-mt-4">
+        <SectionHeading
+          icon={<SettingsIcon size={12} />}
+          title="Edit your profile"
+        />
+        <EditTab />
+      </section>
+
+      {/* 3. Notifications */}
+      <section id={SECTION_ANCHORS.notifications} className="scroll-mt-4">
+        <SectionHeading
+          icon={<Bell size={12} />}
+          title="Notifications"
+        />
         <SurfaceCard>
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Email notifications</p>
           <NotificationPreferencesPanel />
         </SurfaceCard>
-      )}
-      {tab === 'account' && <AccountTab />}
+      </section>
+
+      {/* 4. Account */}
+      <section id={SECTION_ANCHORS.account} className="scroll-mt-4">
+        <SectionHeading
+          icon={<Shield size={12} />}
+          title="Account"
+        />
+        <AccountTab />
+      </section>
+    </div>
+  );
+}
+
+// Small section heading used to break the long scroll into scannable blocks.
+function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-3 px-1">
+      <span className="stitch-text-secondary">{icon}</span>
+      <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+        {title}
+      </p>
     </div>
   );
 }
@@ -129,6 +161,9 @@ function EditTab() {
   const [city, setCity] = useState(profile?.city ?? '');
   const [workTypes, setWorkTypes] = useState<string[]>(profile?.work_types ?? []);
   const [skills, setSkills] = useState<string[]>(profile?.skills ?? []);
+  const [skillLevels, setSkillLevels] = useState<Record<string, number>>(
+    (profile?.skill_levels as Record<string, number>) ?? {}
+  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +184,7 @@ function EditTab() {
         : profile.work_type ? [profile.work_type] : [];
       setWorkTypes(types);
       setSkills(profile.skills ?? []);
+      setSkillLevels((profile.skill_levels as Record<string, number>) ?? {});
     }
   }, [profile]);
 
@@ -202,6 +238,10 @@ function EditTab() {
           work_types: workTypes,
           work_type: workTypes[0] ?? null,
           skills,
+          // Drop any orphan ratings (skill removed but level still in map).
+          skill_levels: Object.fromEntries(
+            Object.entries(skillLevels).filter(([k]) => skills.includes(k))
+          ),
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -226,7 +266,8 @@ function EditTab() {
     countryCode !== (profile?.country_code ?? null) ||
     city !== (profile?.city ?? '') ||
     !arraysEqual(workTypes, initialWorkTypes) ||
-    !arraysEqual(skills, profile?.skills ?? []);
+    !arraysEqual(skills, profile?.skills ?? []) ||
+    JSON.stringify(skillLevels) !== JSON.stringify((profile?.skill_levels as Record<string, number>) ?? {});
 
   return (
     <div className="space-y-5">
@@ -386,7 +427,12 @@ function EditTab() {
         <p className="text-xs stitch-text-secondary mb-4">
           Tools, crafts, languages — anything you bring to the work. Filterable on /people.
         </p>
-        <SkillsEditor value={skills} onChange={setSkills} />
+        <SkillsEditor
+          value={skills}
+          onChange={setSkills}
+          levels={skillLevels as Record<string, 1 | 2 | 3 | 4 | 5>}
+          onLevelsChange={(next) => setSkillLevels(next)}
+        />
       </SurfaceCard>
 
       {/* ── Save button ───────────────────────────────────── */}

@@ -15,8 +15,9 @@ import {
 import { AdminLayout } from './AdminLayout';
 import {
   listFlags, listModerationActions, adminRemoveContent, warnUser, resolveFlag,
+  getFlagEvidence,
   FLAG_REASON_LABELS, CONTENT_TYPE_LABELS,
-  type ContentFlag, type ModerationAction, type FlagStatus,
+  type ContentFlag, type ModerationAction, type FlagStatus, type FlagEvidence,
 } from '../../core/services/ModerationService';
 
 type QueueTab = 'open' | 'resolved' | 'dismissed' | 'log';
@@ -58,6 +59,18 @@ function FlagCard({
   const [expanded, setExpanded]   = useState(false);
   const [actioning, setActioning] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Evidence is lazy-loaded the first time the flag is expanded. Signed
+  // URLs for screenshots only live 5 min, so we re-fetch on each expand.
+  const [evidence, setEvidence] = useState<FlagEvidence[] | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+
+  useEffect(() => {
+    if (!expanded || evidenceLoading || evidence !== null) return;
+    setEvidenceLoading(true);
+    getFlagEvidence(flag.id)
+      .then(setEvidence)
+      .finally(() => setEvidenceLoading(false));
+  }, [expanded, flag.id, evidenceLoading, evidence]);
 
   async function handleRemove() {
     if (!confirm(`Remove this ${flag.content_type} content? It will be hidden from all users but preserved in the database.`)) return;
@@ -179,6 +192,30 @@ function FlagCard({
         <div className="px-4 pb-3">
           <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider mb-1">Reporter notes</p>
           <p className="text-sm text-gray-700">{flag.notes}</p>
+        </div>
+      )}
+
+      {/* Evidence panel — only loads when the flag is expanded */}
+      {expanded && (
+        <div className="px-4 pb-3">
+          <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider mb-2">
+            Evidence {evidence && evidence.length > 0 && `· ${evidence.length}`}
+          </p>
+          {evidenceLoading ? (
+            <p className="text-xs text-gray-400 flex items-center gap-1.5">
+              <Loader2 size={11} className="animate-spin" /> Loading…
+            </p>
+          ) : !evidence || evidence.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">
+              No evidence attached (report not fired from inside a live session).
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {evidence.map((ev) => (
+                <EvidenceItem key={ev.id} evidence={ev} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -389,5 +426,73 @@ export function AdminModerationQueue() {
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+// ── Evidence display ───────────────────────────────────────────────────────
+
+function EvidenceItem({ evidence }: { evidence: FlagEvidence }) {
+  const capturedAt = new Date(evidence.captured_at).toLocaleString();
+  const deletesAt  = new Date(evidence.auto_delete_at).toLocaleDateString();
+
+  if (evidence.evidence_type === 'screenshot') {
+    return (
+      <div className="rounded-xl bg-white ring-1 ring-gray-200 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[11px] font-bold text-gray-700">
+            📸 Screenshot
+          </p>
+          <p className="text-[10px] text-gray-400">
+            Captured {capturedAt} · Auto-deletes {deletesAt}
+          </p>
+        </div>
+        {evidence.signed_url ? (
+          <a href={evidence.signed_url} target="_blank" rel="noreferrer" className="block">
+            <img
+              src={evidence.signed_url}
+              alt="Captured frame from reported participant"
+              className="w-full max-h-72 object-contain rounded-lg bg-black/5"
+            />
+            <p className="text-[10px] text-blue-600 mt-1.5 font-semibold">
+              Open full size →
+            </p>
+          </a>
+        ) : (
+          <p className="text-xs text-gray-400 italic">Image unavailable (storage object may have been purged).</p>
+        )}
+      </div>
+    );
+  }
+
+  // chat_transcript
+  const messages = evidence.transcript ?? [];
+  return (
+    <div className="rounded-xl bg-white ring-1 ring-gray-200 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[11px] font-bold text-gray-700">
+          💬 Chat transcript · {messages.length} {messages.length === 1 ? 'message' : 'messages'}
+        </p>
+        <p className="text-[10px] text-gray-400">
+          Captured {capturedAt} · Auto-deletes {deletesAt}
+        </p>
+      </div>
+      {messages.length === 0 ? (
+        <p className="text-xs text-gray-400 italic">No messages in the captured window.</p>
+      ) : (
+        <div className="max-h-64 overflow-y-auto space-y-1.5 text-xs">
+          {messages.map((m, i) => (
+            <div key={i} className="flex gap-2">
+              <span className="text-gray-400 font-mono shrink-0">
+                {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+              <span className="text-gray-400 font-mono shrink-0 truncate max-w-[100px]" title={m.user_id}>
+                {m.user_id.slice(0, 8)}
+              </span>
+              <span className="text-gray-700 break-words">{m.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

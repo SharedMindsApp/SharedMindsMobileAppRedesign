@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock, Video, VideoOff } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
+import { TaskService } from '../../services/TaskService';
 import { InputWell } from '../../ui/CorePage';
+import { useAuth } from '../../auth/AuthProvider';
+import { ConductGateModal } from '../moderation/ConductGateModal';
 
 type DurationOption = 25 | 50 | 90;
 type GoalTab = 'pick' | 'type';
@@ -78,6 +81,9 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
     forceSoloMode ? 'solo' : 'one_on_one'
   );
+  // Solo-only sub-toggle: when ON, user joins the shared body-double Daily
+  // room with camera mandatory + mic locked off. Off = pure private solo.
+  const [bodyDouble, setBodyDouble] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
@@ -87,6 +93,11 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
    *  are real tasks people want to track. Toggle off for ad-hoc one-offs. */
   const [saveAsTask, setSaveAsTask] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // Pending-start guard for the conduct gate. If the user hasn't accepted
+  // the conduct rules yet, clicking Start opens this gate first; on
+  // acceptance we re-enter handleStart() to actually create the session.
+  const { profile } = useAuth();
+  const [showConductGate, setShowConductGate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // After a future session is scheduled, show a 2.5s confirmation before closing
   const [scheduledConfirm, setScheduledConfirm] = useState(false);
@@ -112,12 +123,64 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     }
   }
 
-  const openTasks = tasks.filter((t) => !t.done);
+  const allOpenTasks = tasks.filter((t) => !t.done);
+
+  // Project filter: lets the user narrow the task picker to one project's
+  // tasks. Default to the activeProject if any (so "What am I working on?"
+  // is one tap), else "All" (no filter).
+  // Special value 'unscoped' = tasks not in any project (inbox).
+  type ProjectFilterValue = string | 'all' | 'unscoped';
+  const [projectFilter, setProjectFilter] = useState<ProjectFilterValue>(
+    activeProjectId ?? 'all',
+  );
+
+  // Compute which projects actually have open tasks — no point showing
+  // a chip for a project with nothing to pick.
+  const projectsWithTasks = projects.filter((p) =>
+    allOpenTasks.some((t) => t.projectId === p.id),
+  );
+  const hasUnscopedTasks = allOpenTasks.some((t) => !t.projectId);
+
+  // Apply the project filter. If no projects exist OR the user picked
+  // "All", show everything (current behavior).
+  const openTasks = (() => {
+    if (projectsWithTasks.length === 0) return allOpenTasks;
+    if (projectFilter === 'all') return allOpenTasks;
+    if (projectFilter === 'unscoped') return allOpenTasks.filter((t) => !t.projectId);
+    return allOpenTasks.filter((t) => t.projectId === projectFilter);
+  })();
+
+  // Split into "continue" (in-progress from a previous session that wasn't
+  // finished) and "all other open" — and pin continue-tasks to the top
+  // sorted by most-recent-session first. This is the ADHD-friendly nudge:
+  // the picker remembers what you were in the middle of, so you don't have
+  // to.
+  const continueTasks = openTasks
+    .filter((t) =>
+      t.lastSessionOutcome === 'partially'
+      || t.lastSessionOutcome === 'something_came_up'
+      || t.lastSessionOutcome === 'no_answer',
+    )
+    .sort((a, b) => {
+      const aTime = a.lastSessionAt ? new Date(a.lastSessionAt).getTime() : 0;
+      const bTime = b.lastSessionAt ? new Date(b.lastSessionAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  const otherTasks = openTasks.filter((t) => !continueTasks.includes(t));
+
   const resolvedGoal = tab === 'pick' ? (selectedTask?.title ?? '') : goalText.trim();
   const canSubmit = resolvedGoal.length > 0 && !submitting;
 
   async function handleStart() {
     if (!canSubmit) return;
+    // Conduct gate: block the first session until the user has explicitly
+    // accepted the community ground rules. The modal calls back into
+    // handleStart() on accept (the profile column will be set by then so
+    // we skip this branch). No-op for repeat sessions.
+    if (!profile?.conduct_accepted_at) {
+      setShowConductGate(true);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -128,7 +191,19 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         resolvedTaskId = selectedTask.id;
       } else if (tab === 'type' && saveAsTask && goalText.trim()) {
         try {
-          resolvedTaskId = await addTaskAsync(goalText.trim(), selectedProjectId);
+          // Dedupe by title: if the user already has an open task with this
+          // exact title (case-insensitive), reuse it instead of creating a
+          // duplicate. Without this, declaring "Write blog post" every day
+          // would create N copies of the same task in their inbox.
+          const normalized = goalText.trim().toLowerCase();
+          const existing = openTasks.find(
+            (t) => t.title.trim().toLowerCase() === normalized,
+          );
+          if (existing) {
+            resolvedTaskId = existing.id;
+          } else {
+            resolvedTaskId = await addTaskAsync(goalText.trim(), selectedProjectId);
+          }
         } catch (taskErr) {
           // Don't block session start if task save fails — log + continue
           console.warn('[DeclareSessionModal] Save-as-task failed:', taskErr);
@@ -155,7 +230,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         sessionMode,
         // Solo has no audio room — quiet mode is meaningless there
         quietMode: sessionMode === 'solo' ? false : quietMode,
+        bodyDouble: sessionMode === 'solo' ? bodyDouble : false,
       });
+      // Bump the linked task to 'active' + increment sessions_count.
+      // Fire-and-forget — the DB write isn't worth blocking navigation on.
+      if (resolvedTaskId) {
+        TaskService.markTaskStartedForSession(resolvedTaskId).catch(() => { /* non-fatal */ });
+      }
       setActiveSession(session);
       onClose();
       // Pass the session object in router state so ActiveSessionPage has it
@@ -293,45 +374,78 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         <div className="flex-1 overflow-y-auto px-5 min-h-0">
           {tab === 'pick' ? (
             <div className="space-y-1.5 pb-2">
-              {openTasks.map((task) => {
-                const isSelected = selectedTask?.id === task.id;
-                return (
-                  <div key={task.id} className="group relative">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTask(isSelected ? null : task)}
-                      className={`w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150 pr-10 ${
-                        isSelected
-                          ? 'bg-primary/8 ring-2 ring-primary/25 shadow-sm'
-                          : 'bg-surface-container-low hover:bg-surface-container active:scale-[0.99]'
-                      }`}
-                    >
-                      <div className={`w-1 self-stretch rounded-full shrink-0 ${ENERGY_COLORS[task.energy]}`} />
-                      <span className="flex-1 text-sm font-medium stitch-text-primary leading-snug">
-                        {task.title}
-                      </span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                        isSelected ? 'bg-primary' : 'border-2 border-surface-container'
-                      }`}>
-                        {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
-                      </div>
-                    </button>
-                    {/* Delete button — appears on hover, sits in top-right corner */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
+              {/* ── Project filter chips (only if user has projects) ── */}
+              {projectsWithTasks.length > 0 && (
+                <div className="flex flex-wrap gap-1 pb-1 sticky top-0 bg-white z-10 -mx-5 px-5 pt-1">
+                  <ProjectChip
+                    label="All"
+                    selected={projectFilter === 'all'}
+                    onClick={() => setProjectFilter('all')}
+                  />
+                  {projectsWithTasks.map((p) => (
+                    <ProjectChip
+                      key={p.id}
+                      label={p.name}
+                      color={p.color}
+                      selected={projectFilter === p.id}
+                      onClick={() => setProjectFilter(p.id)}
+                    />
+                  ))}
+                  {hasUnscopedTasks && (
+                    <ProjectChip
+                      label="Inbox"
+                      selected={projectFilter === 'unscoped'}
+                      onClick={() => setProjectFilter('unscoped')}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* ── Continue section: tasks you've started but not finished ── */}
+              {continueTasks.length > 0 && (
+                <>
+                  <div className="flex items-center gap-1.5 pt-1 pb-1">
+                    <Clock size={9} className="text-amber-600" />
+                    <p className="text-[9px] font-bold text-amber-700 tracking-widest uppercase">
+                      Continue where you left off
+                    </p>
+                  </div>
+                  {continueTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      isSelected={selectedTask?.id === task.id}
+                      isContinue
+                      onSelect={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
+                      onDelete={() => {
                         if (selectedTask?.id === task.id) setSelectedTask(null);
                         deleteTaskAsync(task.id).catch(() => {});
                       }}
-                      title="Remove task"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity bg-surface-container hover:bg-red-100 hover:text-red-500 stitch-text-secondary"
-                    >
-                      <X size={11} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                );
-              })}
+                    />
+                  ))}
+                  {otherTasks.length > 0 && (
+                    <div className="pt-2 pb-1">
+                      <p className="text-[9px] font-bold stitch-text-secondary tracking-widest uppercase">
+                        All tasks
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Everything else ── */}
+              {otherTasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  isSelected={selectedTask?.id === task.id}
+                  onSelect={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
+                  onDelete={() => {
+                    if (selectedTask?.id === task.id) setSelectedTask(null);
+                    deleteTaskAsync(task.id).catch(() => {});
+                  }}
+                />
+              ))}
 
               {/* ── Inline task creation row ── */}
               <div className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
@@ -572,6 +686,44 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
         )}
 
+        {/* ── Body-double toggle (Solo only) ────────────────────── */}
+        {sessionMode === 'solo' && (
+          <div className="shrink-0 px-5 pt-3">
+            <button
+              type="button"
+              onClick={() => setBodyDouble((v) => !v)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
+                bodyDouble
+                  ? 'bg-violet-500/10 ring-2 ring-violet-400/30'
+                  : 'bg-surface-container-low hover:bg-surface-container'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                bodyDouble ? 'bg-violet-500 text-white' : 'bg-white stitch-text-secondary'
+              }`}>
+                {bodyDouble ? <Video size={14} /> : <VideoOff size={14} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold stitch-text-primary leading-tight">
+                  Body double · silent video {bodyDouble && <span className="text-violet-600">· on</span>}
+                </p>
+                <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
+                  {bodyDouble
+                    ? 'Camera required. See other solo folks silently. Mic locked off.'
+                    : 'Optional: feel less alone with silent video. Camera required.'}
+                </p>
+              </div>
+              <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                bodyDouble ? 'bg-violet-500' : 'bg-surface-container'
+              }`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                  bodyDouble ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </div>
+            </button>
+          </div>
+        )}
+
         {/* ── Quiet mode toggle (hidden for Solo — no audio room) ── */}
         {sessionMode !== 'solo' && (
           <div className="shrink-0 px-5 pt-3">
@@ -641,7 +793,136 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
 
       </div>
+
+      {/* Blocking conduct gate for first-session users. Rendered alongside
+          the declare modal in the portal so it appears above everything. */}
+      {showConductGate && (
+        <ConductGateModal
+          onAccepted={() => {
+            setShowConductGate(false);
+            // Re-trigger start now that the profile column is set. We let
+            // React flush state first by deferring the call to the next tick.
+            setTimeout(() => { void handleStart(); }, 0);
+          }}
+          onCancel={() => setShowConductGate(false)}
+        />
+      )}
     </>,
     document.body
+  );
+}
+
+// ── TaskRow ────────────────────────────────────────────────────────
+// Renders a single task in the picker. Variants:
+//   - Default: plain row with hover-reveal delete
+//   - isContinue: amber-tinted with "continue" + session count chip
+// Both show the "intention" chip when linked to a weekly intention.
+function TaskRow({
+  task, isSelected, isContinue = false, onSelect, onDelete,
+}: {
+  task: CoreTask;
+  isSelected: boolean;
+  isContinue?: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
+  const sessions = task.sessionsCount ?? 0;
+
+  return (
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150 pr-10 ${
+          isSelected
+            ? 'bg-primary/8 ring-2 ring-primary/25 shadow-sm'
+            : isContinue
+            ? 'bg-amber-50/60 hover:bg-amber-50 ring-1 ring-amber-200/40 active:scale-[0.99]'
+            : 'bg-surface-container-low hover:bg-surface-container active:scale-[0.99]'
+        }`}
+      >
+        <div className={`w-1 self-stretch rounded-full shrink-0 ${ENERGY_COLORS[task.energy]}`} />
+        <div className="flex-1 min-w-0">
+          <span className="block text-sm font-medium stitch-text-primary leading-snug truncate">
+            {task.title}
+          </span>
+          {/* Chip row: intention badge + session count */}
+          {(task.weeklyIntentionId || sessions > 0) && (
+            <div className="flex items-center gap-1 mt-0.5">
+              {task.weeklyIntentionId && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[9px] font-bold">
+                  ✦ Intention
+                </span>
+              )}
+              {sessions > 0 && (
+                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                  isContinue
+                    ? 'bg-amber-200/50 text-amber-800'
+                    : 'bg-surface-container stitch-text-secondary'
+                }`}>
+                  {sessions} session{sessions !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
+          isSelected ? 'bg-primary' : 'border-2 border-surface-container'
+        }`}>
+          {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
+        </div>
+      </button>
+      {/* Delete on hover */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        title="Remove task"
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity bg-surface-container hover:bg-red-100 hover:text-red-500 stitch-text-secondary"
+      >
+        <X size={11} strokeWidth={2.5} />
+      </button>
+    </div>
+  );
+}
+
+// ── ProjectChip ──────────────────────────────────────────────────────
+// Filter pill at the top of the "From my tasks" picker. Shown only when
+// the user has 1+ projects with open tasks. Lets them narrow the picker
+// to one project (or 'all' / 'unscoped inbox').
+const PROJECT_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function projectDotColor(token: string | null): string {
+  if (!token) return '#94a3b8';
+  return PROJECT_HEX[token] ?? token; // accept either a token key or a raw hex
+}
+
+function ProjectChip({
+  label, color = null, selected, onClick,
+}: {
+  label: string;
+  color?: string | null;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all active:scale-95 ${
+        selected
+          ? 'bg-primary text-white shadow-sm'
+          : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
+      }`}
+    >
+      {color && (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: projectDotColor(color) }}
+        />
+      )}
+      <span className="truncate max-w-[120px]">{label}</span>
+    </button>
   );
 }

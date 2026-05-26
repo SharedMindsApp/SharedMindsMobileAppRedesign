@@ -7,6 +7,8 @@ export interface Connection {
   requester_id: string;
   addressee_id: string;
   status: 'pending' | 'accepted';
+  /** Optional "why I'd like to connect" message, up to 280 chars. */
+  note: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -17,10 +19,18 @@ export interface ConnectionWithProfile extends Connection {
   other_user_id: string;
 }
 
-export async function sendConnectionRequest(addresseeId: string): Promise<Connection> {
+export async function sendConnectionRequest(
+  addresseeId: string,
+  note?: string,
+): Promise<Connection> {
+  const trimmed = note?.trim() || null;
   const { data, error } = await supabase
     .from('connections')
-    .insert({ addressee_id: addresseeId })
+    .insert({
+      addressee_id: addresseeId,
+      // Only send when present so legacy clients still work
+      ...(trimmed ? { note: trimmed.slice(0, 280) } : {}),
+    })
     .select()
     .single();
 
@@ -92,6 +102,29 @@ export async function fetchConnections(): Promise<ConnectionWithProfile[]> {
         : (row.requester?.avatar_url ?? null),
     } as ConnectionWithProfile;
   });
+}
+
+/**
+ * Cheap count of accepted connections. Use this instead of
+ * `(await fetchConnections()).length` when you only need the number —
+ * skips fetching full profile rows + serialisation, and PostgREST returns
+ * just a row count in the response header.
+ */
+export async function fetchConnectionsCount(): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { count, error } = await supabase
+    .from('connections')
+    .select('*', { count: 'exact', head: true })
+    .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+    .eq('status', 'accepted');
+
+  if (error) {
+    console.warn('[ConnectionService] fetchConnectionsCount failed:', error.message);
+    return 0;
+  }
+  return count ?? 0;
 }
 
 export async function fetchPendingRequests(): Promise<ConnectionWithProfile[]> {

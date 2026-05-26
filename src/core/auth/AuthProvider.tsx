@@ -16,6 +16,9 @@ export interface Profile {
     id: string;
     display_name: string;
     avatar_url: string | null;
+    /** Face-verification status of the uploaded avatar. Only 'approved' means the user can turn off their camera in video sessions. */
+    avatar_status?: 'none' | 'pending' | 'approved' | 'rejected_face' | 'rejected_safety';
+    avatar_rejection_reason?: string | null;
     timezone: string;
     locale: string | null;
     neurotype: string | null;
@@ -27,11 +30,35 @@ export interface Profile {
     bio?: string | null;
     work_type?: string | null;
     work_types?: string[] | null;
+    /** Industries / markets the user works in (e.g. ['healthcare','sports']).
+     *  Curated list maintained client-side; collected in the onboarding wizard. */
+    industries?: string[] | null;
     skills?: string[] | null;
+    /** Self-rated proficiency per skill: { "Figma": 5, "React": 3 }. Optional —
+     *  any skill in `skills` without an entry here is treated as unspecified. */
+    skill_levels?: Record<string, number> | null;
+    /** Lightweight networking signals — what this member can help others with. */
+    offering?: string[] | null;
+    /** Lightweight networking signals — what this member would love help with. */
+    seeking?: string[] | null;
+    /** Skills the user would love to find in *other people* (identity-oriented,
+     *  distinct from seeking which is task-oriented). Drawn from SKILL_CATEGORIES. */
+    wanted_skills?: string[] | null;
     location?: string | null;
     country_code?: string | null;
     city?: string | null;
     is_hidden_from_directory?: boolean;
+    suspended_until?: string | null;
+    warning_count?: number | null;
+    /** Set when the user accepted the conduct gate (blocking modal before
+     *  their first session). NULL = never accepted; show the modal. */
+    conduct_accepted_at?: string | null;
+    conduct_accepted_version?: string | null;
+    /** NULL = user has not completed the v2 onboarding wizard.
+     *  Non-NULL timestamp = wizard finished. Gate used in CoreApp.tsx. */
+    wizard_v2_completed_at?: string | null;
+    /** 0=Sunday 1=Monday … 6=Saturday — day chosen for weekly intention-setting. */
+    intentions_reminder_day?: number | null;
     created_at: string;
     updated_at: string;
 }
@@ -161,8 +188,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 currentUserProfile = newProfile;
             }
 
+            // Enforce suspension/ban: if `suspended_until` is in the future,
+            // sign the user out and surface a message. We do this before
+            // marking profileReady so suspended users never see the dashboard.
+            if (
+              currentUserProfile.suspended_until &&
+              new Date(currentUserProfile.suspended_until).getTime() > Date.now()
+            ) {
+              const untilDisplay = new Date(currentUserProfile.suspended_until)
+                .toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+              try { await supabase.auth.signOut(); } catch { /* ignore */ }
+              setProfile(null);
+              setUser(null);
+              setProfileReady(true);
+              if (typeof window !== 'undefined') {
+                alert(
+                  `Your account is suspended until ${untilDisplay}.\n\n` +
+                  `If you believe this is a mistake, email support@sharedminds.app.`
+                );
+                window.location.replace('/');
+              }
+              return;
+            }
+
             setProfile(currentUserProfile);
             setProfileReady(true);
+
+            // Backfill: if the avatar predates the verification system
+            // (status='pending'), re-run it through the face check in the
+            // background. Fire-and-forget — the result lands in the DB and
+            // a future profile fetch will pick it up.
+            if (
+                currentUserProfile.avatar_status === 'pending' &&
+                currentUserProfile.avatar_url
+            ) {
+                import('../services/ProfileService').then(({ reverifyExistingAvatar }) => {
+                    reverifyExistingAvatar(userId, currentUserProfile.avatar_url!).catch(() => {
+                        /* non-fatal */
+                    });
+                }).catch(() => { /* dynamic import failed — ignore */ });
+            }
 
             // Only bootstrap space if we got a real DB profile (not a fallback)
             try {

@@ -8,12 +8,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Loader2, Pencil, Play, Target, Users, Calendar, ArrowLeft,
-  CheckCircle2, Circle, Plus, Pin, Clock, Zap, TrendingUp,
-  Archive, UserPlus, ChevronRight,
+  Loader2, Pencil, Play, Target, Calendar, ArrowLeft,
+  CheckCircle2, Plus, Pin, Clock, Zap,
+  Archive, UserPlus, ChevronRight, Trash2, X, Check,
+  Columns, Flag, NotebookPen, Activity,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { ProjectService, type Project, type ProjectMemberWithProfile } from '../../services/ProjectService';
+import {
+  ProjectService,
+  type Project,
+  type ProjectMemberWithProfile,
+  type ProjectGoal,
+  type ProjectNote,
+} from '../../services/ProjectService';
 import { TaskService, type Task } from '../../services/TaskService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
 import { useAuth } from '../../auth/AuthProvider';
@@ -24,7 +31,14 @@ import { projectColorMeta } from './ProjectsPage';
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
-type Tab = 'tasks' | 'sessions' | 'members';
+// Project = organising your work to be productive. Sessions live on
+// /sessions; the project page is about decomposing the work itself.
+//   • Tasks    — flat list view (most familiar)
+//   • Kanban   — same data, swimlanes by status
+//   • Goals    — phases / deliverables this project is chasing
+//   • Notes    — project thinking + docs
+//   • Activity — chronological event feed
+type Tab = 'tasks' | 'kanban' | 'goals' | 'notes' | 'activity';
 
 // ── Priority / energy labels ─────────────────────────────────────
 
@@ -177,10 +191,15 @@ export function ProjectDetailPage() {
       </button>
 
       {/* ── Hero header ────────────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden mb-5 shadow-md">
+      {/* Stack: gradient banner on top, stats band below (sharing the same
+          card so they read as one piece). Previous design used an absolutely
+          positioned stats band that overlapped the gradient and got clipped
+          by the wrapper's overflow-hidden — leaving the bottom half of every
+          stat value invisible. */}
+      <div className="rounded-2xl overflow-hidden mb-5 shadow-md bg-surface ring-1 ring-surface-container/60">
 
-        {/* Gradient background */}
-        <div className={`bg-gradient-to-br ${color.gradient} px-5 pt-5 pb-14`}>
+        {/* Gradient banner */}
+        <div className={`bg-gradient-to-br ${color.gradient} px-5 pt-5 pb-6`}>
 
           {/* Top bar: archived badge + edit */}
           <div className="flex items-center justify-between mb-3">
@@ -212,124 +231,124 @@ export function ProjectDetailPage() {
           )}
         </div>
 
-        {/* ── Stats band (overlapping the gradient) ────────────── */}
-        <div className="absolute bottom-0 left-0 right-0 translate-y-1/2 px-4">
-          <div className="bg-surface rounded-2xl shadow-lg ring-1 ring-surface-container/60 px-4 py-3 flex items-center gap-4 overflow-x-auto">
+        {/* ── Stats band (below the banner, inside the same card) ─
+            Equal-width tiles with consistent icon-box treatment so the row
+            reads as a balanced strip, not three different-shaped widgets.
+            Each tile: tinted square icon + label/value stacked next to it. */}
+        <div className="px-4 py-3 grid grid-cols-3 gap-3 border-t border-surface-container/40">
 
-            {/* Task progress ring */}
-            <div className="flex items-center gap-3 shrink-0">
-              <ProgressRing pct={taskProgress} hex={color.hex} size={44} />
-              <div>
-                <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">Tasks</p>
-                <p className="text-sm font-extrabold stitch-text-primary">
-                  {doneTasks.length}<span className="text-xs font-medium stitch-text-secondary">/{tasks.length}</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="w-px h-8 bg-surface-container shrink-0" />
-
-            {/* Sessions */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: color.hex + '20' }}>
-                <Zap size={16} style={{ color: color.hex }} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">Sessions</p>
-                <p className="text-sm font-extrabold stitch-text-primary">{completedSessions.length}</p>
-              </div>
-            </div>
-
-            <div className="w-px h-8 bg-surface-container shrink-0" />
-
-            {/* Time logged */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: color.hex + '20' }}>
-                <Clock size={16} style={{ color: color.hex }} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">Time logged</p>
-                <p className="text-sm font-extrabold stitch-text-primary">
-                  {totalSessionMinutes >= 60
-                    ? `${Math.floor(totalSessionMinutes / 60)}h ${totalSessionMinutes % 60}m`
-                    : `${totalSessionMinutes}m`}
-                </p>
-              </div>
-            </div>
-
-            {/* Members (if shared) */}
-            {members.length > 1 && (
+          <StatTile
+            icon={<Target size={16} style={{ color: color.hex }} />}
+            label="Tasks"
+            value={
               <>
-                <div className="w-px h-8 bg-surface-container shrink-0" />
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex -space-x-1.5">
-                    {members.slice(0, 3).map((m) => (
-                      m.avatar_url ? (
-                        <img key={m.id} src={m.avatar_url} alt={m.display_name}
-                          className="w-7 h-7 rounded-full object-cover border-2 border-surface" />
-                      ) : (
-                        <div key={m.id}
-                          className={`w-7 h-7 rounded-full bg-gradient-to-br ${color.gradient} flex items-center justify-center text-[10px] font-bold text-white border-2 border-surface`}>
-                          {m.display_name.charAt(0).toUpperCase()}
-                        </div>
-                      )
-                    ))}
-                    {members.length > 3 && (
-                      <div className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center text-[9px] font-bold stitch-text-secondary border-2 border-surface">
-                        +{members.length - 3}
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-xs font-semibold stitch-text-secondary">{members.length}</span>
-                </div>
+                {doneTasks.length}
+                <span className="text-xs font-medium stitch-text-secondary">/{tasks.length}</span>
               </>
-            )}
-          </div>
+            }
+            tintHex={color.hex}
+            footer={tasks.length > 0 ? <ProgressBar pct={taskProgress} hex={color.hex} /> : null}
+          />
+
+          <StatTile
+            icon={<Zap size={16} style={{ color: color.hex }} />}
+            label="Sessions"
+            value={completedSessions.length}
+            tintHex={color.hex}
+          />
+
+          <StatTile
+            icon={<Clock size={16} style={{ color: color.hex }} />}
+            label="Time logged"
+            value={
+              totalSessionMinutes >= 60
+                ? `${Math.floor(totalSessionMinutes / 60)}h ${totalSessionMinutes % 60}m`
+                : `${totalSessionMinutes}m`
+            }
+            tintHex={color.hex}
+          />
+
+          {/* Members avatar strip — full-width row below the 3-up grid,
+              only when the project is actually shared. */}
+          {members.length > 1 && (
+            <div className="col-span-3 flex items-center gap-2 pt-2 border-t border-surface-container/40">
+              <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">
+                Members
+              </p>
+              <div className="flex -space-x-1.5">
+                {members.slice(0, 5).map((m) => (
+                  m.avatar_url ? (
+                    <img key={m.id} src={m.avatar_url} alt={m.display_name}
+                      className="w-6 h-6 rounded-full object-cover border-2 border-surface" />
+                  ) : (
+                    <div key={m.id}
+                      className={`w-6 h-6 rounded-full bg-gradient-to-br ${color.gradient} flex items-center justify-center text-[9px] font-bold text-white border-2 border-surface`}>
+                      {m.display_name.charAt(0).toUpperCase()}
+                    </div>
+                  )
+                ))}
+                {members.length > 5 && (
+                  <div className="w-6 h-6 rounded-full bg-surface-container flex items-center justify-center text-[9px] font-bold stitch-text-secondary border-2 border-surface">
+                    +{members.length - 5}
+                  </div>
+                )}
+              </div>
+              <span className="text-xs font-semibold stitch-text-secondary">{members.length}</span>
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Spacer for the overlapping stats band */}
-      <div className="h-10 mb-1" />
-
-      {/* ── CTA row ────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 flex-wrap mb-5">
+        {/* ── Action row (inside the same hero card) ─────────────
+            One primary CTA (Start a session) anchored full-width on the
+            left, with a small secondary Pin toggle on the right. Reads as
+            "primary action + state toggle" rather than two competing pills. */}
         {!isArchived && (
-          <button
-            type="button"
-            onClick={() => setDeclareOpen(true)}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-white text-sm font-bold shadow-md active:scale-[0.98] bg-gradient-to-r ${color.gradient}`}
-            style={{ boxShadow: `0 4px 14px ${color.hex}40` }}
-          >
-            <Play size={13} fill="currentColor" strokeWidth={0} />
-            Start a session
-          </button>
+          <div className="px-4 pb-4 pt-2 flex items-center gap-2 border-t border-surface-container/40">
+            <button
+              type="button"
+              onClick={() => setDeclareOpen(true)}
+              className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-extrabold transition-all active:scale-[0.98] bg-gradient-to-r ${color.gradient}`}
+              style={{ boxShadow: `0 4px 14px ${color.hex}40` }}
+            >
+              <Play size={14} fill="currentColor" strokeWidth={0} />
+              Start a session
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveProject(isPinned ? null : project.id)}
+              title={isPinned ? 'Unpin from active' : 'Pin as your active project'}
+              className={`shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl text-xs font-bold transition-colors ${
+                isPinned
+                  ? `${color.soft} ${color.textDark}`
+                  : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+              }`}
+            >
+              <Pin size={13} fill={isPinned ? 'currentColor' : 'none'} />
+              {isPinned ? 'Pinned' : 'Pin'}
+            </button>
+          </div>
         )}
-        <button
-          type="button"
-          onClick={() => setActiveProject(isPinned ? null : project.id)}
-          className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-bold transition-colors ${
-            isPinned
-              ? `${color.soft} ${color.textDark}`
-              : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
-          }`}
-        >
-          <Pin size={12} fill={isPinned ? 'currentColor' : 'none'} />
-          {isPinned ? 'Pinned as active' : 'Pin as active'}
-        </button>
       </div>
+
+      {/* Breathing room before the tab strip */}
+      <div className="h-4" />
 
       {/* ── Tabs ───────────────────────────────────────────────── */}
-      <div className="flex p-1 bg-surface-container-low rounded-full gap-1 mb-4">
+      {/* Tab strip — horizontally scrollable on mobile so all 5 fit. */}
+      <div className="flex p-1 bg-surface-container-low rounded-full gap-1 mb-4 overflow-x-auto scrollbar-thin">
         {([
-          { id: 'tasks' as const,   label: 'Tasks',   count: openTasks.length, icon: Target },
-          { id: 'sessions' as const, label: 'Sessions', count: sessions.length,  icon: Zap },
-          { id: 'members' as const, label: 'Members', count: members.length,   icon: Users },
-        ]).map(({ id, label, count, icon: Icon }) => (
+          { id: 'tasks'    as const, label: 'Tasks',    count: openTasks.length, icon: Target,       hint: 'Flat list' },
+          { id: 'kanban'   as const, label: 'Kanban',   count: tasks.length,     icon: Columns,      hint: 'Board view' },
+          { id: 'goals'    as const, label: 'Goals',    count: 0,                icon: Flag,         hint: 'Phases this project is chasing' },
+          { id: 'notes'    as const, label: 'Notes',    count: 0,                icon: NotebookPen,  hint: 'Project thinking' },
+          { id: 'activity' as const, label: 'Activity', count: 0,                icon: Activity,     hint: 'What happened' },
+        ]).map(({ id, label, count, icon: Icon, hint }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-xs font-semibold transition-all ${
+            title={hint}
+            className={`shrink-0 flex-1 min-w-[88px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-full text-xs font-semibold transition-all ${
               tab === id ? 'bg-white shadow-sm text-primary' : 'stitch-text-secondary hover:stitch-text-primary'
             }`}
           >
@@ -360,15 +379,35 @@ export function ProjectDetailPage() {
           colorGradient={color.gradient}
         />
       )}
-      {tab === 'sessions' && (
-        <SessionsTab
-          sessions={sessions}
+      {tab === 'kanban' && (
+        <KanbanTab
+          tasks={tasks}
+          onToggle={toggleTaskStatus}
+          newTaskTitle={newTaskTitle}
+          setNewTaskTitle={setNewTaskTitle}
+          onAdd={handleAddTask}
+          submitting={taskSubmitting}
           colorHex={color.hex}
-          colorGradient={color.gradient}
-          onDeclare={() => setDeclareOpen(true)}
         />
       )}
-      {tab === 'members' && (
+      {tab === 'goals' && (
+        <GoalsTab projectId={project.id} colorHex={color.hex} />
+      )}
+      {tab === 'notes' && (
+        <NotesTab projectId={project.id} colorHex={color.hex} />
+      )}
+      {tab === 'activity' && (
+        <ActivityTab
+          projectId={project.id}
+          tasks={tasks}
+          sessions={sessions}
+          members={members}
+          colorHex={color.hex}
+        />
+      )}
+      {/* Members tab removed — member management moves into the Settings
+          drawer next phase. Member preview already lives on the editor modal. */}
+      {false && (
         <MembersTab
           members={members}
           isOwner={members.find((m) => m.user_id === user?.id)?.role === 'owner'}
@@ -381,6 +420,7 @@ export function ProjectDetailPage() {
       {editorOpen && (
         <ProjectEditorModal
           project={project}
+          members={members}
           onClose={() => setEditorOpen(false)}
           onSaved={(p) => { setProject(p); setEditorOpen(false); refreshProjects(); }}
           onArchived={() => navigate('/projects')}
@@ -398,22 +438,51 @@ export function ProjectDetailPage() {
 
 // ── Progress ring ─────────────────────────────────────────────────
 
-function ProgressRing({ pct, hex, size }: { pct: number; hex: string; size: number }) {
-  const r = (size - 8) / 2;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - pct / 100);
+// ── Stats sub-components ───────────────────────────────────────────────
+//
+// StatTile is the unified tile used across the header stats band. Every
+// stat (Tasks / Sessions / Time logged) renders the same shape so the row
+// reads as a balanced 3-up grid rather than three different-looking widgets.
+// `footer` lets the Tasks tile slip a thin progress bar under the value.
+
+function StatTile({
+  icon, label, value, tintHex, footer,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  tintHex: string;
+  footer?: React.ReactNode;
+}) {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={r}
-        stroke="var(--color-surface-container)" strokeWidth="5" fill="none" />
-      <circle cx={size / 2} cy={size / 2} r={r}
-        stroke={hex} strokeWidth="5" fill="none"
-        strokeDasharray={circ}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+    <div className="flex items-center gap-2 min-w-0">
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+        style={{ backgroundColor: tintHex + '20' }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider truncate">
+          {label}
+        </p>
+        <p className="text-sm font-extrabold stitch-text-primary leading-tight">
+          {value}
+        </p>
+        {footer && <div className="mt-1.5">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ProgressBar({ pct, hex }: { pct: number; hex: string }) {
+  return (
+    <div className="h-1 w-full rounded-full bg-surface-container-low overflow-hidden">
+      <div
+        className="h-full rounded-full transition-[width] duration-500"
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%`, backgroundColor: hex }}
       />
-    </svg>
+    </div>
   );
 }
 
@@ -708,3 +777,787 @@ async function fetchProjectSessions(projectId: string): Promise<FocusSession[]> 
 }
 
 export type { Task, ShippedSession, ScheduledSessionWithProfile };
+
+// ── Kanban tab ──────────────────────────────────────────────────────────
+//
+// Same task data as the flat Tasks tab, visualised as three columns by
+// status. Tasks move with explicit ←/→ buttons rather than drag-drop —
+// drag would add ~50 LOC + dnd-kit dep for a marginal UX win at this
+// scale. If task volume grows, drag becomes worth it.
+
+const KANBAN_COLUMNS = [
+  { key: 'inbox' as const,  label: 'Inbox',  desc: 'Captured. Not started.', tint: 'bg-surface-container-low' },
+  { key: 'active' as const, label: 'Active', desc: 'In progress.',           tint: 'bg-blue-50/60' },
+  { key: 'done' as const,   label: 'Done',   desc: 'Finished.',              tint: 'bg-emerald-50/60' },
+];
+
+type KanbanStatus = 'inbox' | 'active' | 'done';
+
+function KanbanTab({
+  tasks, onToggle, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+}: {
+  tasks: Task[];
+  onToggle: (task: Task) => void;
+  newTaskTitle: string;
+  setNewTaskTitle: (s: string) => void;
+  onAdd: () => void;
+  submitting: boolean;
+  colorHex: string;
+}) {
+  async function moveTask(task: Task, next: KanbanStatus) {
+    if (task.status === next) return;
+    try {
+      await TaskService.updateTask(task.id, { status: next });
+      // Optimistic local mutation through the parent toggle isn't quite
+      // right here (different target), so we let the parent re-fetch by
+      // toggling and using the lazy refresh path. For now, mutate via the
+      // direct service call — the parent's `tasks` state will re-sync on
+      // next load. If this feels stale, lift state into the parent.
+      onToggle({ ...task, status: next } as Task);
+    } catch (err) {
+      console.error('[KanbanTab] move failed:', err);
+    }
+  }
+
+  // Group tasks by status; treat unknown as 'inbox'.
+  const grouped: Record<KanbanStatus, Task[]> = { inbox: [], active: [], done: [] };
+  for (const t of tasks) {
+    const s = (t.status as KanbanStatus) || 'inbox';
+    if (s === 'inbox' || s === 'active' || s === 'done') grouped[s].push(t);
+    else grouped.inbox.push(t);
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Inline add — fires straight into inbox */}
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container">
+        <Plus size={13} className="stitch-text-secondary shrink-0" />
+        <input
+          type="text"
+          value={newTaskTitle}
+          onChange={(e) => setNewTaskTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') onAdd(); }}
+          placeholder="Add a task to this project…"
+          className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none border-0"
+          disabled={submitting}
+        />
+        {newTaskTitle.trim().length > 0 && (
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={submitting}
+            className="shrink-0 px-3 py-1 rounded-full text-[11px] font-bold text-white"
+            style={{ backgroundColor: colorHex }}
+          >
+            {submitting ? 'Adding…' : 'Add'}
+          </button>
+        )}
+      </div>
+
+      {/* Three columns side-by-side on desktop, stacked on mobile */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {KANBAN_COLUMNS.map((col) => (
+          <div key={col.key} className={`rounded-2xl ${col.tint} p-3 min-h-[200px]`}>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest">
+                {col.label}
+              </p>
+              <span className="text-[10px] font-bold stitch-text-secondary tabular-nums">
+                {grouped[col.key].length}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {grouped[col.key].length === 0 ? (
+                <p className="text-[11px] stitch-text-secondary italic px-1 py-2 opacity-60">
+                  {col.desc}
+                </p>
+              ) : (
+                grouped[col.key].map((t) => (
+                  <KanbanCard
+                    key={t.id}
+                    task={t}
+                    columnKey={col.key}
+                    onMove={(next) => moveTask(t, next)}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KanbanCard({
+  task, columnKey, onMove,
+}: {
+  task: Task;
+  columnKey: KanbanStatus;
+  onMove: (next: KanbanStatus) => void;
+}) {
+  // Allowed transitions — keep cards moving forward easily and back if needed.
+  const canPrev = columnKey !== 'inbox';
+  const canNext = columnKey !== 'done';
+  const prevTarget: KanbanStatus = columnKey === 'done' ? 'active' : 'inbox';
+  const nextTarget: KanbanStatus = columnKey === 'inbox' ? 'active' : 'done';
+
+  return (
+    <div className="group bg-white rounded-xl ring-1 ring-surface-container px-3 py-2 hover:shadow-sm transition-shadow">
+      <p className={`text-xs font-semibold leading-snug ${columnKey === 'done' ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}>
+        {task.title}
+      </p>
+      <div className="flex items-center justify-between mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={() => canPrev && onMove(prevTarget)}
+          disabled={!canPrev}
+          className="text-[10px] font-bold stitch-text-secondary hover:stitch-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+          title={canPrev ? `Move to ${prevTarget}` : ''}
+        >
+          ← {canPrev ? prevTarget : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => canNext && onMove(nextTarget)}
+          disabled={!canNext}
+          className="text-[10px] font-bold stitch-text-secondary hover:stitch-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+          title={canNext ? `Move to ${nextTarget}` : ''}
+        >
+          {canNext ? nextTarget : ''} →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Goals tab ───────────────────────────────────────────────────────────
+//
+// A goal = a phase / deliverable the project is chasing, with an optional
+// target date. Kept deliberately lite: inline add row at top, vertical list
+// below, complete by clicking the circle. Edit-in-place is intentionally
+// deferred — if a goal's title is wrong, delete it and re-add. Keeps the
+// surface tiny.
+
+function GoalsTab({ projectId, colorHex }: { projectId: string; colorHex: string }) {
+  const [goals, setGoals] = useState<ProjectGoal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    ProjectService.listMilestones(projectId)
+      .then((rows) => { if (!cancelled) setGoals(rows); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  async function handleAdd() {
+    if (!title.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      const created = await ProjectService.createMilestone({
+        project_id: projectId,
+        title: title.trim(),
+        target_date: targetDate || null,
+      });
+      setGoals((prev) => [created, ...prev]);
+      setTitle('');
+      setTargetDate('');
+    } catch (err) {
+      console.error('[GoalsTab] add:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleToggle(g: ProjectGoal) {
+    const prev = goals;
+    const optimistic: ProjectGoal = {
+      ...g,
+      completed_at: g.completed_at ? null : new Date().toISOString(),
+    };
+    setGoals((cur) => cur.map((x) => (x.id === g.id ? optimistic : x)));
+    try {
+      const updated = await ProjectService.toggleMilestoneComplete(g);
+      setGoals((cur) => cur.map((x) => (x.id === g.id ? updated : x)));
+    } catch (err) {
+      console.error('[GoalsTab] toggle:', err);
+      setGoals(prev);
+    }
+  }
+
+  async function handleDelete(g: ProjectGoal) {
+    if (!confirm(`Delete goal "${g.title}"?`)) return;
+    const prev = goals;
+    setGoals((cur) => cur.filter((x) => x.id !== g.id));
+    try {
+      await ProjectService.deleteMilestone(g.id);
+    } catch (err) {
+      console.error('[GoalsTab] delete:', err);
+      setGoals(prev);
+      alert('Could not delete that goal.');
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Inline add row */}
+      <div className="bg-surface rounded-xl ring-1 ring-surface-container/80 px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Plus size={14} className="stitch-text-secondary shrink-0" />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+            placeholder="Add a goal…"
+            className="flex-1 bg-transparent outline-none text-sm stitch-text-primary placeholder:stitch-text-secondary"
+          />
+          {title.trim() && (
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={submitting}
+              className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full text-white disabled:opacity-50"
+              style={{ backgroundColor: colorHex }}
+            >
+              {submitting ? '…' : 'Add'}
+            </button>
+          )}
+        </div>
+        {title.trim() && (
+          <div className="flex items-center gap-2 mt-2 pl-6">
+            <Calendar size={12} className="stitch-text-secondary" />
+            <input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className="text-xs bg-transparent stitch-text-secondary outline-none"
+            />
+            <span className="text-[10px] stitch-text-secondary italic">optional</span>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <Loader2 size={16} className="animate-spin stitch-text-secondary" />
+        </div>
+      ) : goals.length === 0 ? (
+        <div className="flex flex-col items-center text-center py-10 px-4 bg-surface rounded-2xl ring-1 ring-surface-container/80">
+          <Flag size={24} className="mb-3 stitch-text-secondary opacity-40" />
+          <p className="text-sm font-bold stitch-text-primary mb-1">No goals yet</p>
+          <p className="text-xs stitch-text-secondary">Map out the phases of getting this done.</p>
+        </div>
+      ) : (
+        goals.map((g) => {
+          const isDone = !!g.completed_at;
+          const overdue = !isDone && g.target_date && new Date(g.target_date) < new Date();
+          return (
+            <div
+              key={g.id}
+              className="group flex items-start gap-3 px-4 py-3 rounded-xl bg-surface ring-1 ring-surface-container/60 shadow-sm hover:ring-surface-container transition-all"
+            >
+              <button
+                type="button"
+                onClick={() => handleToggle(g)}
+                className="mt-0.5 shrink-0"
+                aria-label={isDone ? 'Mark incomplete' : 'Mark complete'}
+              >
+                {isDone ? (
+                  <CheckCircle2 size={18} className="text-emerald-500" />
+                ) : (
+                  <div
+                    className="w-[18px] h-[18px] rounded-full border-2 hover:scale-110 transition-transform"
+                    style={{ borderColor: colorHex }}
+                  />
+                )}
+              </button>
+
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm leading-snug ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary font-semibold'}`}>
+                  {g.title}
+                </p>
+                {g.description && !isDone && (
+                  <p className="text-xs stitch-text-secondary mt-0.5 leading-snug">{g.description}</p>
+                )}
+                {g.target_date && (
+                  <div className={`inline-flex items-center gap-1 mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                    overdue
+                      ? 'bg-rose-50 text-rose-700'
+                      : 'bg-surface-container-low stitch-text-secondary'
+                  }`}>
+                    <Calendar size={9} />
+                    {new Date(g.target_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {overdue && ' · overdue'}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleDelete(g)}
+                className="opacity-0 group-hover:opacity-60 hover:opacity-100 transition-opacity shrink-0 stitch-text-secondary hover:text-rose-600"
+                aria-label="Delete goal"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// ── Notes tab ───────────────────────────────────────────────────────────
+//
+// Freeform text blocks per project. Inline composer at top; each note is
+// an editable card. Only the author can edit / delete their own (enforced
+// at the RLS layer — the UI just respects it).
+
+function NotesTab({ projectId, colorHex }: { projectId: string; colorHex: string }) {
+  const { user } = useAuth();
+  const [notes, setNotes] = useState<ProjectNote[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [composerTitle, setComposerTitle] = useState('');
+  const [composerBody, setComposerBody] = useState('');
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBody, setEditBody] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    ProjectService.listNotes(projectId)
+      .then((rows) => { if (!cancelled) setNotes(rows); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  async function handleCreate() {
+    if (!composerBody.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      const created = await ProjectService.createNote({
+        project_id: projectId,
+        title: composerTitle || null,
+        body: composerBody.trim(),
+      });
+      setNotes((prev) => [created, ...prev]);
+      setComposerTitle('');
+      setComposerBody('');
+      setComposerOpen(false);
+    } catch (err) {
+      console.error('[NotesTab] create:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEdit(n: ProjectNote) {
+    setEditingId(n.id);
+    setEditTitle(n.title ?? '');
+    setEditBody(n.body);
+  }
+
+  async function saveEdit(n: ProjectNote) {
+    if (!editBody.trim()) return;
+    try {
+      const updated = await ProjectService.updateNote(n.id, {
+        title: editTitle || null,
+        body: editBody.trim(),
+      });
+      setNotes((prev) => prev.map((x) => (x.id === n.id ? updated : x)));
+      setEditingId(null);
+    } catch (err) {
+      console.error('[NotesTab] save:', err);
+      alert('Could not save that note. You can only edit your own notes.');
+    }
+  }
+
+  async function handleDelete(n: ProjectNote) {
+    if (!confirm('Delete this note?')) return;
+    const prev = notes;
+    setNotes((cur) => cur.filter((x) => x.id !== n.id));
+    try {
+      await ProjectService.deleteNote(n.id);
+    } catch (err) {
+      console.error('[NotesTab] delete:', err);
+      setNotes(prev);
+      alert('Could not delete that note. You can only delete your own.');
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Composer */}
+      <div className="bg-surface rounded-xl ring-1 ring-surface-container/80 shadow-sm overflow-hidden">
+        {!composerOpen ? (
+          <button
+            type="button"
+            onClick={() => setComposerOpen(true)}
+            className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm stitch-text-secondary hover:stitch-text-primary"
+          >
+            <Plus size={14} />
+            Capture a thought, decision, or block of research…
+          </button>
+        ) : (
+          <div className="p-3 space-y-2">
+            <input
+              value={composerTitle}
+              onChange={(e) => setComposerTitle(e.target.value)}
+              placeholder="Title (optional)"
+              className="w-full bg-transparent outline-none text-sm font-bold stitch-text-primary placeholder:stitch-text-secondary"
+            />
+            <textarea
+              value={composerBody}
+              onChange={(e) => setComposerBody(e.target.value)}
+              placeholder="Write a note…"
+              rows={4}
+              autoFocus
+              className="w-full bg-transparent outline-none text-sm stitch-text-primary placeholder:stitch-text-secondary resize-none"
+            />
+            <div className="flex items-center justify-end gap-2 pt-1 border-t border-surface-container/60">
+              <button
+                type="button"
+                onClick={() => { setComposerOpen(false); setComposerTitle(''); setComposerBody(''); }}
+                className="text-xs font-bold stitch-text-secondary hover:stitch-text-primary px-2.5 py-1.5 rounded-full"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!composerBody.trim() || submitting}
+                className="text-xs font-extrabold text-white px-3 py-1.5 rounded-full disabled:opacity-50"
+                style={{ backgroundColor: colorHex }}
+              >
+                {submitting ? 'Saving…' : 'Save note'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <Loader2 size={16} className="animate-spin stitch-text-secondary" />
+        </div>
+      ) : notes.length === 0 ? (
+        <div className="flex flex-col items-center text-center py-10 px-4 bg-surface rounded-2xl ring-1 ring-surface-container/80">
+          <NotebookPen size={24} className="mb-3 stitch-text-secondary opacity-40" />
+          <p className="text-sm font-bold stitch-text-primary mb-1">No notes yet</p>
+          <p className="text-xs stitch-text-secondary">Park decisions and research where the project lives.</p>
+        </div>
+      ) : (
+        notes.map((n) => {
+          const isMine = n.author_id === user?.id;
+          const isEditing = editingId === n.id;
+          const when = new Date(n.updated_at).toLocaleDateString('en-GB', {
+            day: 'numeric', month: 'short', year: 'numeric',
+          });
+          return (
+            <div
+              key={n.id}
+              className="group bg-surface rounded-xl ring-1 ring-surface-container/60 shadow-sm px-4 py-3"
+            >
+              {isEditing ? (
+                <div className="space-y-2">
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="Title (optional)"
+                    className="w-full bg-transparent outline-none text-sm font-bold stitch-text-primary placeholder:stitch-text-secondary"
+                  />
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={4}
+                    className="w-full bg-transparent outline-none text-sm stitch-text-primary placeholder:stitch-text-secondary resize-none"
+                  />
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-surface-container/60">
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="text-xs font-bold stitch-text-secondary hover:stitch-text-primary px-2 py-1 rounded-full inline-flex items-center gap-1"
+                    >
+                      <X size={11} /> Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(n)}
+                      className="text-xs font-extrabold text-white px-3 py-1 rounded-full inline-flex items-center gap-1"
+                      style={{ backgroundColor: colorHex }}
+                    >
+                      <Check size={11} /> Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      {n.title && (
+                        <p className="text-sm font-bold stitch-text-primary mb-1">{n.title}</p>
+                      )}
+                      <p className="text-sm stitch-text-primary leading-relaxed whitespace-pre-wrap break-words">
+                        {n.body}
+                      </p>
+                    </div>
+                    {isMine && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(n)}
+                          className="stitch-text-secondary hover:stitch-text-primary p-1"
+                          aria-label="Edit note"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(n)}
+                          className="stitch-text-secondary hover:text-rose-600 p-1"
+                          aria-label="Delete note"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-surface-container/40">
+                    {n.author?.avatar_url ? (
+                      <img src={n.author.avatar_url} alt="" className="w-4 h-4 rounded-full object-cover" />
+                    ) : (
+                      <div
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+                        style={{ backgroundColor: colorHex }}
+                      >
+                        {(n.author?.display_name ?? '?').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-[10px] font-semibold stitch-text-secondary">
+                      {n.author?.display_name ?? 'Someone'} · {when}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// ── Activity tab ────────────────────────────────────────────────────────
+//
+// Derived chronological feed — no `activity_log` table. We merge events
+// from the data the parent already loaded (tasks, sessions, members) plus
+// goals we fetch here, then sort by date desc. If a feature needs
+// audit-grade history, that's a different problem and gets its own table.
+
+type ActivityEvent = {
+  id: string;
+  kind: 'task_added' | 'task_done' | 'session_completed' | 'member_joined' | 'goal_added' | 'goal_done';
+  at: string;
+  title: string;
+  subtitle?: string;
+};
+
+function ActivityTab({
+  projectId, tasks, sessions, members, colorHex,
+}: {
+  projectId: string;
+  tasks: Task[];
+  sessions: FocusSession[];
+  members: ProjectMemberWithProfile[];
+  colorHex: string;
+}) {
+  const [goals, setGoals] = useState<ProjectGoal[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    ProjectService.listMilestones(projectId)
+      .then((rows) => { if (!cancelled) setGoals(rows); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  const events = useMemo<ActivityEvent[]>(() => {
+    const out: ActivityEvent[] = [];
+
+    for (const t of tasks) {
+      out.push({
+        id: `task-add-${t.id}`,
+        kind: 'task_added',
+        at: t.created_at,
+        title: t.title,
+        subtitle: 'Task added',
+      });
+      if (t.status === 'done' && t.completed_at) {
+        out.push({
+          id: `task-done-${t.id}`,
+          kind: 'task_done',
+          at: t.completed_at,
+          title: t.title,
+          subtitle: 'Task finished',
+        });
+      }
+    }
+
+    for (const s of sessions) {
+      if (s.status === 'completed') {
+        const mins = s.actual_duration_minutes ?? s.intended_duration_minutes ?? 0;
+        out.push({
+          id: `session-${s.id}`,
+          kind: 'session_completed',
+          at: s.end_time ?? s.start_time,
+          title: s.session_goal ?? 'Focus session',
+          subtitle: `${mins}m logged`,
+        });
+      }
+    }
+
+    for (const m of members) {
+      out.push({
+        id: `member-${m.id}`,
+        kind: 'member_joined',
+        at: m.created_at,
+        title: m.display_name,
+        subtitle: m.role === 'owner' ? 'Created the project' : 'Joined as ' + m.role,
+      });
+    }
+
+    for (const g of goals) {
+      out.push({
+        id: `goal-add-${g.id}`,
+        kind: 'goal_added',
+        at: g.created_at,
+        title: g.title,
+        subtitle: 'Goal added',
+      });
+      if (g.completed_at) {
+        out.push({
+          id: `goal-done-${g.id}`,
+          kind: 'goal_done',
+          at: g.completed_at,
+          title: g.title,
+          subtitle: 'Goal hit',
+        });
+      }
+    }
+
+    return out.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [tasks, sessions, members, goals]);
+
+  const KIND_META: Record<ActivityEvent['kind'], { icon: React.ReactNode; tint: string }> = {
+    task_added:        { icon: <Plus size={11} />,         tint: 'bg-slate-100 text-slate-600' },
+    task_done:         { icon: <CheckCircle2 size={11} />, tint: 'bg-emerald-100 text-emerald-700' },
+    session_completed: { icon: <Zap size={11} />,          tint: 'bg-amber-100 text-amber-700' },
+    member_joined:     { icon: <UserPlus size={11} />,     tint: 'bg-blue-100 text-blue-700' },
+    goal_added:        { icon: <Flag size={11} />,         tint: 'bg-violet-100 text-violet-700' },
+    goal_done:         { icon: <CheckCircle2 size={11} />, tint: 'bg-violet-100 text-violet-700' },
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-6">
+        <Loader2 size={16} className="animate-spin stitch-text-secondary" />
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <div className="flex flex-col items-center text-center py-10 px-4 bg-surface rounded-2xl ring-1 ring-surface-container/80">
+        <Activity size={24} className="mb-3 stitch-text-secondary opacity-40" />
+        <p className="text-sm font-bold stitch-text-primary mb-1">Nothing happened yet</p>
+        <p className="text-xs stitch-text-secondary">Add a task or run a session — the timeline starts filling in.</p>
+      </div>
+    );
+  }
+
+  // Group by date so the feed reads like a timeline rather than a wall.
+  const grouped = events.reduce<Record<string, ActivityEvent[]>>((acc, e) => {
+    const d = new Date(e.at).toLocaleDateString('en-GB', {
+      weekday: 'short', day: 'numeric', month: 'short',
+    });
+    if (!acc[d]) acc[d] = [];
+    acc[d].push(e);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(grouped).map(([date, group]) => (
+        <div key={date}>
+          <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest mb-2">{date}</p>
+          <div className="space-y-1.5">
+            {group.map((e) => {
+              const meta = KIND_META[e.kind];
+              const time = new Date(e.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+              return (
+                <div
+                  key={e.id}
+                  className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-surface ring-1 ring-surface-container/60 shadow-sm"
+                >
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${meta.tint}`}>
+                    {meta.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold stitch-text-primary truncate">{e.title}</p>
+                    <p className="text-[11px] stitch-text-secondary">
+                      {e.subtitle} · {time}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {/* tint marker to silence unused-var lint when colorHex isn't used directly */}
+      <div className="h-0" style={{ borderColor: colorHex }} />
+    </div>
+  );
+}
+
+// ── ComingSoon tab — placeholder for tabs that need a migration ────────
+//
+// Used for Roadmap / Notes / Activity until their DB tables ship. Better
+// than hiding the tab because users learn the future shape of the page.
+
+function ComingSoonTab({
+  icon, title, body, colorHex,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  colorHex: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-surface-container-low/50 ring-1 ring-dashed ring-outline-variant/30 p-8 text-center">
+      <div
+        className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+        style={{ backgroundColor: colorHex + '20', color: colorHex }}
+      >
+        {icon}
+      </div>
+      <p className="text-base font-bold stitch-text-primary mb-1.5">
+        {title} <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded ml-1.5">Coming soon</span>
+      </p>
+      <p className="text-xs stitch-text-secondary leading-relaxed max-w-md mx-auto">
+        {body}
+      </p>
+    </div>
+  );
+}

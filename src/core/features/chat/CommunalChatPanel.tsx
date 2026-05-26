@@ -79,13 +79,14 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
   const listRef   = useRef<HTMLDivElement>(null);
 
   // ── Fetch initial messages ──────────────────────────────────────────────────
+  // Two-query approach: PostgREST can't infer the relationship between
+  // global_chat_messages and profiles because there are MULTIPLE FKs between
+  // them (e.g. user_id + report-related). We fetch messages and profiles
+  // separately and join client-side.
   const fetchMessages = useCallback(async () => {
-    const { data, error } = await supabase
+    const { data: messages, error } = await supabase
       .from('global_chat_messages')
-      .select(`
-        id, user_id, content, created_at,
-        profiles!inner(display_name, avatar_url, last_seen_at)
-      `)
+      .select('id, user_id, content, created_at')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -95,16 +96,43 @@ export function CommunalChatPanel({ compact = false, listHeight }: CommunalChatP
       return;
     }
 
-    const rows: ChatMessage[] = ((data ?? []) as any[])
-      .map((r) => ({
-        id:           r.id,
-        user_id:      r.user_id,
-        content:      r.content,
-        created_at:   r.created_at,
-        display_name: r.profiles?.display_name ?? 'Someone',
-        avatar_url:   r.profiles?.avatar_url ?? null,
-        last_seen_at: r.profiles?.last_seen_at ?? null,
-      }))
+    const msgs = messages ?? [];
+    if (msgs.length === 0) {
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
+
+    const userIds = Array.from(new Set(msgs.map((m) => m.user_id as string)));
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, display_name, avatar_url, last_seen_at')
+      .in('id', userIds);
+
+    const profileById = new Map(
+      (profiles ?? []).map((p) => [
+        p.id as string,
+        {
+          display_name: (p.display_name as string) ?? 'Someone',
+          avatar_url:   (p.avatar_url as string | null) ?? null,
+          last_seen_at: (p.last_seen_at as string | null) ?? null,
+        },
+      ]),
+    );
+
+    const rows: ChatMessage[] = msgs
+      .map((r) => {
+        const prof = profileById.get(r.user_id as string);
+        return {
+          id:           r.id as string,
+          user_id:      r.user_id as string,
+          content:      r.content as string,
+          created_at:   r.created_at as string,
+          display_name: prof?.display_name ?? 'Someone',
+          avatar_url:   prof?.avatar_url   ?? null,
+          last_seen_at: prof?.last_seen_at ?? null,
+        };
+      })
       .reverse(); // oldest first for display
 
     setMessages(rows);

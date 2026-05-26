@@ -33,29 +33,29 @@ import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { fetchProfileStats, fetchWeekSessions } from '../../services/ProfileService';
 import { fetchRecentShippedSessions, fetchUpcomingScheduledSessions } from '../../services/SessionService';
 import { SurfaceCard } from '../../ui/CorePage';
+import { HomeHero } from './HomeHero';
 import { SmartNextCard } from './SmartNextCard';
 import { CommunityPulseCard } from './CommunityPulseCard';
 import { DayZeroWelcome } from './DayZeroWelcome';
 import { TodayPlannerCard } from './TodayPlannerCard';
 import { UpcomingSessionCountdown } from './UpcomingSessionCountdown';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
-import { RecentFinishesCarousel } from './RecentFinishesCarousel';
-import { OnboardingChecklist } from './OnboardingChecklist';
+import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
+import { ShippedFeedStrip } from './ShippedFeedStrip';
+import { DashboardTabs } from './DashboardTabs';
+import { StatsTab } from './StatsTab';
+import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
+import { PlanTasksCard } from './PlanTasksCard';
+import { PulsePeopleTab } from './PulsePeopleTab';
+// OnboardingChecklist + ProfileCompletenessCard removed — the wizard now
+// handles all setup before the user reaches the home screen.
 import { FoundingMemberBadge } from './FoundingMemberBadge';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
-import { fetchConnections } from '../../services/ConnectionService';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
 
 // ── Utilities ─────────────────────────────────────────────────────
-
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
 
 /** Time-of-day flavour line, used to season the welcome hero. */
 function timeOfDayHint(): string {
@@ -325,25 +325,46 @@ export function DashboardPage() {
   const [declareGoal, setDeclareGoal] = useState<string | undefined>(undefined);
   const [showSchedule, setShowSchedule] = useState(false);
   const [stats, setStats] = useState<ProfileStats | null>(null);
-  const [statsLoaded, setStatsLoaded] = useState(false);
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
   const [myShips, setMyShips] = useState<ShippedSession[]>([]);
   const [upcomingScheduled, setUpcomingScheduled] = useState<ScheduledSessionWithProfile[]>([]);
-  const [connectionsCount, setConnectionsCount] = useState(0);
+  // Unified load gate. We deliberately await ALL queries before painting
+  // the dashboard so sections don't pop in one at a time. Trade-off: the
+  // slowest query (usually fetchUpcomingScheduledSessions) gates the
+  // whole page — but on Pro/Micro that's well under a second, and the
+  // single-paint feels dramatically less janky.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
-    fetchProfileStats(user.id).then((s) => { setStats(s); setStatsLoaded(true); }).catch(() => setStatsLoaded(true));
-    fetchWeekSessions(user.id).then(setWeekSessions).catch(() => {});
-    fetchRecentShippedSessions(user.id).then((s) => setMyShips(s.slice(0, 3))).catch(() => {});
-    fetchUpcomingScheduledSessions().then(setUpcomingScheduled).catch(() => {});
-    fetchConnections().then((rows) => setConnectionsCount(rows.length)).catch(() => {});
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [s, w, ships, upcoming] = await Promise.all([
+          fetchProfileStats(user.id).catch(() => null),
+          fetchWeekSessions(user.id).catch(() => [] as { start_time: string }[]),
+          fetchRecentShippedSessions(user.id).catch(() => [] as ShippedSession[]),
+          fetchUpcomingScheduledSessions().catch(() => [] as ScheduledSessionWithProfile[]),
+        ]);
+        if (cancelled) return;
+        // Batch the updates inside an effect callback so React 18 commits
+        // them in a single render. No partial paints.
+        setStats(s);
+        setWeekSessions(w);
+        setMyShips(ships.slice(0, 3));
+        setUpcomingScheduled(upcoming);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
   const workTypeLabel = profile?.work_type ? WORK_TYPE_LABELS[profile.work_type] : null;
-  const isDayZero = statsLoaded && (stats?.totalSessions ?? 0) === 0;
-  const hasWeekData = weekSessions.length > 0;
+  const isDayZero = loaded && (stats?.totalSessions ?? 0) === 0;
 
   function openDeclare(initialGoal?: string) {
     setDeclareGoal(initialGoal);
@@ -358,48 +379,72 @@ export function DashboardPage() {
     setShowDeclare(true);
   }
 
+  // ── Single-paint loader ──────────────────────────────────────────────
+  // Hold render until all queries resolve so the dashboard appears as one
+  // composed view, not as five sections popping in independently. The
+  // skeleton mirrors the rough vertical rhythm of the real page so the
+  // layout doesn't shift when content arrives.
   return (
     <div className="space-y-4">
 
-      {/* ── Greeting ─────────────────────────────────────────── */}
-      <div className="pt-1">
-        <p className="text-sm stitch-text-secondary font-medium">{greeting()}</p>
-        <h1 className="stitch-headline text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
-          {firstName} 👋
-        </h1>
+      {/* ── Hero ─────────────────────────────────────────────────
+           Always renders immediately — firstName comes from cached auth,
+           liveSessions from the realtime subscription. No load gate.    */}
+      <HomeHero
+        firstName={firstName}
+        liveSessions={liveSessions}
+        onStart={() => openDeclare()}
+      />
 
-        {/* Identity + momentum row */}
-        <div className="flex flex-wrap items-center gap-2 mt-2">
-          <FoundingMemberBadge createdAt={(profile as any)?.created_at} />
-          {workTypeLabel && (
-            <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
-              {workTypeLabel}
-            </span>
-          )}
-          {stats && stats.currentStreak > 0 && (
-            <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
-              <Flame size={11} /> {stats.currentStreak} day streak
-            </span>
-          )}
-          {stats && stats.totalSessions > 0 && (
-            <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-              {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
-            </span>
-          )}
-          {stats && stats.completionRate > 0 && (
-            <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-              {stats.completionRate}% finish rate
-            </span>
-          )}
+      {/* ── Load-gated content ───────────────────────────────── */}
+      {!loaded ? (
+        <div className="space-y-4 animate-pulse">
+          <div className="flex gap-2">
+            <div className="h-6 w-24 rounded-full bg-surface-container-low" />
+            <div className="h-6 w-20 rounded-full bg-surface-container-low" />
+            <div className="h-6 w-28 rounded-full bg-surface-container-low" />
+          </div>
+          <div className="h-32 rounded-2xl bg-surface-container-low/60" />
+          <div className="h-40 rounded-2xl bg-surface-container-low/60" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="h-20 rounded-xl bg-surface-container-low/60" />
+            <div className="h-20 rounded-xl bg-surface-container-low/60" />
+          </div>
+          <div className="h-48 rounded-2xl bg-surface-container-low/60" />
         </div>
-      </div>
-
-      {/* ── Weekly review prompt — only Sun 18:00 → Mon 23:59 ── */}
-      <WeeklyReviewPromptCard />
-
-      {/* ── Day-0 vs Returning split ─────────────────────────── */}
-      {isDayZero ? (
+      ) : (
         <>
+          {/* Identity + momentum chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <FoundingMemberBadge createdAt={(profile as any)?.created_at} />
+            {workTypeLabel && (
+              <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
+                {workTypeLabel}
+              </span>
+            )}
+            {stats && stats.currentStreak > 0 && (
+              <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                <Flame size={11} /> {stats.currentStreak} day streak
+              </span>
+            )}
+            {stats && stats.totalSessions > 0 && (
+              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
+                {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
+              </span>
+            )}
+            {stats && stats.completionRate > 0 && (
+              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
+                {stats.completionRate}% finish rate
+              </span>
+            )}
+          </div>
+
+          {/* ── Day-0 vs Returning split ──────────────────────── */}
+          {isDayZero ? (
+        <>
+          {/* Weekly review prompt (auto-hides outside Sun/Mon window) */}
+          <WeeklyReviewPromptCard />
+
           {/* 1. Welcome hero — time-of-day aware copy + ambient gradient */}
           <DayZeroWelcome onStart={() => openDeclare()} hint={timeOfDayHint()} />
 
@@ -427,88 +472,64 @@ export function DashboardPage() {
           {/* 5b. Community feed teaser */}
           <CommunityFeedStrip />
 
-          {/* 6. Founders finished today — community proof */}
-          <RecentFinishesCarousel excludeUserId={user?.id} />
+          {/* 6. Just shipped — live debrief outcomes from across the community */}
+          <ShippedFeedStrip />
 
-          {/* 7. Onboarding checklist */}
-          <OnboardingChecklist stats={stats} connectionsCount={connectionsCount} />
         </>
       ) : (
         <>
-          {/* 1. Smart next move */}
-          <SmartNextCard
-            liveSessions={liveSessions}
-            upcomingScheduled={upcomingScheduled}
-            myUserId={user?.id}
-            onDeclareCustom={openDeclare}
-            onSchedule={() => setShowSchedule(true)}
-          />
+          {/* Returning user: weekly review prompt + SmartNextCard sit side-by-side
+              on desktop to reduce wasted vertical space. Stacked on mobile.
+              When the review prompt is hidden (outside Sun/Mon window or already
+              completed), SmartNextCard takes the full width naturally. */}
+          <div className="flex flex-col md:flex-row gap-4 md:items-stretch">
+            <WeeklyReviewPromptCard className="md:flex-1 md:basis-0" />
+            <div className="md:flex-1 md:basis-0">
+              <SmartNextCard
+                liveSessions={liveSessions}
+                upcomingScheduled={upcomingScheduled}
+                myUserId={user?.id}
+                onDeclareCustom={openDeclare}
+                onSchedule={() => setShowSchedule(true)}
+              />
+            </div>
+          </div>
 
-          {/* Countdown banner — shows only when a session is within 24 h */}
           <UpcomingSessionCountdown />
 
-          {/* 2. Today — hour grid + one-liner intention + quick-add templates */}
-          <TodayPlannerCard onStartSession={openDeclareWithTemplate} />
-
-          {/* (Weekly intentions are now integrated into TodayPlannerCard as a sidebar) */}
-
-          {/* 4. Community pulse */}
-          <CommunityPulseCard
-            sessions={liveSessions}
-            excludeSessionId={activeSession?.id}
-            onStart={() => openDeclare()}
-          />
-
-          {/* 5. Upcoming calendar slots */}
-          <UpcomingPublicSessionsStrip
-            sessions={upcomingScheduled}
-            myUserId={user?.id}
-          />
-
-          {/* 5b. Community feed teaser */}
-          <CommunityFeedStrip />
-
-          {/* 6. Founders finished today — fresh social proof every visit */}
-          <RecentFinishesCarousel excludeUserId={user?.id} />
-
-          {/* 7. Projects */}
-          <ProjectsMiniGrid
-            projects={projects}
-            tasks={tasks}
-            activeProjectId={activeProjectId}
-            onPin={setActiveProject}
-          />
-
-          {/* 8. Onboarding checklist — auto-hides once complete */}
-          <OnboardingChecklist stats={stats} connectionsCount={connectionsCount} />
-
-          {/* 9. Week strip — only when we have data */}
-          {hasWeekData && (
-            <SurfaceCard>
-              <WeekStrip weekSessions={weekSessions} />
-            </SurfaceCard>
-          )}
-
-          {/* 10. Recent finishes */}
-          {myShips.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">Your recent finishes</p>
-                <button
-                  type="button"
-                  onClick={() => navigate('/profile')}
-                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:opacity-70 transition-opacity"
-                >
-                  All <ArrowRight size={12} />
-                </button>
+          <DashboardTabs
+            now={
+              <div className="space-y-4">
+                {/* "Today" — hour grid + one-liner intention + quick-start templates */}
+                <TodayPlannerCard onStartSession={openDeclareWithTemplate} />
               </div>
-              <SurfaceCard>
-                <div className="divide-y divide-surface-container">
-                  {myShips.map((s) => <ShipRow key={s.id} ship={s} />)}
-                </div>
-              </SurfaceCard>
-            </section>
-          )}
+            }
+            plan={
+              <div className="space-y-4">
+                {/* 1. Goals — weekly intentions (strategic, 1-3 per week) */}
+                <WeeklyIntentionsCard />
+
+                {/* 2. Tasks — operational backlog with quick-start */}
+                <PlanTasksCard
+                  tasks={tasks}
+                  projects={projects}
+                  onSelectTask={(title) => openDeclare(title)}
+                />
+
+                {/* 3. Projects — containers */}
+                <ProjectsMiniGrid
+                  projects={projects}
+                  tasks={tasks}
+                  activeProjectId={activeProjectId}
+                  onPin={setActiveProject}
+                />
+              </div>
+            }
+            stats={<StatsTab />}
+            pulse={<PulsePeopleTab />}
+          />
+        </>
+      )}
         </>
       )}
 

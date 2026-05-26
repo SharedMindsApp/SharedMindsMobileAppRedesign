@@ -82,9 +82,11 @@ export function UpcomingSessionCountdown() {
 
   const startMs = new Date(next.scheduled_at ?? next.start_time).getTime();
   const msUntil = startMs - now;
-  const isLive   = msUntil <= 0;
-  const isSoon   = msUntil <= 15 * 60 * 1000;  // < 15 min
-  const isWarm   = msUntil <= 60 * 60 * 1000;  // < 60 min
+  const isLive    = msUntil <= 0;
+  // Sessions become joinable 5 minutes before — clicking enters the waiting room.
+  const canJoin   = msUntil <= 5 * 60 * 1000;
+  const isSoon    = msUntil <= 15 * 60 * 1000;  // < 15 min (visual nudge)
+  const isWarm    = msUntil <= 60 * 60 * 1000;  // < 60 min
   const ModeIcon = MODE_ICON[(next as any).session_mode as keyof typeof MODE_ICON] ?? Users;
 
   const timeStr = new Date(startMs).toLocaleTimeString('en-GB', {
@@ -142,14 +144,18 @@ export function UpcomingSessionCountdown() {
         </div>
 
         {/* CTA button */}
-        {isLive ? (
+        {isLive || canJoin ? (
           <button
             type="button"
             onClick={() => navigate(`/session/${next.id}`)}
-            className="flex items-center gap-1 text-[11px] font-bold bg-emerald-500 text-white px-3 py-1.5 rounded-full shadow-md shadow-emerald-500/30 hover:bg-emerald-600 hover:-translate-y-px transition-all"
+            className={`flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-full shadow-md hover:-translate-y-px transition-all ${
+              isLive
+                ? 'bg-emerald-500 text-white shadow-emerald-500/30 hover:bg-emerald-600'
+                : 'bg-violet-500 text-white shadow-violet-500/30 hover:bg-violet-600'
+            }`}
           >
             <Play size={10} fill="currentColor" strokeWidth={0} />
-            Join
+            {isLive ? 'Join' : 'Get ready'}
           </button>
         ) : (
           <button
@@ -158,7 +164,7 @@ export function UpcomingSessionCountdown() {
             className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ring-1 ${theme.text} ring-current/30 hover:opacity-80 transition-opacity`}
           >
             <Bell size={10} />
-            {isSoon ? 'Get ready' : 'View'}
+            {isSoon ? 'Notify me' : 'View'}
           </button>
         )}
       </div>

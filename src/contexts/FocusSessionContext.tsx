@@ -109,6 +109,20 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
         }
 
         if (data && !cancelled && isMounted()) {
+          // Don't restore sessions that ended more than 30 minutes ago —
+          // these are stale/orphaned rows that were never properly closed.
+          // Auto-mark them completed so they don't block the user.
+          const targetEnd = data.target_end_time ? new Date(data.target_end_time).getTime() : null;
+          const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
+          if (targetEnd && targetEnd < thirtyMinAgo) {
+            console.warn('[FocusSessionContext] Found expired session, auto-closing:', data.id);
+            supabase
+              .from('focus_sessions')
+              .update({ status: 'completed', ended_at: new Date().toISOString(), end_time: new Date().toISOString() })
+              .eq('id', data.id)
+              .then(() => {}); // fire-and-forget
+            return;
+          }
           console.log('[FocusSessionContext] Restored active session', data.id);
           handleSetActiveSession(data as FocusSession);
         }

@@ -1,109 +1,140 @@
+/**
+ * TasksPage — operational task surface.
+ *
+ * Redesigned to match the row pattern from the home page Plan tab:
+ *   • Compact rows (1 line each instead of bulky cards)
+ *   • Checkbox-left, title-middle, delete-on-hover-right
+ *   • Inline "+ Add" at top of the list (no floating button that fights the chat widget)
+ *   • Project + energy filter chips share one slim row
+ *   • Completed tasks collapse into a "Done this week" section
+ *
+ * Same vocabulary as the Plan tab so users don't relearn the page.
+ */
+
 import { useState } from 'react';
-import { Zap, Leaf, Coffee, Sparkles, Plus, Check, Circle, Play } from 'lucide-react';
-import { useCoreData } from '../../data/CoreDataContext';
+import { useNavigate } from 'react-router-dom';
+import { Zap, Leaf, Coffee, Sparkles, Plus, Check, X, Play, Target, Clock, ChevronDown, Pencil } from 'lucide-react';
+import { useCoreData, type CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import type { CoreTask } from '../../data/CoreDataContext';
-import {
-  PageGreeting,
-  SurfaceCard,
-  GradientButton,
-  InputWell,
-} from '../../ui/CorePage';
+import { showToast } from '../../../components/Toast';
+import { PageGreeting, SurfaceCard, GradientButton } from '../../ui/CorePage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
+import { TaskEditModal } from './TaskEditModal';
 
 type EnergyFilter = 'all' | 'deep' | 'medium' | 'light';
 
-const ENERGY_FILTERS: { id: EnergyFilter; label: string; sublabel: string; icon: typeof Zap; color: string }[] = [
-  { id: 'all',    label: 'All Levels', sublabel: `${'\u26A1'} Energy`,  icon: Sparkles, color: 'text-primary' },
-  { id: 'deep',   label: 'Hyperfocus', sublabel: 'High',     icon: Zap,      color: 'text-red-500' },
-  { id: 'medium', label: 'Steady',     sublabel: 'Medium',   icon: Leaf,     color: 'text-emerald-600' },
-  { id: 'light',  label: 'Gentle',     sublabel: 'Low',      icon: Coffee,   color: 'text-gray-500' },
+const ENERGY_CHIPS: { id: EnergyFilter; label: string; icon: typeof Zap }[] = [
+  { id: 'all',    label: 'All',    icon: Sparkles },
+  { id: 'deep',   label: 'High',   icon: Zap },
+  { id: 'medium', label: 'Medium', icon: Leaf },
+  { id: 'light',  label: 'Low',    icon: Coffee },
 ];
 
-function energyPillClasses(energy: CoreTask['energy']): string {
-  switch (energy) {
-    case 'deep':   return 'bg-red-100 text-red-700';
-    case 'medium': return 'bg-emerald-100 text-emerald-700';
-    case 'light':  return 'bg-gray-100 text-gray-600';
-  }
+const PROJECT_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function projectChipHex(token: string | null): string {
+  if (!token) return '#94a3b8';
+  return PROJECT_HEX[token] ?? token;
 }
 
-function energyLabel(energy: CoreTask['energy']): string {
-  switch (energy) {
-    case 'deep':   return 'High Energy';
-    case 'medium': return 'Medium';
-    case 'light':  return 'Low Energy';
-  }
-}
+const ENERGY_BARS: Record<CoreTask['energy'], string> = {
+  deep:   'bg-violet-400',
+  medium: 'bg-blue-400',
+  light:  'bg-amber-400',
+};
 
 export function TasksPage() {
+  const navigate = useNavigate();
   const [draftTask, setDraftTask] = useState('');
+  const [savingTask, setSavingTask] = useState(false);
   const [energyFilter, setEnergyFilter] = useState<EnergyFilter>('all');
-  // null = "All projects"; '__inbox' = unscoped only; uuid = specific project
-  const [projectFilter, setProjectFilter] = useState<string | null>(null);
-  const [showCapture, setShowCapture] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);  // null=all, '__inbox'=unscoped, uuid=specific
   const [showDeclare, setShowDeclare] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const [editingTask, setEditingTask] = useState<CoreTask | null>(null);
   const { activeSession } = useFocusSession();
   const {
     state: { tasks, projects, activeProjectId },
-    addTask,
+    addTaskAsync,
     toggleTask,
+    deleteTaskAsync,
   } = useCoreData();
 
-  const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
+  const activeProject = projects.find((p) => p.id === activeProjectId);
 
-  // Project filter applied first, then energy.
+  // Apply project filter
   const projectFiltered = projectFilter === null
     ? tasks
     : projectFilter === '__inbox'
       ? tasks.filter((t) => !t.projectId)
       : tasks.filter((t) => t.projectId === projectFilter);
 
-  const openTasks = projectFiltered.filter((t) => !t.done);
-  const completedTasks = projectFiltered.filter((t) => t.done);
+  // Apply energy filter
+  const energyFiltered = energyFilter === 'all'
+    ? projectFiltered
+    : projectFiltered.filter((t) => t.energy === energyFilter);
 
-  const filteredOpen = energyFilter === 'all'
-    ? openTasks
-    : openTasks.filter((t) => t.energy === energyFilter);
+  // Open + done partition; open sorted continue-first
+  const open = energyFiltered.filter((t) => !t.done).sort((a, b) => {
+    const aCont = isContinue(a);
+    const bCont = isContinue(b);
+    if (aCont !== bCont) return aCont ? -1 : 1;
+    return 0;
+  });
+  const done = energyFiltered.filter((t) => t.done);
 
-  const filteredDone = energyFilter === 'all'
-    ? completedTasks
-    : completedTasks.filter((t) => t.energy === energyFilter);
-
-  function submitTask() {
-    if (!draftTask.trim()) return;
-    addTask(draftTask);
-    setDraftTask('');
-    setShowCapture(false);
+  async function handleAddTask() {
+    const title = draftTask.trim();
+    if (!title || savingTask) return;
+    setSavingTask(true);
+    try {
+      const targetProjectId =
+        projectFilter && projectFilter !== '__inbox' ? projectFilter : activeProjectId;
+      await addTaskAsync(title, targetProjectId);
+      setDraftTask('');
+    } catch (err) {
+      console.warn('[TasksPage] add failed:', err);
+    } finally {
+      setSavingTask(false);
+    }
   }
 
   return (
-    <div className="space-y-5 sm:space-y-8">
+    <div className="space-y-5 max-w-3xl mx-auto pb-8">
 
-      {/* ── Editorial Header ──────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────── */}
       <section>
         <PageGreeting
-          greeting="Your Flow State"
+          greeting="Your tasks"
           subtitle="Focus on what matches your energy right now."
         />
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-700 px-3 py-1 rounded-full text-xs font-semibold">
             <Sparkles size={12} />
-            {activeProject?.name ?? 'No project'}
+            {activeProject?.name ?? 'No active project'}
           </span>
-          <span className="inline-flex items-center gap-1.5 bg-primary/5 text-primary px-3 py-1 rounded-full text-xs font-semibold">
-            {openTasks.length} task{openTasks.length === 1 ? '' : 's'} remaining
+          <span className="inline-flex items-center gap-1.5 bg-primary/8 text-primary px-3 py-1 rounded-full text-xs font-semibold">
+            {open.length} open
           </span>
+          {done.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 bg-surface-container-low stitch-text-secondary px-3 py-1 rounded-full text-xs font-semibold">
+              {done.length} done
+            </span>
+          )}
         </div>
       </section>
 
-      {/* ── Start Session CTA ────────────────────────────── */}
+      {/* ── Start session CTA (compact) ───────────────── */}
       {!activeSession && (
         <SurfaceCard>
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold stitch-text-primary">Ready to focus?</p>
-              <p className="text-xs stitch-text-secondary mt-0.5">Declare the one thing for your next session.</p>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold stitch-text-primary truncate">Ready to focus?</p>
+              <p className="text-xs stitch-text-secondary mt-0.5 truncate">
+                Declare the one thing for your next session.
+              </p>
             </div>
             <GradientButton size="sm" onClick={() => setShowDeclare(true)}>
               <Play size={13} className="mr-1" />
@@ -113,242 +144,317 @@ export function TasksPage() {
         </SurfaceCard>
       )}
 
-      {/* ── Project Filter Chips ──────────────────────────── */}
-      {projects.length > 0 && (
-        <section>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-            <button
-              type="button"
+      {/* ── Filter row — project + energy in one slim strip ── */}
+      <section className="space-y-2">
+        {projects.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+            <FilterChip
+              label="All projects"
+              selected={projectFilter === null}
               onClick={() => setProjectFilter(null)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
-                projectFilter === null
-                  ? 'stitch-btn--primary text-white shadow-sm'
-                  : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
+            />
+            <FilterChip
+              label="Inbox"
+              selected={projectFilter === '__inbox'}
               onClick={() => setProjectFilter('__inbox')}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
-                projectFilter === '__inbox'
-                  ? 'stitch-btn--primary text-white shadow-sm'
-                  : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
-              }`}
-            >
-              Inbox
-            </button>
-            {projects.map((p) => {
-              const sel = projectFilter === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setProjectFilter(p.id)}
-                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
-                    sel
-                      ? 'stitch-btn--primary text-white shadow-sm'
-                      : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
-                  }`}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: projectChipHex(p.color) }}
-                  />
-                  <span className="truncate max-w-[140px]">{p.name}</span>
-                </button>
-              );
-            })}
+            />
+            {projects.map((p) => (
+              <FilterChip
+                key={p.id}
+                label={p.name}
+                color={p.color}
+                selected={projectFilter === p.id}
+                onClick={() => setProjectFilter(p.id)}
+              />
+            ))}
           </div>
-        </section>
-      )}
-
-      {/* ── Energy Filter Tabs (Bento) ────────────────────── */}
-      <section>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-          {ENERGY_FILTERS.map((f) => {
-            const Icon = f.icon;
-            const active = energyFilter === f.id;
+        )}
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+          {ENERGY_CHIPS.map((e) => {
+            const Icon = e.icon;
+            const active = energyFilter === e.id;
             return (
               <button
-                key={f.id}
+                key={e.id}
                 type="button"
-                onClick={() => setEnergyFilter(f.id)}
-                className={`flex flex-col items-start gap-2 p-3 sm:p-4 rounded-xl transition-all duration-200 active:scale-[0.97] ${
+                onClick={() => setEnergyFilter(e.id)}
+                className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
                   active
-                    ? 'bg-white shadow-sm ring-2 ring-primary/20'
-                    : 'bg-surface-container-low hover:bg-surface-container'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
                 }`}
               >
-                <Icon size={18} className={active ? 'text-primary' : f.color} />
-                <div className="text-left">
-                  <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">
-                    {f.sublabel}
-                  </p>
-                  <p className={`text-sm sm:text-base font-bold ${active ? 'text-primary' : 'stitch-text-primary'}`}>
-                    {f.label}
-                  </p>
-                </div>
+                <Icon size={11} />
+                {e.label}
               </button>
             );
           })}
         </div>
       </section>
 
-      {/* ── Quick Capture (expandable) ────────────────────── */}
-      {showCapture && (
-        <SurfaceCard className="animate-fade-in">
-          <div className="space-y-3">
-            <InputWell
-              value={draftTask}
-              onChange={setDraftTask}
-              onSubmit={submitTask}
-              placeholder="What needs doing?"
+      {/* ── Inline + Add ─────────────────────────────── */}
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container">
+        <Plus size={14} className="stitch-text-secondary shrink-0" />
+        <input
+          type="text"
+          value={draftTask}
+          onChange={(e) => setDraftTask(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); handleAddTask(); }
+          }}
+          placeholder="Capture a task…"
+          className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none min-w-0"
+        />
+        {draftTask.trim() && (
+          <button
+            type="button"
+            onClick={handleAddTask}
+            disabled={savingTask}
+            className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50"
+          >
+            Add
+          </button>
+        )}
+      </div>
+
+      {/* ── Open task list ──────────────────────────── */}
+      <section className="space-y-1.5">
+        {open.length > 0 ? (
+          open.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              projects={projects}
+              onToggle={() => toggleTask(task.id)}
+              onDelete={() => deleteTaskAsync(task.id).catch((err) => {
+                console.error('[TasksPage] delete failed:', err);
+                showToast('error', "Couldn't delete that task. Refresh and try again.");
+              })}
+              onEdit={() => setEditingTask(task)}
+              onStartSession={() => {
+                // Open declare modal — currently we don't have a way to pre-select
+                // a task by ID. Title-prefill happens via the modal's "Type a goal"
+                // tab, which lets users continue from any task quickly.
+                setShowDeclare(true);
+              }}
             />
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-medium stitch-text-secondary truncate">
-                {activeProject?.name ?? 'No project'}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCapture(false)}
-                  className="px-3 py-2 text-sm font-medium rounded-full stitch-text-secondary hover:bg-surface-container transition-colors"
-                >
-                  Cancel
-                </button>
-                <GradientButton size="sm" onClick={submitTask}>
-                  Add task
-                </GradientButton>
-              </div>
-            </div>
+          ))
+        ) : (
+          <div className="rounded-xl bg-surface-container-low/50 ring-1 ring-dashed ring-outline-variant/20 p-6 text-center">
+            <p className="text-sm font-bold stitch-text-primary">Nothing matches this filter</p>
+            <p className="text-xs stitch-text-secondary mt-1">
+              {tasks.filter((t) => !t.done).length === 0
+                ? 'Capture your first task above ↑'
+                : 'Try a different energy or project filter.'}
+            </p>
           </div>
-        </SurfaceCard>
-      )}
-
-      {/* ── Task Cards Grid ───────────────────────────────── */}
-      <section>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          {filteredOpen.map((task) => (
-            <TaskCard key={task.id} task={task} onToggle={toggleTask} projects={projects} />
-          ))}
-
-          {filteredDone.slice(0, 4).map((task) => (
-            <TaskCard key={task.id} task={task} onToggle={toggleTask} projects={projects} />
-          ))}
-
-          {/* Empty / Quick-add prompt */}
-          {filteredOpen.length === 0 && filteredDone.length === 0 && (
-            <div className="sm:col-span-2 bg-surface-container-low/50 border-2 border-dashed border-outline-variant/20 rounded-xl p-6 flex flex-col items-center justify-center text-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center">
-                <Plus size={20} className="text-outline-variant" />
-              </div>
-              <div>
-                <p className="text-sm font-bold stitch-text-primary">No tasks match this filter</p>
-                <p className="text-xs stitch-text-secondary mt-0.5">Try another energy level or add a task.</p>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </section>
 
-      {/* ── Floating Quick-Add Button ─────────────────────── */}
-      {!showCapture && (
-        <button
-          type="button"
-          onClick={() => setShowCapture(true)}
-          className="fixed right-4 sm:right-6 bottom-24 md:bottom-8 z-20 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-white flex items-center justify-center shadow-2xl shadow-primary/30 hover:scale-105 active:scale-90 transition-all"
-          aria-label="Quick add task"
-        >
-          <Plus size={26} strokeWidth={2.5} />
-        </button>
+      {/* ── Done section (collapsible) ──────────────── */}
+      {done.length > 0 && (
+        <section>
+          <button
+            type="button"
+            onClick={() => setShowDone((v) => !v)}
+            className="w-full flex items-center justify-between px-1 py-2 hover:opacity-70 transition-opacity"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">
+              Done · {done.length}
+            </span>
+            <ChevronDown
+              size={14}
+              className={`stitch-text-secondary transition-transform ${showDone ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {showDone && (
+            <div className="space-y-1.5">
+              {done.slice(0, 20).map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  projects={projects}
+                  onToggle={() => toggleTask(task.id)}
+                  onDelete={() => deleteTaskAsync(task.id).catch((err) => {
+                console.error('[TasksPage] delete failed:', err);
+                showToast('error', "Couldn't delete that task. Refresh and try again.");
+              })}
+                  onStartSession={() => setShowDeclare(true)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {showDeclare && (
         <DeclareSessionModal onClose={() => setShowDeclare(false)} />
       )}
+
+      {editingTask && (
+        <TaskEditModal task={editingTask} onClose={() => setEditingTask(null)} />
+      )}
     </div>
+  );
+
+  // Helper: suppress unused-import warning if navigate isn't otherwise used
+  void navigate;
+}
+
+// ── Helpers / sub-components ──────────────────────────────────────
+
+function isContinue(t: CoreTask): boolean {
+  return t.lastSessionOutcome === 'partially'
+      || t.lastSessionOutcome === 'something_came_up'
+      || t.lastSessionOutcome === 'no_answer';
+}
+
+function FilterChip({
+  label, color = null, selected, onClick,
+}: {
+  label: string;
+  color?: string | null;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+        selected
+          ? 'bg-primary text-white shadow-sm'
+          : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+      }`}
+    >
+      {color && (
+        <span
+          className="w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: projectChipHex(color) }}
+        />
+      )}
+      <span className="truncate max-w-[140px]">{label}</span>
+    </button>
   );
 }
 
-const PROJECT_HEX: Record<string, string> = {
-  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
-  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
-};
-function projectChipHex(token: string | null): string {
-  return PROJECT_HEX[token ?? ''] ?? PROJECT_HEX.blue;
-}
-
-/* ── Individual Task Card ─────────────────────────────── */
-function TaskCard({
-  task,
-  onToggle,
-  projects,
+function TaskRow({
+  task, projects, onToggle, onDelete, onEdit, onStartSession,
 }: {
   task: CoreTask;
-  onToggle: (id: string) => void;
-  projects: { id: string; name: string; color: string | null }[];
+  projects: Array<{ id: string; name: string; color: string | null }>;
+  onToggle: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  onStartSession: () => void;
 }) {
-  const project = task.projectId ? projects.find((p) => p.id === task.projectId) : null;
+  const project = task.projectId
+    ? projects.find((p) => p.id === task.projectId)
+    : null;
+  const continueFlag = isContinue(task);
+  const sessions = task.sessionsCount ?? 0;
 
   return (
     <div
-      className={`stitch-card flex flex-col justify-between gap-4 p-4 sm:p-5 transition-all duration-200 hover:shadow-md ${
-        task.done ? 'opacity-60' : ''
+      className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-xl transition-all ${
+        task.done
+          ? 'opacity-55 bg-surface-container-low'
+          : continueFlag
+          ? 'bg-amber-50/60 hover:bg-amber-50 ring-1 ring-amber-200/40'
+          : 'bg-white ring-1 ring-surface-container hover:bg-surface-container-low'
       }`}
     >
-      {/* Top row: energy pill + due label */}
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${energyPillClasses(task.energy)}`}>
-            {task.energy === 'deep' && <Zap size={10} />}
-            {task.energy === 'medium' && <Leaf size={10} />}
-            {task.energy === 'light' && <Coffee size={10} />}
-            {energyLabel(task.energy)}
-          </span>
-          <span className="text-[11px] font-medium stitch-text-secondary shrink-0">
-            {task.dueLabel}
-          </span>
-        </div>
+      {/* Energy bar */}
+      <div className={`w-0.5 self-stretch rounded-full shrink-0 ${ENERGY_BARS[task.energy]}`} />
 
-        {/* Title */}
-        <h3 className={`text-base sm:text-lg font-bold leading-snug stitch-text-primary ${task.done ? 'line-through' : ''}`}>
+      {/* Checkbox */}
+      <button
+        type="button"
+        onClick={onToggle}
+        title={task.done ? 'Mark as not done' : 'Mark as done'}
+        aria-label={task.done ? 'Mark as not done' : 'Mark as done'}
+        className={`shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+          task.done
+            ? 'bg-emerald-500 border-emerald-500'
+            : 'border-surface-container-high hover:border-emerald-500 hover:bg-emerald-50'
+        }`}
+      >
+        <Check
+          size={11}
+          className={
+            task.done
+              ? 'text-white opacity-100'
+              : 'text-emerald-500 opacity-0 group-hover:opacity-60 transition-opacity'
+          }
+          strokeWidth={3}
+        />
+      </button>
+
+      {/* Main click area — opens session */}
+      <button
+        type="button"
+        onClick={onStartSession}
+        disabled={task.done}
+        className="flex-1 min-w-0 text-left active:scale-[0.99] transition-transform pr-20 disabled:cursor-default"
+        title={task.done ? 'Task completed' : 'Start a session on this task'}
+      >
+        <p className={`text-sm font-semibold leading-tight ${
+          task.done ? 'line-through stitch-text-secondary' : 'stitch-text-primary'
+        }`}>
           {task.title}
-        </h3>
-
-        {project && (
-          <div className="mt-2 inline-flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: projectChipHex(project.color) }}
-            />
-            <span className="text-[11px] font-bold stitch-text-secondary uppercase tracking-wider truncate">
+        </p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {project && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary truncate max-w-[120px]">
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: projectChipHex(project.color) }}
+              />
               {project.name}
             </span>
-          </div>
-        )}
-      </div>
+          )}
+          {!project && (
+            <span className="text-[10px] font-semibold stitch-text-secondary">
+              Inbox
+            </span>
+          )}
+          {task.weeklyIntentionId && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded-full">
+              <Target size={8} /> Intention
+            </span>
+          )}
+          {continueFlag && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+              <Clock size={8} /> Continue
+            </span>
+          )}
+          {sessions > 0 && !continueFlag && (
+            <span className="text-[9px] font-semibold stitch-text-secondary">
+              {sessions} session{sessions === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+      </button>
 
-      {/* Bottom row: status + toggle */}
-      <div className="flex items-center justify-between">
-        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-          task.done ? 'text-emerald-600' : 'stitch-text-secondary'
-        }`}>
-          {task.done ? <Check size={14} /> : <Circle size={14} />}
-          {task.done ? 'Completed' : 'Not started'}
-        </span>
+      {/* Edit + Delete — hover-reveal cluster */}
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <button
           type="button"
-          onClick={() => onToggle(task.id)}
-          className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-90 ${
-            task.done
-              ? 'bg-surface-container text-on-surface-variant'
-              : 'bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105'
-          }`}
-          aria-label={task.done ? 'Undo task' : 'Complete task'}
+          onClick={onEdit}
+          title="Edit task"
+          aria-label="Edit task"
+          className="w-7 h-7 rounded-full flex items-center justify-center bg-surface-container hover:bg-primary/15 hover:text-primary stitch-text-secondary transition-colors"
         >
-          <Check size={18} />
+          <Pencil size={11} strokeWidth={2.5} />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          title="Delete task"
+          aria-label="Delete task"
+          className="w-7 h-7 rounded-full flex items-center justify-center bg-surface-container hover:bg-red-100 hover:text-red-500 stitch-text-secondary transition-colors"
+        >
+          <X size={12} strokeWidth={2.5} />
         </button>
       </div>
     </div>

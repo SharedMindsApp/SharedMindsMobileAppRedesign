@@ -229,9 +229,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const openRouterApiKey =
-      Deno.env.get('OPENROUTER_API_KEY') ||
-      Deno.env.get('VITE_OPENROUTER_API_KEY');
+    const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
 
     if (!openRouterApiKey || openRouterApiKey.trim().length === 0) {
       return new Response(

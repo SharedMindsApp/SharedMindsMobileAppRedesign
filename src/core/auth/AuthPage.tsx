@@ -48,10 +48,24 @@ export function AuthPage() {
                         : `Account created. We sent a confirmation email to ${normalizedEmail}.`
                 );
             } else {
-                const { error: signInError } = await supabase.auth.signInWithPassword({
+                // Race signInWithPassword against a 15-second timeout. If the
+                // Supabase client gets stuck (stale session, network hang,
+                // edge-case auth race) we surface a real error instead of
+                // leaving the button on "Please wait…" forever.
+                const signInPromise = supabase.auth.signInWithPassword({
                     email: email.trim().toLowerCase(),
                     password,
                 });
+                const timeout = new Promise<never>((_, reject) =>
+                    setTimeout(
+                        () => reject(new Error(
+                            "Sign-in is taking too long. Your session may be stale — try: " +
+                            "DevTools → Application → Local Storage → delete sb-* keys → refresh.",
+                        )),
+                        15_000,
+                    ),
+                );
+                const { error: signInError } = await Promise.race([signInPromise, timeout]);
 
                 if (signInError) throw signInError;
             }

@@ -41,7 +41,9 @@ export function CommunityFeedPage() {
 
   // Fetch blocked user IDs once on mount so their posts are hidden
   useEffect(() => {
-    getBlockedUserIds().then(setBlockedIds).catch(() => {});
+    getBlockedUserIds()
+      .then((ids) => setBlockedIds(Array.from(ids)))
+      .catch(() => {});
   }, []);
 
   async function refresh() {

@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw, Flame } from 'lucide-react';
 import { getFocusSessionSummary, endFocusSession } from '../../lib/sessions/focus';
-import { endCommunitySession } from '../../core/services/SessionService';
+import { endCommunitySession, fetchSessionOutcomes, type DebriefOutcome } from '../../core/services/SessionService';
 import { supabase } from '../../lib/supabase';
 import type { FocusSessionSummary, SessionOutcome } from '../../lib/sessions/focusTypes';
+import { ConnectButton } from '../../core/features/connections/ConnectButton';
+import { useAuth } from '../../core/auth/AuthProvider';
 
 const OUTCOME_OPTIONS: { value: SessionOutcome; label: string; icon: any; description: string }[] = [
   { value: 'finished', label: 'Yes, I finished it', icon: CheckCircle2, description: 'Task complete' },
@@ -148,12 +150,11 @@ export function SessionSummaryPage() {
     );
   }
 
-  // ── Community session outcome gate ──────────────────────────
-  if (summary.session.session_goal && !outcomeSubmitted) {
-    return <OutcomeQuestion onSelect={handleOutcomeSelect} submitting={outcomeSubmitting} />;
-  }
-
   // ── Community session finish screen ──────────────────────────
+  // The outcome was captured live in the in-call debrief overlay, so we no
+  // longer show the outcome picker here — just the stats + team outcomes.
+  // (`OutcomeQuestion` is kept in the file as a fallback only — invoked
+  // below if a legacy session somehow lacks a session_outcomes row.)
   if (summary.session.session_goal) {
     return <CommunitySummary summary={summary} onNewSession={handleStartNewSession} onHome={handleReturnToDashboard} />;
   }
@@ -369,10 +370,25 @@ function CommunitySummary({
     ?? 0;
 
   const [weekCount, setWeekCount] = useState<number | null>(null);
+  const { user } = useAuth();
+
+  // Live debrief outcomes — one row per participant in this session.
+  // Lets us show "Sarah finished · Tom partial" with a Connect CTA for peers.
+  const [teamOutcomes, setTeamOutcomes] = useState<Array<{
+    user_id: string;
+    outcome: DebriefOutcome;
+    declared_goal: string | null;
+    profile: { display_name: string; avatar_url: string | null } | null;
+  }>>([]);
 
   useEffect(() => {
     fetchWeekSessionCount().then(setWeekCount).catch(() => setWeekCount(null));
-  }, []);
+    fetchSessionOutcomes(summary.session.id)
+      .then(setTeamOutcomes)
+      .catch(() => setTeamOutcomes([]));
+  }, [summary.session.id]);
+
+  const peerOutcomes = teamOutcomes.filter((o) => o.user_id !== user?.id);
 
   const isFinished = outcome === 'finished';
 
@@ -406,6 +422,18 @@ function CommunitySummary({
             </p>
           )}
         </div>
+
+        {/* ── Team outcomes (who else was in the session and how they did) ── */}
+        {peerOutcomes.length > 0 && (
+          <div className="w-full rounded-2xl bg-white ring-1 ring-surface-container p-4 space-y-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">
+              You worked with
+            </p>
+            {peerOutcomes.map((peer) => (
+              <PeerOutcomeRow key={peer.user_id} peer={peer} />
+            ))}
+          </div>
+        )}
 
         {/* ── Streak celebration (only when finished + we have data) ── */}
         {isFinished && weekCount !== null && weekCount > 0 && (
@@ -470,3 +498,60 @@ function CommunitySummary({
     </div>
   );
 }
+
+// ── Peer outcome row ────────────────────────────────────────────────
+// Shows another participant's avatar, name, what they declared, and the
+// outcome they picked in the debrief — plus a Connect CTA.
+function PeerOutcomeRow({
+  peer,
+}: {
+  peer: {
+    user_id: string;
+    outcome: DebriefOutcome;
+    declared_goal: string | null;
+    profile: { display_name: string; avatar_url: string | null } | null;
+  };
+}) {
+  const name = peer.profile?.display_name ?? 'Member';
+  const initial = name.trim().charAt(0).toUpperCase();
+  const badge = OUTCOME_BADGE[peer.outcome];
+
+  return (
+    <div className="flex items-center gap-3">
+      {peer.profile?.avatar_url ? (
+        <img
+          src={peer.profile.avatar_url}
+          alt=""
+          className="w-9 h-9 rounded-full object-cover shrink-0"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
+          {initial}
+        </div>
+      )}
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-bold stitch-text-primary truncate">{name}</span>
+          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${badge.classes}`}>
+            {badge.label}
+          </span>
+        </div>
+        {peer.declared_goal && (
+          <p className="text-[11px] stitch-text-secondary truncate">
+            {peer.declared_goal}
+          </p>
+        )}
+      </div>
+
+      <ConnectButton otherUserId={peer.user_id} variant="light" />
+    </div>
+  );
+}
+
+const OUTCOME_BADGE: Record<DebriefOutcome, { label: string; classes: string }> = {
+  finished:          { label: 'Finished',  classes: 'bg-emerald-100 text-emerald-700' },
+  partially:         { label: 'Partial',   classes: 'bg-amber-100 text-amber-700' },
+  something_came_up: { label: 'Came up',   classes: 'bg-rose-100 text-rose-700' },
+  no_answer:         { label: 'No answer', classes: 'bg-gray-100 text-gray-500' },
+};

@@ -1,29 +1,47 @@
 /**
  * ProjectEditorModal — create or edit a project.
  *
- * Fields kept deliberately minimal: title (required), description ("what
- * does done look like?"), color. For an existing project we also surface
- * an archive button + an Invite section trigger.
+ * Sectioned bottom sheet (mobile) / centered modal (desktop):
+ *   1. Basics — title + "what does done look like?"
+ *   2. Colour — labeled swatches with a clear checkmark on the selected one
+ *   3. Members — preview avatars + invite (existing projects only)
+ *   4. Danger zone — archive (existing projects only)
+ *
+ * The earlier layout mashed all sections into one scroll with no visual
+ * grouping; the new one uses subtle ring-1 cards per section so the
+ * heaviest action (archive) is clearly separated from the save flow.
  */
 
 import { useState } from 'react';
-import { X, Archive, Loader2, Target, UserPlus } from 'lucide-react';
+import { X, Archive, Loader2, Target, UserPlus, Check, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
-import { ProjectService, type Project } from '../../services/ProjectService';
+import { ProjectService, type Project, type ProjectMemberWithProfile } from '../../services/ProjectService';
 import { InputWell } from '../../ui/CorePage';
 import { PROJECT_COLORS } from './ProjectsPage';
 import { InviteCollaboratorSheet } from './InviteCollaboratorSheet';
 
+const COLOR_LABELS: Record<string, string> = {
+  cyan:    'Cyan',
+  blue:    'Blue',
+  violet:  'Violet',
+  emerald: 'Emerald',
+  amber:   'Amber',
+  rose:    'Rose',
+};
+
 type Props = {
   /** Pass a project to edit; omit to create. */
   project?: Project;
+  /** Existing members to preview (passed from ProjectDetailPage to avoid a
+   *  duplicate fetch). Only used when editing. */
+  members?: ProjectMemberWithProfile[];
   onClose: () => void;
   onSaved?: (project: Project) => void;
   onArchived?: () => void;
 };
 
-export function ProjectEditorModal({ project, onClose, onSaved, onArchived }: Props) {
+export function ProjectEditorModal({ project, members = [], onClose, onSaved, onArchived }: Props) {
   const { user } = useAuth();
   const { state: { spaces }, refreshProjects } = useCoreData();
   const isNew = !project;
@@ -95,64 +113,73 @@ export function ProjectEditorModal({ project, onClose, onSaved, onArchived }: Pr
         className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl stitch-card--accent flex items-center justify-center">
-              <Target size={18} className="text-white" />
+        {/* Header — adds a left colour stripe matching the project's colour
+            so the user has constant visual confirmation of what they're
+            editing, plus the same close affordance as before. */}
+        <div className="shrink-0 flex items-stretch border-b border-surface-container/50">
+          <div className="w-1.5" style={{ backgroundColor: PROJECT_COLORS[color]?.hex }} />
+          <div className="flex-1 flex items-center justify-between px-5 pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: (PROJECT_COLORS[color]?.hex ?? '#3b82f6') + '20' }}
+              >
+                <Target size={18} style={{ color: PROJECT_COLORS[color]?.hex }} />
+              </div>
+              <div>
+                <h2 className="stitch-headline text-base font-extrabold leading-tight">
+                  {isNew ? 'New project' : 'Edit project'}
+                </h2>
+                <p className="text-xs stitch-text-secondary">
+                  {isNew ? "What's the macro goal?" : 'Refine title, scope, colour, sharing.'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="stitch-headline text-base font-extrabold leading-tight">
-                {isNew ? 'New project' : 'Edit project'}
-              </h2>
-              <p className="text-xs stitch-text-secondary">
-                What's the macro goal?
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-low hover:bg-surface-container transition-colors"
+            >
+              <X size={15} className="stitch-text-secondary" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-low hover:bg-surface-container transition-colors"
-          >
-            <X size={15} className="stitch-text-secondary" />
-          </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-4">
-          {/* Title */}
-          <div>
-            <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 block">
-              Title
-            </label>
-            <InputWell
-              value={title}
-              onChange={setTitle}
-              placeholder="e.g. Ship pitch deck v1"
-            />
-          </div>
+        {/* Body — 4 sectioned cards, each ring-1 boxed for visual grouping */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          {/* Description */}
-          <div>
-            <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 block">
-              What does done look like? <span className="opacity-60 normal-case font-medium">(optional)</span>
-            </label>
-            <InputWell
-              value={description}
-              onChange={setDescription}
-              placeholder="A 15-slide deck ready to send to investors"
-              multiline
-              rows={3}
-            />
-          </div>
+          {/* 1. Basics */}
+          <section className="rounded-2xl ring-1 ring-surface-container p-4 space-y-3">
+            <SectionHeading icon={<Target size={11} />} label="Basics" />
+            <div>
+              <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 block">
+                Title
+              </label>
+              <InputWell
+                value={title}
+                onChange={setTitle}
+                placeholder="e.g. Ship pitch deck v1"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 block">
+                What does done look like? <span className="opacity-60 normal-case font-medium">(optional)</span>
+              </label>
+              <InputWell
+                value={description}
+                onChange={setDescription}
+                placeholder="A 15-slide deck ready to send to investors"
+                multiline
+                rows={3}
+              />
+            </div>
+          </section>
 
-          {/* Color */}
-          <div>
-            <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 block">
-              Color
-            </label>
-            <div className="flex items-center gap-2">
+          {/* 2. Colour — bigger swatches in a 6-up grid, label below each,
+              a check mark on the selected one for unambiguous state. */}
+          <section className="rounded-2xl ring-1 ring-surface-container p-4">
+            <SectionHeading icon={<span className="text-[10px]">🎨</span>} label="Colour" />
+            <div className="grid grid-cols-6 gap-2 mt-3">
               {Object.entries(PROJECT_COLORS).map(([key, meta]) => {
                 const selected = color === key;
                 return (
@@ -160,27 +187,108 @@ export function ProjectEditorModal({ project, onClose, onSaved, onArchived }: Pr
                     key={key}
                     type="button"
                     onClick={() => setColor(key)}
-                    className={`w-8 h-8 rounded-full transition-all active:scale-90 ${
-                      selected ? 'ring-2 ring-offset-2 ring-offset-surface' + ' ' + meta.ring : ''
-                    }`}
-                    style={{ backgroundColor: meta.hex }}
-                    aria-label={key}
-                  />
+                    className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
+                    aria-label={COLOR_LABELS[key] ?? key}
+                    aria-pressed={selected}
+                  >
+                    <div
+                      className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-shadow ${
+                        selected
+                          ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md ' + meta.ring
+                          : 'shadow-sm'
+                      }`}
+                      style={{ backgroundColor: meta.hex }}
+                    >
+                      {selected && <Check size={18} className="text-white" strokeWidth={3} />}
+                    </div>
+                    <span className={`text-[10px] font-bold ${
+                      selected ? meta.textDark : 'stitch-text-secondary'
+                    }`}>
+                      {COLOR_LABELS[key] ?? key}
+                    </span>
+                  </button>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          {/* Invite section — existing projects only */}
+          {/* 3. Members (existing projects only) — preview avatar stack +
+              invite button. Doesn't try to be a full management surface;
+              that lives in the upcoming Settings drawer. */}
           {!isNew && (
-            <button
-              type="button"
-              onClick={() => setInviteOpen(true)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
-            >
-              <UserPlus size={14} />
-              Invite collaborator
-            </button>
+            <section className="rounded-2xl ring-1 ring-surface-container p-4">
+              <SectionHeading icon={<UserPlus size={11} />} label={`Members · ${members.length || 1}`} />
+              <div className="flex items-center gap-3 mt-3">
+                {members.length > 0 ? (
+                  <div className="flex -space-x-2 shrink-0">
+                    {members.slice(0, 5).map((m) => (
+                      m.avatar_url ? (
+                        <img
+                          key={m.id}
+                          src={m.avatar_url}
+                          alt={m.display_name}
+                          title={m.display_name + (m.role === 'owner' ? ' (owner)' : '')}
+                          className="w-9 h-9 rounded-full object-cover border-2 border-surface"
+                        />
+                      ) : (
+                        <div
+                          key={m.id}
+                          title={m.display_name + (m.role === 'owner' ? ' (owner)' : '')}
+                          className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white border-2 border-surface"
+                        >
+                          {m.display_name.charAt(0).toUpperCase()}
+                        </div>
+                      )
+                    ))}
+                    {members.length > 5 && (
+                      <div className="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-[10px] font-bold stitch-text-secondary border-2 border-surface">
+                        +{members.length - 5}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs stitch-text-secondary italic">Just you for now.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setInviteOpen(true)}
+                  className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container transition-colors"
+                >
+                  <UserPlus size={12} />
+                  Invite
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* 4. Danger zone (existing projects only) — clearly separated by
+              ring colour + label so admin-y actions can't be confused with
+              save flow. Currently just Archive; Delete/Transfer land in the
+              Settings drawer next phase. */}
+          {!isNew && (
+            <section className="rounded-2xl ring-1 ring-rose-200/50 p-4 bg-rose-50/30">
+              <SectionHeading
+                icon={<AlertTriangle size={11} className="text-rose-600" />}
+                label="Danger zone"
+                tone="danger"
+              />
+              <div className="flex items-center justify-between gap-3 mt-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold stitch-text-primary">Archive this project</p>
+                  <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+                    Hides it from your list. Past sessions and tasks stay accessible.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={submitting}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-700 bg-white ring-1 ring-rose-200 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                >
+                  <Archive size={12} /> Archive
+                </button>
+              </div>
+            </section>
           )}
 
           {error && (
@@ -188,20 +296,17 @@ export function ProjectEditorModal({ project, onClose, onSaved, onArchived }: Pr
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer — single Save action, no competing Archive button. The
+            danger zone owns destructive actions; this row is pure commit. */}
         <div className="shrink-0 px-5 pt-3 pb-5 border-t border-surface-container/50 flex items-center gap-2">
-          {!isNew && (
-            <button
-              type="button"
-              onClick={handleArchive}
-              disabled={submitting}
-              className="px-3 py-2.5 rounded-xl text-xs font-bold text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <Archive size={12} /> Archive
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
           <button
             type="button"
             onClick={handleSave}
@@ -212,7 +317,7 @@ export function ProjectEditorModal({ project, onClose, onSaved, onArchived }: Pr
                 : 'bg-surface-container-low stitch-text-secondary cursor-not-allowed'
             }`}
           >
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : (isNew ? 'Create' : 'Save')}
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : (isNew ? 'Create project' : 'Save changes')}
           </button>
         </div>
       </div>
@@ -225,5 +330,23 @@ export function ProjectEditorModal({ project, onClose, onSaved, onArchived }: Pr
       />
     )}
     </>
+  );
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+function SectionHeading({
+  icon, label, tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  tone?: 'danger';
+}) {
+  const tint = tone === 'danger' ? 'text-rose-700' : 'stitch-text-secondary';
+  return (
+    <div className={`flex items-center gap-1.5 ${tint}`}>
+      <span className="opacity-80">{icon}</span>
+      <p className="text-[10px] font-bold tracking-widest uppercase">{label}</p>
+    </div>
   );
 }

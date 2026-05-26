@@ -58,7 +58,7 @@ interface EnrichedMember extends PublicProfile {
   isOnline: boolean;
 }
 
-export function MembersDirectoryPage() {
+export function MembersDirectoryPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { profile: me } = useAuth();
   const { openConversation, isMobile } = useMessagingDock();
@@ -271,10 +271,15 @@ export function MembersDirectoryPage() {
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      <PageGreeting
-        greeting="People"
-        subtitle="Browse the community. Connect, message, or pull someone into a session."
-      />
+      {/* PageGreeting is hidden when this component is embedded inside
+          another page (e.g. ConnectionsPage's Discover tab) so we don't
+          render two headers. */}
+      {!embedded && (
+        <PageGreeting
+          greeting="People"
+          subtitle="Browse the community. Connect, message, or pull someone into a session."
+        />
+      )}
 
       {/* Search */}
       <div className="space-y-3">

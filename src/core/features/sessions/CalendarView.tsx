@@ -16,9 +16,10 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Play, ChevronLeft, ChevronRight, Calendar as CalIcon,
-  Users, UserPlus, User, MicOff, Loader2, X, Clock, StopCircle, Plus,
+  Users, UserPlus, User, Loader2, X, Clock, StopCircle, Plus,
   CalendarPlus,
 } from 'lucide-react';
+import { SessionTagPills } from './SessionTagPills';
 import { downloadIcs } from '../../../lib/sessions/icsExport';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useAuth } from '../../auth/AuthProvider';
@@ -27,6 +28,7 @@ import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscrip
 import {
   fetchUpcomingScheduledSessions,
   joinOneOnOneSession,
+  markSessionEnded,
   type ScheduledSessionWithProfile,
 } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
@@ -163,7 +165,20 @@ function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
 export function CalendarView() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { activeSession, sessionGoal, timerSecondsRemaining } = useFocusSession();
+  const { activeSession, sessionGoal, timerSecondsRemaining, clearSession } = useFocusSession();
+
+  // End session directly from the sidebar — writes to DB immediately so the
+  // session can't get "stuck" if the user never reaches the summary screen.
+  async function handleEndSessionFromSidebar() {
+    if (!activeSession) return;
+    try {
+      await markSessionEnded(activeSession.id);
+    } catch {
+      // Best-effort — navigate to summary anyway so the user can pick an outcome
+    }
+    clearSession();
+    navigate(`/session/${activeSession.id}/summary`);
+  }
 
   const { sessions: active } = useCommunitySessionsSubscription();
   const [scheduled, setScheduled] = useState<ScheduledSessionWithProfile[]>([]);
@@ -323,7 +338,7 @@ export function CalendarView() {
             timerSecondsRemaining={timerSecondsRemaining}
             durationMin={activeSession.intended_duration_minutes ?? 50}
             onRejoin={() => navigate(`/session/${activeSession.id}`)}
-            onEnd={() => navigate(`/session/${activeSession.id}/summary`)}
+            onEnd={handleEndSessionFromSidebar}
           />
         )}
 
@@ -716,26 +731,13 @@ function SessionBlock({
           </div>
         )}
         {height > 50 && (
-          <div className="flex items-center gap-1 mt-1 flex-wrap">
-            {isOneOnOne ? (
-              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider text-violet-700">
-                <UserPlus size={8} />1-on-1
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider stitch-text-secondary">
-                <Users size={8} />Group
-              </span>
-            )}
-            {session.quiet_mode && (
-              <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider stitch-text-secondary">
-                <MicOff size={8} />Quiet
-              </span>
-            )}
-            {partnerOpen && (
-              <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-600">
-                Slot open
-              </span>
-            )}
+          <div className="mt-1">
+            <SessionTagPills
+              mode={session.session_mode}
+              quietMode={session.quiet_mode}
+              partnerOpen={partnerOpen}
+              size="sm"
+            />
           </div>
         )}
       </div>
@@ -773,37 +775,20 @@ function SessionBlock({
           {session.session_goal ?? session.session_title ?? 'Working on something'}
         </p>
 
-        <div className="relative text-[11px] stitch-text-secondary space-y-1">
-          <div className="flex items-center justify-between">
+        <div className="relative space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
             <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">When</span>
             <span className="tabular-nums font-semibold stitch-text-primary">{timeRange}</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Duration</span>
-            <span className="tabular-nums font-semibold stitch-text-primary">{session.intended_duration_minutes} min</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Mode</span>
-            <span className="font-semibold stitch-text-primary inline-flex items-center gap-1">
-              {isOneOnOne ? <><UserPlus size={10} /> 1-on-1</> : <><Users size={10} /> Group</>}
-              {session.quiet_mode && <span className="inline-flex items-center gap-0.5 ml-1"><MicOff size={10} /> Quiet</span>}
-            </span>
-          </div>
-          {session.project_title && (
-            <div className="flex items-center justify-between">
-              <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Project</span>
-              <span className="font-semibold stitch-text-primary inline-flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: projectDot(session.project_color) }} />
-                {session.project_title}
-              </span>
-            </div>
-          )}
-          {partnerOpen && (
-            <div className="mt-2 pt-2 border-t border-surface-container/60 text-emerald-700 font-bold uppercase tracking-wider text-[9px]">
-              1-on-1 slot open — click to join
-            </div>
-          )}
-          <div className="mt-2 pt-2 border-t border-surface-container/60 text-primary font-bold text-[10px] text-center">
+          <SessionTagPills
+            mode={session.session_mode}
+            quietMode={session.quiet_mode}
+            partnerOpen={partnerOpen}
+            projectTitle={session.project_title}
+            projectColor={session.project_color}
+            size="sm"
+          />
+          <div className="mt-1 pt-2 border-t border-surface-container/60 text-primary font-bold text-[10px] text-center">
             Click for details →
           </div>
         </div>
@@ -967,32 +952,16 @@ function SessionDetailSheet({
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap mb-3">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-            isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-cyan-100 text-cyan-700'
-          }`}>
-            {isActive ? 'Live now' : 'Scheduled'}
-          </span>
-          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-            isOneOnOne ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
-          }`}>
-            {isOneOnOne ? <UserPlus size={9} /> : <Users size={9} />}
-            {isOneOnOne ? '1-on-1' : 'Group'}
-          </span>
-          {session.quiet_mode && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-slate-100 text-slate-700">
-              <MicOff size={9} /> Quiet
-            </span>
-          )}
-          {session.project_title && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-surface-container stitch-text-primary">
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: projectDot(session.project_color) }}
-              />
-              {session.project_title}
-            </span>
-          )}
+        <div className="mb-3">
+          <SessionTagPills
+            mode={session.session_mode}
+            quietMode={session.quiet_mode}
+            partnerOpen={partnerOpen}
+            status={isActive ? 'active' : 'scheduled'}
+            durationMinutes={session.intended_duration_minutes}
+            projectTitle={session.project_title}
+            projectColor={session.project_color}
+          />
         </div>
 
         <p className="text-sm stitch-text-primary leading-snug mb-4">

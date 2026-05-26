@@ -439,60 +439,11 @@ export function ProfilePage() {
         </section>
       )}
 
-      {/* ── Profile completion (own view, hides at 100%) ────── */}
-      {isOwn && (
-        <ProfileCompletionCard
-          profile={profile}
-          totalSessions={stats?.totalSessions ?? 0}
-          onJump={() => navigate('/profile?tab=edit')}
-        />
-      )}
-
-      {/* ── Stats — tiered layout ──────────────────────────── */}
-      {stats && (isOwn || stats.totalSessions >= 10) ? (
-        <div className="space-y-2">
-          {/* Primary row */}
-          <SurfaceCard>
-            <div className="flex divide-x divide-surface-container">
-              <StatPill emoji="🚀" value={stats.totalSessions} label="Sessions" />
-              <StatPill emoji="⏱" value={formatHours(stats.totalFocusMinutes)} label="Focus time" />
-              <StatPill emoji="🤝" value={stats.connectionCount} label="Connections" />
-            </div>
-          </SurfaceCard>
-
-          {/* Secondary row (compact) */}
-          {(stats.totalSessions > 0 || stats.longestStreak > 0) && (
-            <SurfaceCard>
-              <div className="flex divide-x divide-surface-container">
-                <MiniStat icon={Check} value={`${stats.completionRate}%`} label="Finished" />
-                <MiniStat
-                  icon={Flame}
-                  value={stats.currentStreak > 0 ? `${stats.currentStreak}d` : '—'}
-                  label="Streak"
-                />
-                <MiniStat
-                  icon={Trophy}
-                  value={stats.longestStreak > 0 ? `${stats.longestStreak}d` : '—'}
-                  label="Best streak"
-                />
-                <MiniStat
-                  icon={Timer}
-                  value={stats.avgSessionMinutes > 0 ? `${stats.avgSessionMinutes}m` : '—'}
-                  label="Avg length"
-                />
-              </div>
-            </SurfaceCard>
-          )}
-        </div>
-      ) : !isOwn && stats ? (
-        <SurfaceCard>
-          <p className="text-xs stitch-text-secondary text-center py-3 leading-relaxed">
-            {profile.display_name.split(' ')[0]} is just getting started.
-            <br />
-            <span className="opacity-60">Stats appear after 10 completed sessions.</span>
-          </p>
-        </SurfaceCard>
-      ) : null}
+      {/* Profile = identity only. Stats, streaks, activity, and the
+          "Start a session" empty state previously lived here — they've
+          moved to Home → Stats and the dashboard surfaces. The Profile
+          page is now a single-purpose identity card: who you are, what
+          you do, what you're looking for. Activity belongs to Home. */}
 
       {/* ── Connections preview (own view only, hides at 0) ─ */}
       {isOwn && connections.length > 0 && (
@@ -501,53 +452,6 @@ export function ProfilePage() {
           onAllClick={() => navigate('/connections')}
         />
       )}
-
-      {/* ── Activity highlights (own view, gated to 5+ sessions) ── */}
-      {isOwn && stats && stats.totalSessions >= 5 && (
-        <ActivityHighlights stats={stats} />
-      )}
-
-      {/* ── Recently finished ──────────────────────────────── */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <Flame size={13} className="stitch-text-secondary" />
-          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
-            Recently finished
-          </p>
-        </div>
-        {ships.length > 0 ? (
-          <SurfaceCard>
-            <div className="divide-y divide-surface-container">
-              {ships.map((s) => <ShipCard key={s.id} ship={s} />)}
-            </div>
-          </SurfaceCard>
-        ) : isOwn ? (
-          <SurfaceCard>
-            <div className="text-center py-6 px-4">
-              <div className="w-12 h-12 rounded-2xl bg-primary/8 flex items-center justify-center mx-auto mb-3">
-                <Rocket size={20} className="text-primary" />
-              </div>
-              <p className="text-sm font-bold stitch-text-primary mb-1">Ready when you are</p>
-              <p className="text-xs stitch-text-secondary mb-4 max-w-[260px] mx-auto leading-relaxed">
-                Your first finished session will live here. It's just one declared goal away.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/sessions')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full stitch-btn--primary text-white text-xs font-bold active:scale-95 transition-all"
-              >
-                Start a session <ArrowRight size={11} />
-              </button>
-            </div>
-          </SurfaceCard>
-        ) : (
-          <SurfaceCard>
-            <p className="text-sm stitch-text-secondary text-center py-6">
-              No sessions completed yet.
-            </p>
-          </SurfaceCard>
-        )}
-      </section>
     </div>
   );
 }
