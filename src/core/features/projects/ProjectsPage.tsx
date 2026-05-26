@@ -7,7 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Target, CheckCircle2, Pin, Play, Archive, Zap } from 'lucide-react';
+import { Plus, Users, Target, CheckCircle2, Pin, Play, Archive, Zap, MoreVertical, Trash2, Pencil } from 'lucide-react';
+import { ProjectService } from '../../services/ProjectService';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreProject } from '../../data/CoreDataContext';
 import { PageGreeting, GradientButton } from '../../ui/CorePage';
@@ -64,6 +65,33 @@ export function ProjectsPage() {
   const activeProjects = projects.filter((p) => p.status === 'active');
   const archivedProjects = projects.filter((p) => p.status !== 'active');
 
+  // ── Card-level archive / delete handlers ───────────────────────
+  // Confirm-then-call-service-then-refresh. Delete uses a stricter
+  // type-the-name gate matching the in-editor delete flow.
+  async function handleArchive(project: CoreProject) {
+    if (!confirm(`Archive "${project.name}"? It hides from this list but past sessions stay accessible.`)) return;
+    try {
+      await ProjectService.archiveProject(project.id);
+      await refreshProjects();
+    } catch (e: any) {
+      alert(`Could not archive: ${e?.message ?? 'unknown error'}`);
+    }
+  }
+  async function handleDelete(project: CoreProject) {
+    if (!confirm(`Permanently delete "${project.name}"?\n\nThis removes the project, its milestones, phases, tasks, notes, and members.\n\nThere is no undo.`)) return;
+    const typed = prompt(`Type the project name to confirm:\n"${project.name}"`);
+    if (typed?.trim() !== project.name.trim()) {
+      if (typed != null) alert('Project name did not match — delete cancelled.');
+      return;
+    }
+    try {
+      await ProjectService.deleteProject(project.id);
+      await refreshProjects();
+    } catch (e: any) {
+      alert(`Could not delete: ${e?.message ?? 'unknown error'}`);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageGreeting
@@ -96,6 +124,8 @@ export function ProjectsPage() {
                 onTogglePin={() =>
                   setActiveProject(project.id === activeProjectId ? null : project.id)
                 }
+                onArchive={() => handleArchive(project)}
+                onDelete={() => handleDelete(project)}
               />
             ))}
           </div>
@@ -108,6 +138,8 @@ export function ProjectsPage() {
               activeProjectId={activeProjectId}
               onOpen={(id) => navigate(`/projects/${id}`)}
               onTogglePin={(id) => setActiveProject(id === activeProjectId ? null : id)}
+              onArchive={handleArchive}
+              onDelete={handleDelete}
             />
           )}
         </div>
@@ -134,6 +166,8 @@ function ProjectCard({
   taskCounts,
   onOpen,
   onTogglePin,
+  onArchive,
+  onDelete,
 }: {
   project: CoreProject;
   isActive: boolean;
@@ -141,7 +175,25 @@ function ProjectCard({
   onOpen: () => void;
   onStartSession: () => void;
   onTogglePin: () => void;
+  onArchive?: () => void;
+  onDelete?: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Click-outside / Escape close — the menu is inside the card which is
+  // also clickable, so we attach the listener once we know the menu is
+  // open and stop propagation on the menu itself.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
   const color = projectColorMeta(project.color);
   const progress = taskCounts.total > 0
     ? Math.round((taskCounts.done / taskCounts.total) * 100)
@@ -179,17 +231,85 @@ function ProjectCard({
             </div>
           </div>
 
-          {/* Badges */}
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            {isActive && (
-              <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${color.soft} ${color.textDark}`}>
-                <Pin size={7} fill="currentColor" /> Active
-              </span>
-            )}
-            {isShared && (
-              <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 uppercase tracking-wider">
-                <Users size={8} /> {project.memberCount ?? 2}
-              </span>
+          {/* Badges + overflow menu */}
+          <div className="flex items-start gap-1.5 shrink-0">
+            <div className="flex flex-col items-end gap-1">
+              {isActive && (
+                <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${color.soft} ${color.textDark}`}>
+                  <Pin size={7} fill="currentColor" /> Active
+                </span>
+              )}
+              {isShared && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 uppercase tracking-wider">
+                  <Users size={8} /> {project.memberCount ?? 2}
+                </span>
+              )}
+            </div>
+
+            {/* ── 3-dot menu (Edit · Archive · Delete) ──
+                stopPropagation everywhere so the card's onOpen doesn't fire
+                when the user is interacting with the menu. */}
+            {(onArchive || onDelete) && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen((v) => !v);
+                  }}
+                  aria-label="Project actions"
+                  className="w-7 h-7 rounded-full hover:bg-surface-container-low active:bg-surface-container flex items-center justify-center transition-colors"
+                >
+                  <MoreVertical size={14} className="stitch-text-secondary" />
+                </button>
+                {menuOpen && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-full mt-1 z-20 w-44 rounded-xl bg-white shadow-lg ring-1 ring-surface-container-high overflow-hidden py-1"
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(false);
+                        onOpen();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold stitch-text-primary hover:bg-surface-container-low transition-colors text-left"
+                    >
+                      <Pencil size={12} /> Open / edit
+                    </button>
+                    {onArchive && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpen(false);
+                          onArchive();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold stitch-text-primary hover:bg-surface-container-low transition-colors text-left"
+                      >
+                        <Archive size={12} /> Archive
+                      </button>
+                    )}
+                    {onDelete && (
+                      <>
+                        <div className="border-t border-surface-container my-0.5" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpen(false);
+                            onDelete();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-left"
+                        >
+                          <Trash2 size={12} /> Delete permanently
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -280,13 +400,15 @@ function StatChip({ icon, label }: { icon: React.ReactNode; label: string }) {
 // ── Archived section ─────────────────────────────────────────────
 
 function ArchivedSection({
-  projects, taskCounts, activeProjectId, onOpen, onTogglePin,
+  projects, taskCounts, activeProjectId, onOpen, onTogglePin, onArchive, onDelete,
 }: {
   projects: CoreProject[];
   taskCounts: Map<string, { open: number; done: number; total: number }>;
   activeProjectId: string | null;
   onOpen: (id: string) => void;
   onTogglePin: (id: string) => void;
+  onArchive?: (project: CoreProject) => void;
+  onDelete?: (project: CoreProject) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -315,6 +437,7 @@ function ArchivedSection({
               onOpen={() => onOpen(project.id)}
               onStartSession={() => onOpen(project.id)}
               onTogglePin={() => onTogglePin(project.id)}
+              onDelete={onDelete ? () => onDelete(project) : undefined}
             />
           ))}
         </div>
