@@ -13,7 +13,7 @@ import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHos
 import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
-import { SoloVisualizer } from './SoloVisualizer';
+import { SoloVisualizer, readVisualizerStyle, writeVisualizerStyle, type VisualizerStyle } from './SoloVisualizer';
 import { SessionMusicPlayer } from './SessionMusicPlayer';
 import type { MusicCategory } from '../../services/SessionMusicService';
 import { useSessionWizards } from './SessionWizards/useSessionWizards';
@@ -983,6 +983,14 @@ function SoloFocusView({
   // Theme — persisted choice, hot-swappable. Lazy init from localStorage.
   const [theme, setTheme] = useState<SoloTheme>(() => readSoloTheme());
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** Audio visualizer style — persisted alongside the theme. Defaults
+   *  to bars; users sensitive to motion can switch to pulse, particles,
+   *  or 'off' for distraction-free focus. */
+  const [vizStyle, setVizStyle] = useState<VisualizerStyle>(() => readVisualizerStyle());
+  function pickVizStyle(s: VisualizerStyle) {
+    setVizStyle(s);
+    writeVisualizerStyle(s);
+  }
   function pickTheme(t: SoloTheme) {
     setTheme(t);
     try { window.localStorage.setItem(LS_SOLO_THEME, t.id); } catch { /* private */ }
@@ -1161,6 +1169,35 @@ function SoloFocusView({
             <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold text-white/60 text-center">
               {theme.label}
             </p>
+
+            {/* ── Visualizer style picker ─────────────────────────
+                Distinct from theme — controls only what reacts to
+                the music. 'Off' for distraction-free focus. */}
+            <div className="border-t border-white/10 mt-1 pt-2 px-2 pb-1.5">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-white/50 mb-1.5">
+                Audio visualizer
+              </p>
+              <div className="grid grid-cols-4 gap-1">
+                {(['bars','pulse','particles','off'] as VisualizerStyle[]).map((s) => {
+                  const active = vizStyle === s;
+                  const label = s === 'off' ? 'Off' : s.charAt(0).toUpperCase() + s.slice(1);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => pickVizStyle(s)}
+                      aria-label={label}
+                      title={label}
+                      className={`relative h-9 rounded-lg overflow-hidden ring-1 transition-all text-[9px] font-bold uppercase tracking-wider grid place-items-center ${
+                        active ? 'bg-white/15 text-white ring-white/40' : 'bg-white/5 text-white/60 ring-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1180,7 +1217,7 @@ function SoloFocusView({
               to nothing when music isn't playing. Pure ambient layer:
               pointer-events: none, no DOM overhead. */}
           <div className="absolute inset-0 grid place-items-center pointer-events-none">
-            <SoloVisualizer size={haloPx} innerRadius={vizInnerRadius} barHeight={vizBarHeight} />
+            <SoloVisualizer size={haloPx} innerRadius={vizInnerRadius} barHeight={vizBarHeight} style={vizStyle} />
           </div>
           {/* Soft outer halo — slow breathing glow, themed */}
           <div
