@@ -286,16 +286,23 @@ export function ActiveSessionPage() {
   }, [session?.debrief_started_at, showDebrief, ending]);
 
   // Auto-open the debrief when the session timer hits zero. We can't
-  // gate purely on `timerSecondsRemaining === 0` — the context value
-  // is 0 on the initial render before the countdown is computed, which
-  // would pop the debrief instantly. Cross-check against the persisted
-  // target_end_time so we only fire once that wall-clock moment has
-  // actually arrived.
+  // gate purely on `timerSecondsRemaining === 0` — that value is 0 on
+  // the initial render before the countdown is computed, which would
+  // pop the debrief instantly. Earlier we cross-checked against
+  // target_end_time > Date.now(), but the timer ticks every 1000ms
+  // using floor() so remaining hits 0 a few hundred ms BEFORE the
+  // wall-clock target — that race made the debrief lag by up to a
+  // full second after the visible "Time up" badge.
+  //
+  // New gate: confirm the session has actually started (start_time in
+  // the past) and the planned duration is real (>0). If both hold and
+  // remaining is 0, fire immediately — no wall-clock cross-check.
   useEffect(() => {
     if (!session || showDebrief || ending || session.debrief_started_at) return;
     if (timerSecondsRemaining !== 0) return;
-    const targetEndMs = session.target_end_time ? new Date(session.target_end_time).getTime() : null;
-    if (!targetEndMs || targetEndMs > Date.now()) return; // not really over yet
+    const startMs = session.start_time ? new Date(session.start_time).getTime() : null;
+    if (!startMs || startMs > Date.now()) return;        // hasn't started
+    if ((session.intended_duration_minutes ?? 0) <= 0) return; // unknown duration
     setShowDebrief(true);
     triggerDebriefForSession(session.id).catch(() => { /* idempotent — safe */ });
   }, [timerSecondsRemaining, session, showDebrief, ending]);
