@@ -17,6 +17,15 @@ export interface CreateScheduledSessionInput {
   /** Marker for Quick Timer scheduled blocks — see
    *  StartCommunitySessionInput.isQuickTimer. */
   isQuickTimer?: boolean;
+  /** Optional structured segments copied from a session_templates row.
+   *  When present, the calendar detail sheet shows a segment timeline
+   *  and (future) the runtime auto-advances through them. */
+  segments?: Array<{
+    kind: string;
+    label: string;
+    minutes: number;
+    wizard?: string;
+  }>;
 }
 
 export interface ScheduledSessionWithProfile extends FocusSession {
@@ -524,6 +533,7 @@ export async function createScheduledSession(
       project_id: input.projectId ?? null,
       join_code: joinCode,
       is_quick_timer: !!input.isQuickTimer,
+      segments: input.segments ?? null,
       drift_count: 0,
       distraction_count: 0,
     })

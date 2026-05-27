@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { SessionsListView, type ListSession } from './SessionsListView';
 import { QuickTimerButton } from '../dashboard/QuickTimerButton';
+import { SegmentTimeline } from './SegmentTimeline';
+import type { Segment } from '../../services/SessionTemplatesService';
 import { SessionTagPills } from './SessionTagPills';
 import { downloadIcs } from '../../../lib/sessions/icsExport';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
@@ -116,6 +118,7 @@ type GridSession = {
   project_title?: string | null;
   project_color?: string | null;
   is_quick_timer?: boolean;
+  segments?: Segment[] | null;
 };
 
 const PROJECT_DOT_HEX: Record<string, string> = {
@@ -143,6 +146,7 @@ function toGridSession(s: CommunitySession): GridSession {
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
     is_quick_timer: !!(s as any).is_quick_timer,
+    segments: (s as any).segments ?? null,
   };
 }
 
@@ -164,6 +168,7 @@ function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
     is_quick_timer: !!(s as any).is_quick_timer,
+    segments: (s as any).segments ?? null,
   };
 }
 
@@ -1162,6 +1167,17 @@ function SessionDetailSheet({
           <p className="text-sm stitch-text-primary leading-snug mb-4">
             {session.session_goal ?? session.session_title ?? 'Working on something'}
           </p>
+        )}
+
+        {/* Segment timeline — only shown when the session has a
+            structured template applied. Pure read-only preview. */}
+        {session.segments && session.segments.length > 0 && (
+          <div className="mb-4 rounded-2xl bg-surface-container-low/40 p-2.5">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-2 px-1">
+              Structure · {session.segments.length} segments
+            </p>
+            <SegmentTimeline segments={session.segments as Segment[]} />
+          </div>
         )}
 
         {err && (

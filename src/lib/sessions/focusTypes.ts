@@ -52,6 +52,15 @@ export interface FocusSession {
    *  both store session_mode='solo'. UI surfaces them differently
    *  (TIMER vs SOLO pill on the calendar). */
   is_quick_timer?: boolean;
+  /** Ordered segments copied from a session_templates row at creation
+   *  time. Drives the structure timeline in the detail sheet and the
+   *  (future) mid-session auto-advance runtime. NULL = unstructured. */
+  segments?: Array<{
+    kind: 'intro' | 'intentions' | 'work' | 'break' | 'reflect' | 'farewell' | 'wizard';
+    label: string;
+    minutes: number;
+    wizard?: string;
+  }> | null;
   created_at: string;
   updated_at: string;
   // Community session fields

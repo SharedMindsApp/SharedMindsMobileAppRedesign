@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { X, Calendar, Loader2, Zap, Leaf, Coffee, Link, Copy, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Calendar, Loader2, Zap, Leaf, Coffee, Link, Copy, Check, Sparkles } from 'lucide-react';
 import { createScheduledSession } from '../../services/SessionService';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
+import { SessionTemplatesService, type SessionTemplate } from '../../services/SessionTemplatesService';
+import { SegmentTimeline } from './SegmentTimeline';
 
 type DurationOption = 25 | 50 | 90;
 
@@ -42,6 +44,32 @@ export function ScheduleSessionModal({ onClose, onCreated }: Props) {
   const [created, setCreated] = useState<FocusSession | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // ── Templates (group scope only for now — this modal hosts group
+  //   scheduled sessions; solo templates surface from the Solo Session
+  //   declare modal in a future pass). Picking a template overrides
+  //   the duration with the template's sum-of-segments and feeds the
+  //   segments into createScheduledSession on submit. */
+  const [templates, setTemplates] = useState<SessionTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<SessionTemplate | null>(null);
+  useEffect(() => {
+    SessionTemplatesService.listByScope('group')
+      .then(setTemplates)
+      .catch((e) => console.warn('[Schedule] templates load failed', e));
+  }, []);
+  function applyTemplate(t: SessionTemplate | null) {
+    setSelectedTemplate(t);
+    if (t) {
+      // Clamp to one of our DurationOption values for the picker chip
+      // — exact minutes still go through via the template's segments.
+      const closest = ([25, 50, 90] as DurationOption[]).reduce((acc, n) =>
+        Math.abs(n - t.total_minutes) < Math.abs(acc - t.total_minutes) ? n : acc,
+        50 as DurationOption,
+      );
+      setDuration(closest);
+      if (!title.trim()) setTitle(t.label);
+    }
+  }
+
   const joinUrl = created?.join_code
     ? `${window.location.origin}/join/${created.join_code}`
     : '';
@@ -53,10 +81,14 @@ export function ScheduleSessionModal({ onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
+      // When a template is picked, use its exact total + segments;
+      // otherwise the user's manual duration choice wins.
+      const minutes = selectedTemplate ? selectedTemplate.total_minutes : duration;
       const session = await createScheduledSession({
         title: title.trim(),
         scheduledAt: new Date(scheduledTime),
-        durationMinutes: duration,
+        durationMinutes: minutes as DurationOption,
+        segments: selectedTemplate?.segments,
       });
       setCreated(session);
       onCreated?.(session);
@@ -111,6 +143,63 @@ export function ScheduleSessionModal({ onClose, onCreated }: Props) {
 
           {!created ? (
             <div className="space-y-5 pb-4">
+
+              {/* ── Template picker ─────────────────────────────────
+                  Curated structures — selecting one fills the
+                  duration + segments. "None" keeps the session
+                  unstructured (the existing freestyle path). */}
+              {templates.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2 inline-flex items-center gap-1">
+                    <Sparkles size={10} /> Use a template
+                    <span className="ml-1 font-normal normal-case tracking-normal text-[10px]">(optional)</span>
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate(null)}
+                      className={`px-2.5 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                        selectedTemplate === null
+                          ? 'bg-primary text-white'
+                          : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                      }`}
+                    >
+                      None
+                    </button>
+                    {templates.map((t) => {
+                      const active = selectedTemplate?.id === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => applyTemplate(t)}
+                          title={`${t.tagline} · ${t.total_minutes}m`}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                            active
+                              ? 'bg-primary text-white'
+                              : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                          }`}
+                        >
+                          <span>{t.emoji}</span>
+                          <span>{t.label}</span>
+                          <span className={`text-[10px] font-semibold ${active ? 'text-white/80' : 'stitch-text-secondary'} tabular-nums`}>
+                            · {t.total_minutes}m
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedTemplate && (
+                    <div className="mt-3 rounded-xl bg-surface-container-low/40 p-3 space-y-2">
+                      <p className="text-xs stitch-text-secondary leading-snug">
+                        {selectedTemplate.description}
+                      </p>
+                      <SegmentTimeline segments={selectedTemplate.segments} />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Title */}
               <div>
                 <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase block mb-2">
