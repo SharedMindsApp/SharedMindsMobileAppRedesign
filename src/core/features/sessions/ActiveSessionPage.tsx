@@ -14,6 +14,7 @@ import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
 import { SoloVisualizer, readVisualizerStyle, writeVisualizerStyle, type VisualizerStyle } from './SoloVisualizer';
+import { sessionChimes, readChimesEnabled, writeChimesEnabled } from './sessionChimes';
 import { SessionMusicPlayer } from './SessionMusicPlayer';
 import type { MusicCategory } from '../../services/SessionMusicService';
 import { useSessionWizards } from './SessionWizards/useSessionWizards';
@@ -999,6 +1000,13 @@ function SoloFocusView({
     setVizStyle(s);
     writeVisualizerStyle(s);
   }
+  /** End-of-session audio chimes — on/off, persisted. */
+  const [chimesOn, setChimesOn] = useState<boolean>(() => readChimesEnabled());
+  function toggleChimes() {
+    const next = !chimesOn;
+    setChimesOn(next);
+    writeChimesEnabled(next);
+  }
   function pickTheme(t: SoloTheme) {
     setTheme(t);
     try { window.localStorage.setItem(LS_SOLO_THEME, t.id); } catch { /* private */ }
@@ -1078,6 +1086,33 @@ function SoloFocusView({
       });
     } catch { /* ignore — desktop browsers can be picky about icons */ }
   }, [isOffline, secondsRemaining, goal]);
+
+  // ── Audio chimes + completion burst ────────────────────────────
+  // Three cues: warning at T-10s and T-5s, plus a complete chime at
+  // T-0. Each fires exactly once per session — guarded with refs so
+  // re-renders or seconds-remaining recalculation can't double-fire.
+  const warned10Ref = useRef(false);
+  const warned5Ref = useRef(false);
+  const completedRef = useRef(false);
+  const [burstTriggered, setBurstTriggered] = useState(false);
+  useEffect(() => {
+    if (secondsRemaining <= 0) return; // complete chime handled below
+    if (!warned10Ref.current && secondsRemaining <= 10 && secondsRemaining > 5) {
+      warned10Ref.current = true;
+      sessionChimes.playWarning();
+    }
+    if (!warned5Ref.current && secondsRemaining <= 5) {
+      warned5Ref.current = true;
+      sessionChimes.playWarning();
+    }
+  }, [secondsRemaining]);
+  useEffect(() => {
+    if (completedRef.current) return;
+    if (secondsRemaining > 0 || totalSeconds <= 0) return;
+    completedRef.current = true;
+    sessionChimes.playComplete();
+    setBurstTriggered(true);
+  }, [secondsRemaining, totalSeconds]);
 
   // ── Real-world / offline chrome ─────────────────────────────────────
   // Stripped-down phone-first layout: warm gradient, big tabular timer,
@@ -1206,6 +1241,32 @@ function SoloFocusView({
                 })}
               </div>
             </div>
+
+            {/* ── End-of-session chimes toggle ────────────────────
+                Two soft synthesized tones at T-10s/T-5s and a warm
+                two-note bell at T-0. Off for quiet/shared environments. */}
+            <div className="border-t border-white/10 mt-1 pt-2 px-2 pb-1.5">
+              <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/50">
+                  End-of-session chime
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={chimesOn}
+                  onClick={toggleChimes}
+                  className={`relative w-8 h-4 rounded-full transition-colors ${
+                    chimesOn ? 'bg-emerald-500/70' : 'bg-white/15'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                      chimesOn ? 'translate-x-4' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </label>
+            </div>
           </div>
         )}
       </div>
@@ -1235,6 +1296,47 @@ function SoloFocusView({
               animationDuration: '4s',
             }}
           />
+          {/* Completion burst — fires once when secondsRemaining hits 0.
+              Two expanding rings + a flash, all using the theme halo
+              colour. Pure CSS animations (no JS frame loop) so it
+              vanishes cleanly after ~1.5s. */}
+          {burstTriggered && (
+            <>
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                  background: `radial-gradient(circle, ${variant.haloHex}aa 0%, transparent 70%)`,
+                  animation: 'sm-burst-flash 1200ms ease-out forwards',
+                }}
+              />
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                  border: `2px solid ${variant.haloHex}`,
+                  animation: 'sm-burst-ring 1400ms ease-out forwards',
+                }}
+              />
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                  border: `1.5px solid ${variant.haloHex}`,
+                  animation: 'sm-burst-ring 1800ms 200ms ease-out forwards',
+                }}
+              />
+              <style>{`
+                @keyframes sm-burst-flash {
+                  0%   { opacity: 0; transform: scale(0.9); }
+                  30%  { opacity: 1; transform: scale(1.05); }
+                  100% { opacity: 0; transform: scale(1.15); }
+                }
+                @keyframes sm-burst-ring {
+                  0%   { opacity: 0; transform: scale(0.95); }
+                  20%  { opacity: 0.85; }
+                  100% { opacity: 0; transform: scale(1.6); }
+                }
+              `}</style>
+            </>
+          )}
           <svg width={ringPx} height={ringPx} viewBox="0 0 280 280" className="-rotate-90 relative">
             {/* Track */}
             <circle
