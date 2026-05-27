@@ -6,6 +6,15 @@ Pre-1.0 versioning: each numbered release groups a day of meaningful work.
 Bug fixes and small UX polish that ride alongside a feature ship are folded
 into that release rather than getting their own entry.
 
+To cut a release: add entries under `[Unreleased]` as you ship, then run
+`npm run bump:patch` (or `:minor` / `:major`). The script stamps the
+section with today's date + the new version and tags the commit.
+
+
+## [Unreleased]
+
+_Nothing yet._
+
 
 ## [v0.5.0] — 2026-05-27
 

@@ -1,7 +1,7 @@
 {
   "name": "vite-react-typescript-starter",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "repair:pantry-quantities": "node scripts/repair-pantry-quantities.mjs"
+    "repair:pantry-quantities": "node scripts/repair-pantry-quantities.mjs",
+    "bump:patch": "node scripts/bump.mjs patch",
+    "bump:minor": "node scripts/bump.mjs minor",
+    "bump:major": "node scripts/bump.mjs major",
+    "bump:dry": "node scripts/bump.mjs patch --dry-run"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.90.0",
