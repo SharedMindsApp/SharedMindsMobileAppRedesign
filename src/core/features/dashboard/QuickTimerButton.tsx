@@ -222,7 +222,12 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   const [activitiesLoaded, setActivitiesLoaded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => {
-    if (!menuOpen || activitiesLoaded) return;
+    // Load when the dropdown opens OR — if a pinned activity exists —
+    // immediately on mount so the primary button can render its label
+    // ("Quick timer · 📅 Plan tomorrow · 15m") without waiting for the
+    // user to open the menu.
+    if (activitiesLoaded) return;
+    if (!menuOpen && !pinnedId) return;
     let cancelled = false;
     (async () => {
       const mine = await ActivityService.listMine();
@@ -241,12 +246,13 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         }
       }
       // Day-zero — kick the user into the picker so they curate
-      // their own shortcuts instead of inheriting whatever the seed
-      // guessed. Only auto-opens once per dropdown lifecycle.
-      if (mine.length === 0) setPickerOpen(true);
+      // their own shortcuts. Only auto-open when the user actually
+      // opened the dropdown — otherwise the eager-load triggered by
+      // a stale pin would pop the picker on every page load.
+      if (mine.length === 0 && menuOpen) setPickerOpen(true);
     })().catch((e) => console.warn('[QuickTimer] activity load failed', e));
     return () => { cancelled = true; };
-  }, [menuOpen, activitiesLoaded]);
+  }, [menuOpen, activitiesLoaded, pinnedId]);
 
   /** The goal text that ends up on the focus_sessions row.
    *  Priority: selected activity → typed custom goal → fallback. */
