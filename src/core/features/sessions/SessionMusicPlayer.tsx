@@ -11,6 +11,7 @@
 // alive across all state updates.
 
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Music, Play, Pause, SkipForward, Volume2, VolumeX, X, Waves, Headphones } from 'lucide-react';
 import { SessionMusicService, type SessionTrack, type MusicCategory, MUSIC_CATEGORIES, categoryMeta } from '../../services/SessionMusicService';
 import { supabase } from '../../../lib/supabase';
@@ -57,6 +58,12 @@ function readLocal<T>(key: string, fallback: T, parse: (raw: string) => T): T {
 }
 
 export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost }: Props) {
+  // On the dedicated session page (/session/:id) the user is in
+  // focus mode with plenty of screen real estate — show the full
+  // track title untruncated. On every other page the pill stays
+  // compact so it doesn't crowd the layout.
+  const location = useLocation();
+  const isFullscreenSession = location.pathname.startsWith('/session/');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // In a hosted group session, non-hosts run in "participant mode": their
   // track + transport are driven by the host's broadcasts. They can only
@@ -368,8 +375,12 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
           aria-label="Open music player"
         >
           <Music size={14} className={enabled && playing ? 'text-emerald-400' : 'text-white/70'} />
-          <span className="text-[11px] font-bold tracking-wide uppercase">
-            {enabled && track ? track.title.length > 22 ? track.title.slice(0, 20) + '…' : track.title : 'Music'}
+          <span className={`text-[11px] font-bold tracking-wide uppercase ${isFullscreenSession ? 'whitespace-nowrap' : ''}`}>
+            {enabled && track
+              ? (isFullscreenSession
+                  ? track.title
+                  : (track.title.length > 22 ? track.title.slice(0, 20) + '…' : track.title))
+              : 'Music'}
           </span>
         </button>
       </>
