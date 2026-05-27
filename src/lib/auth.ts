@@ -61,6 +61,31 @@ export function clearStoredAuthSession() {
   }
 }
 
+/**
+ * Canonical app URL for auth redirect emails (confirmation, magic
+ * link, password reset). Reads VITE_APP_URL when set — that's the
+ * production URL configured at deploy time. Falls back to
+ * window.location.origin so local development continues to redirect
+ * back to localhost.
+ *
+ * Why this matters: every email Supabase sends embeds a URL that
+ * brings the user back to the app to finish auth. Without an env
+ * override, that URL is whatever browser triggered the signup —
+ * meaning a dev signing up on localhost poisons their own email with
+ * an unreachable URL, and worse, can confuse users who somehow land
+ * on a non-prod environment.
+ *
+ * IMPORTANT: any URL produced here must also be on the Supabase
+ * Auth "Redirect URLs" allowlist, otherwise the server rejects the
+ * confirmation token even if the user clicks the link.
+ */
+export function appUrl(): string {
+  const envUrl = (import.meta.env.VITE_APP_URL as string | undefined)?.trim();
+  if (envUrl) return envUrl.replace(/\/$/, '');
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+}
+
 export async function signUp({ email, password, fullName }: SignUpInput) {
   const normalizedName = fullName.trim();
   const normalizedEmail = email.trim().toLowerCase();
@@ -68,7 +93,7 @@ export async function signUp({ email, password, fullName }: SignUpInput) {
     email: normalizedEmail,
     password,
     options: {
-      emailRedirectTo: `${window.location.origin}/auth/login`,
+      emailRedirectTo: `${appUrl()}/auth/login`,
       data: {
         full_name: normalizedName,
         display_name: normalizedName,
@@ -104,7 +129,7 @@ export async function resendSignupConfirmation(email: string) {
     type: 'signup',
     email: normalizedEmail,
     options: {
-      emailRedirectTo: `${window.location.origin}/auth/login`,
+      emailRedirectTo: `${appUrl()}/auth/login`,
     },
   });
 
@@ -166,7 +191,7 @@ export async function signOut() {
 
 export async function resetPassword(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth/login`,
+    redirectTo: `${appUrl()}/auth/login`,
   });
 
   if (error) throw error;

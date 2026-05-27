@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { resendSignupConfirmation } from '../../lib/auth';
+import { resendSignupConfirmation, appUrl } from '../../lib/auth';
 import { Eye, EyeOff } from 'lucide-react';
 
 export function AuthPage() {
@@ -32,7 +32,7 @@ export function AuthPage() {
                     email: normalizedEmail,
                     password,
                     options: {
-                        emailRedirectTo: `${window.location.origin}/auth/login`,
+                        emailRedirectTo: `${appUrl()}/auth/login`,
                         data: {
                             full_name: normalizedName,
                             display_name: normalizedName,
