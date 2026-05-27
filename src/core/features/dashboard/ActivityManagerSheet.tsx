@@ -35,6 +35,7 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [librarySearch, setLibrarySearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Custom add state
@@ -46,9 +47,15 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
   async function refresh() {
     setLoading(true);
     try {
+      // Browse Library shows the FULL library (not filtered to the
+      // user's work_types). The Manage sheet is the place where
+      // users go looking — filtering here was hiding the +60
+      // activities we added in migration 20260527000002 from anyone
+      // outside the corresponding role. The picker sheet still
+      // pre-filters when seeding for the first time.
       const [myList, tpls] = await Promise.all([
         ActivityService.listMine(),
-        ActivityService.listTemplates(profile?.work_types ?? undefined),
+        ActivityService.listTemplates(),
       ]);
       setMine(myList);
       setTemplates(tpls);
@@ -120,7 +127,22 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
   // Library shows templates the user doesn't already have (by label,
   // case-insensitive — matches the DB unique constraint).
   const haveLabels = new Set(mine.map((a) => a.label.toLowerCase()));
-  const availableTemplates = templates.filter((t) => !haveLabels.has(t.label.toLowerCase()));
+  // Available = full library minus what the user already has.
+  // When a search query is present, also filter by label substring.
+  // Sort: templates matching the user's work_types first, then the rest.
+  const myWT = new Set(profile?.work_types ?? []);
+  const availableTemplates = templates
+    .filter((t) => !haveLabels.has(t.label.toLowerCase()))
+    .filter((t) => {
+      const q = librarySearch.trim().toLowerCase();
+      return q === '' || t.label.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      const aMatch = a.work_types.some((wt) => myWT.has(wt)) ? 0 : 1;
+      const bMatch = b.work_types.some((wt) => myWT.has(wt)) ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+      return a.sort_order - b.sort_order;
+    });
 
   return (
     <div
@@ -266,10 +288,21 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
               {libraryOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             {libraryOpen && (
-              <div className="px-3 pb-3 max-h-[200px] overflow-y-auto">
+              <div className="px-3 pb-3 space-y-2">
+                {/* Filter — the unfiltered library is ~140 templates,
+                    so a search input keeps it scannable. Matching items
+                    relevant to the user's work_types sort to the top. */}
+                <input
+                  type="text"
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  placeholder="Search the library…"
+                  className="w-full px-2 py-1.5 rounded-lg text-xs stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+                />
+                <div className="max-h-[280px] overflow-y-auto">
                 {availableTemplates.length === 0 ? (
                   <p className="text-xs stitch-text-secondary italic py-2">
-                    You've got every library activity that matches your roles. Add custom ones above.
+                    {librarySearch ? 'No matches — try different words.' : 'You\'ve adopted everything in the library!'}
                   </p>
                 ) : (
                   <ul className="space-y-1">
@@ -301,6 +334,7 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
                     ))}
                   </ul>
                 )}
+                </div>
               </div>
             )}
           </section>
