@@ -86,6 +86,25 @@ export function appUrl(): string {
   return '';
 }
 
+/**
+ * Detect the user's IANA timezone from the browser. Returns null if
+ * the API isn't available (very old browsers — extremely unlikely in
+ * 2026) so the caller can fall back to the schema default.
+ *
+ * Why we do this silently rather than asking: the answer is always
+ * correct in the browser, and asking adds an unjustified onboarding
+ * step. Timezone-aware features (streak nudges, scheduled reminders)
+ * need this value to fire at sensible local times.
+ */
+export function detectBrowserTimezone(): string | null {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === 'string' && tz.length > 0 ? tz : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function signUp({ email, password, fullName }: SignUpInput) {
   const normalizedName = fullName.trim();
   const normalizedEmail = email.trim().toLowerCase();
@@ -105,12 +124,21 @@ export async function signUp({ email, password, fullName }: SignUpInput) {
   if (error) throw error;
   if (!data.user) throw new Error('User creation failed');
 
+  // Capture timezone silently. Profile.timezone defaults to
+  // 'Europe/London' at the schema level — fine for me but wrong for
+  // every other user. We override the default on insert so streak
+  // nudges + reminder schedulers fire at sensible local times from
+  // day one. If detection fails (ancient browser), the schema
+  // default still applies and the user can correct via Settings.
+  const timezone = detectBrowserTimezone();
+
   const { error: profileError } = await supabase
     .from('profiles')
     .insert({
       id: data.user.id,
       full_name: normalizedName,
       display_name: normalizedName,
+      ...(timezone ? { timezone } : {}),
     });
 
   if (profileError) throw profileError;

@@ -155,11 +155,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const userEmail = sessionUser?.email || '';
                 const baseName = extractDisplayNameFromUser(userEmail, sessionUser?.user_metadata);
 
+                // Capture timezone silently — see lib/auth.ts signUp()
+                // for rationale. This is the auto-provision branch
+                // (fires when an auth user lacks a profile row), so
+                // we mirror the signUp() behaviour here.
+                let browserTz: string | null = null;
+                try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; }
+                catch { /* old browser */ }
+
                 const { data: newProfile, error: insertError } = await supabase
                     .from('profiles')
                     .insert({
                         id: userId,
                         display_name: baseName,
+                        ...(browserTz ? { timezone: browserTz } : {}),
                     })
                     .select()
                     .single();
@@ -213,6 +222,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             setProfile(currentUserProfile);
             setProfileReady(true);
+
+            // One-time timezone backfill for users who pre-date the
+            // signup-time timezone capture. The profile schema default
+            // is 'Europe/London' (a relic of the v1 schema). If the
+            // user's saved value still equals the default but their
+            // browser reports something different, they almost
+            // certainly never explicitly set it — silently update.
+            // Fire-and-forget; if it fails (RLS, network) the next
+            // login retries.
+            try {
+                const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (
+                    browserTz
+                    && currentUserProfile.timezone === 'Europe/London'
+                    && browserTz !== 'Europe/London'
+                ) {
+                    void supabase
+                        .from('profiles')
+                        .update({ timezone: browserTz })
+                        .eq('id', userId);
+                }
+            } catch { /* old browser or RLS — non-fatal */ }
 
             // Backfill: if the avatar predates the verification system
             // (status='pending'), re-run it through the face check in the
