@@ -13,6 +13,7 @@ import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHos
 import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
+import { SoloVisualizer } from './SoloVisualizer';
 import { SessionMusicPlayer } from './SessionMusicPlayer';
 import type { MusicCategory } from '../../services/SessionMusicService';
 import { useSessionWizards } from './SessionWizards/useSessionWizards';
@@ -871,6 +872,13 @@ function SoloFocusView({
             digits. Outer faint ring breathes ±2px so even a static
             timer feels alive. */}
         <div className="relative mb-8">
+          {/* Audio-reactive visualizer — orbits the timer with live
+              frequency bars driven by the session music player. Fades
+              to nothing when music isn't playing. Pure ambient layer:
+              pointer-events: none, no DOM overhead. */}
+          <div className="absolute inset-0 grid place-items-center pointer-events-none">
+            <SoloVisualizer size={360} innerRadius={148} barHeight={42} />
+          </div>
           {/* Soft outer halo — slow breathing glow */}
           <div
             className="absolute inset-0 rounded-full blur-3xl opacity-40 pointer-events-none animate-pulse"

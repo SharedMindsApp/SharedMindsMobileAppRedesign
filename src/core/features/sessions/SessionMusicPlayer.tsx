@@ -15,6 +15,7 @@ import { Music, Play, Pause, SkipForward, Volume2, VolumeX, X, Waves, Headphones
 import { SessionMusicService, type SessionTrack, type MusicCategory, MUSIC_CATEGORIES, categoryMeta } from '../../services/SessionMusicService';
 import { supabase } from '../../../lib/supabase';
 import { BinauralEngine } from './BinauralEngine';
+import { musicAudioBus } from './musicAudioBus';
 
 interface Props {
   /** Mood category to pull tracks from. Defaults to 'medium' when unknown. */
@@ -343,7 +344,14 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
   if (!expanded) {
     return (
       <>
-        <audio ref={audioRef} onEnded={handleEnded} preload="auto" />
+        <audio
+          ref={(el) => { audioRef.current = el; if (el) musicAudioBus.attach(el); }}
+          onEnded={() => { musicAudioBus.setPlaying(false); handleEnded(); }}
+          onPlay={() => musicAudioBus.setPlaying(true)}
+          onPause={() => musicAudioBus.setPlaying(false)}
+          crossOrigin="anonymous"
+          preload="auto"
+        />
         <button
           type="button"
           onClick={() => setExpanded(true)}
@@ -362,7 +370,14 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
   // ── Expanded mini-bar ─────────────────────────────────────────────────
   return (
     <>
-      <audio ref={audioRef} onEnded={handleEnded} preload="auto" />
+      <audio
+          ref={(el) => { audioRef.current = el; if (el) musicAudioBus.attach(el); }}
+          onEnded={() => { musicAudioBus.setPlaying(false); handleEnded(); }}
+          onPlay={() => musicAudioBus.setPlaying(true)}
+          onPause={() => musicAudioBus.setPlaying(false)}
+          crossOrigin="anonymous"
+          preload="auto"
+        />
       <div className="fixed bottom-4 right-4 z-[60] w-[280px] rounded-2xl bg-black/75 backdrop-blur-md text-white shadow-xl p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
