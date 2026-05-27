@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2 } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -284,12 +284,19 @@ export function ActiveSessionPage() {
     }
   }, [session?.debrief_started_at, showDebrief, ending]);
 
-  // Auto-open the debrief when the session timer hits zero
+  // Auto-open the debrief when the session timer hits zero. We can't
+  // gate purely on `timerSecondsRemaining === 0` — the context value
+  // is 0 on the initial render before the countdown is computed, which
+  // would pop the debrief instantly. Cross-check against the persisted
+  // target_end_time so we only fire once that wall-clock moment has
+  // actually arrived.
   useEffect(() => {
-    if (timerSecondsRemaining === 0 && session && !showDebrief && !ending && !session.debrief_started_at) {
-      setShowDebrief(true);
-      triggerDebriefForSession(session.id).catch(() => { /* idempotent — safe */ });
-    }
+    if (!session || showDebrief || ending || session.debrief_started_at) return;
+    if (timerSecondsRemaining !== 0) return;
+    const targetEndMs = session.target_end_time ? new Date(session.target_end_time).getTime() : null;
+    if (!targetEndMs || targetEndMs > Date.now()) return; // not really over yet
+    setShowDebrief(true);
+    triggerDebriefForSession(session.id).catch(() => { /* idempotent — safe */ });
   }, [timerSecondsRemaining, session, showDebrief, ending]);
 
   // Called by DebriefOverlay once everyone has answered OR the 60s timer expires
@@ -425,6 +432,23 @@ export function ActiveSessionPage() {
               {formatRemaining(timerSecondsRemaining)}
             </span>
           </div>
+
+          {/* Minimize — keeps the session running in the background as
+              a floating pill (FloatingTimerWidget in Layout) so the user
+              can plan their next session, edit a project, etc. without
+              ending the timer. Solo only — group/1-on-1 sessions need
+              the video chrome to stay active. */}
+          {isSolo && (
+            <button
+              type="button"
+              onClick={() => navigate('/home')}
+              title="Minimize — keep timer running in the background"
+              aria-label="Minimize session"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 grid place-items-center text-white/80 hover:text-white transition-colors"
+            >
+              <Minimize2 size={13} />
+            </button>
+          )}
 
           {/* Extend buttons. Owner-only: hosts in group sessions, the
               user in solo, and either user in 1-on-1. RLS rejects others. */}

@@ -12,6 +12,7 @@ import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { fetchTotalUnreadDms, subscribeToAnyIncomingDm, updateDmPrivacy, type DmPrivacy } from '../core/services/MessageService';
 import { supabase } from '../lib/supabase';
 import { MessagingDock } from '../core/features/messages/MessagingDock';
+import { FloatingTimerWidget } from '../core/features/sessions/FloatingTimerWidget';
 import { NotificationsBell } from './notifications/NotificationsBell';
 // SpaceSwitcher removed — replaced by SharedMinds brand text in header
 // Cleaned duplicate and missing imports
@@ -891,6 +892,11 @@ export function Layout({ children }: LayoutProps) {
           all page content. Hidden during active video sessions so users
           can focus on their work without two competing chat surfaces. */}
       {!location.pathname.startsWith('/session/') && <MessagingDock />}
+
+      {/* Floating mini-timer — self-hides when no active session OR
+          when we're already on the session page. Lets the user keep
+          a Quick Timer running while they plan / edit / browse. */}
+      <FloatingTimerWidget />
 
     </div>
   );
