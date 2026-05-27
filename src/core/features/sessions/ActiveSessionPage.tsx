@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2 } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -772,6 +772,46 @@ export function ActiveSessionPage() {
 
 // ── Solo focus view ──────────────────────────────────────────────
 //
+// ── Solo focus themes ─────────────────────────────────────────────────
+//
+// User-picked background palettes for the solo focus view. Saved per
+// user via localStorage so the choice survives across sessions. The
+// timer ring + halo colours derive from the theme so the whole surface
+// feels coherent — no more violet ring on a forest backdrop.
+
+interface SoloTheme {
+  id: string;
+  label: string;
+  /** CSS gradient for the body backdrop. */
+  bg: string;
+  /** Two radial accents painted on top of the bg for depth. */
+  accent1: string;
+  accent2: string;
+  /** Hex for the halo glow + ring start colour. */
+  haloHex: string;
+  /** SVG linear gradient stops [start, end] for the progress arc. */
+  ringStops: [string, string];
+  /** Used by the picker swatch — small color sample. */
+  swatchHex: string;
+}
+
+const SOLO_THEMES: SoloTheme[] = [
+  { id: 'midnight', label: 'Midnight', bg: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', accent1: 'radial-gradient(circle at 30% 20%, rgba(99,102,241,0.18), transparent 60%)', accent2: 'radial-gradient(circle at 70% 80%, rgba(168,85,247,0.12), transparent 60%)', haloHex: '#a78bfa', ringStops: ['#a78bfa', '#60a5fa'], swatchHex: '#3730a3' },
+  { id: 'aurora',   label: 'Aurora',   bg: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)', accent1: 'radial-gradient(circle at 20% 30%, rgba(34,211,238,0.22), transparent 60%)', accent2: 'radial-gradient(circle at 80% 70%, rgba(167,139,250,0.18), transparent 60%)', haloHex: '#22d3ee', ringStops: ['#22d3ee', '#a78bfa'], swatchHex: '#5b21b6' },
+  { id: 'forest',   label: 'Forest',   bg: 'linear-gradient(135deg, #064e3b 0%, #022c22 50%, #0f1f1c 100%)', accent1: 'radial-gradient(circle at 25% 25%, rgba(16,185,129,0.20), transparent 60%)', accent2: 'radial-gradient(circle at 75% 75%, rgba(45,212,191,0.14), transparent 60%)', haloHex: '#34d399', ringStops: ['#34d399', '#2dd4bf'], swatchHex: '#065f46' },
+  { id: 'sunset',   label: 'Sunset',   bg: 'linear-gradient(135deg, #451a03 0%, #7c2d12 50%, #4c0519 100%)', accent1: 'radial-gradient(circle at 30% 20%, rgba(251,146,60,0.20), transparent 60%)', accent2: 'radial-gradient(circle at 70% 80%, rgba(244,63,94,0.16), transparent 60%)', haloHex: '#fb923c', ringStops: ['#fb923c', '#f43f5e'], swatchHex: '#c2410c' },
+  { id: 'ocean',    label: 'Ocean',    bg: 'linear-gradient(135deg, #082f49 0%, #0c4a6e 50%, #134e4a 100%)', accent1: 'radial-gradient(circle at 25% 20%, rgba(56,189,248,0.20), transparent 60%)', accent2: 'radial-gradient(circle at 75% 80%, rgba(45,212,191,0.14), transparent 60%)', haloHex: '#38bdf8', ringStops: ['#38bdf8', '#2dd4bf'], swatchHex: '#0369a1' },
+  { id: 'mono',     label: 'Mono',     bg: 'linear-gradient(135deg, #18181b 0%, #27272a 50%, #09090b 100%)', accent1: 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.06), transparent 60%)', accent2: 'radial-gradient(circle at 70% 80%, rgba(255,255,255,0.04), transparent 60%)', haloHex: '#a1a1aa', ringStops: ['#e4e4e7', '#a1a1aa'], swatchHex: '#3f3f46' },
+];
+
+const LS_SOLO_THEME = 'sm.solo.theme';
+
+function readSoloTheme(): SoloTheme {
+  if (typeof window === 'undefined') return SOLO_THEMES[0];
+  const id = window.localStorage.getItem(LS_SOLO_THEME);
+  return SOLO_THEMES.find((t) => t.id === id) ?? SOLO_THEMES[0];
+}
+
 // Distraction-free presentation for solo sessions: ambient gradient,
 // big circular progress, the goal in the centre. No Jitsi, no peers.
 // The top bar (with goal, timer, end button) is still rendered above this.
@@ -800,6 +840,29 @@ function SoloFocusView({
   const radius = 118;
   const circumference = 2 * Math.PI * radius;
   const strokeOffset = circumference * (1 - progress);
+
+  // Theme — persisted choice, hot-swappable. Lazy init from localStorage.
+  const [theme, setTheme] = useState<SoloTheme>(() => readSoloTheme());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  function pickTheme(t: SoloTheme) {
+    setTheme(t);
+    try { window.localStorage.setItem(LS_SOLO_THEME, t.id); } catch { /* private */ }
+  }
+
+  // Responsive ring size — scales to viewport so mobile gets a smaller
+  // (but still dominant) timer. Recomputed on resize so the page rotates
+  // gracefully without re-mount.
+  const [vp, setVp] = useState<number>(() => {
+    if (typeof window === 'undefined') return 320;
+    return Math.min(360, Math.max(220, window.innerWidth - 48));
+  });
+  useEffect(() => {
+    const fn = () => setVp(Math.min(360, Math.max(220, window.innerWidth - 48)));
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+  const ringPx = Math.min(320, vp);          // SVG render size (viewBox stays 280)
+  const haloPx = Math.round(ringPx * 1.28);  // visualizer canvas wraps around the ring
 
   // Friendly "phase" hint based on progress
   const phase =
@@ -877,10 +940,12 @@ function SoloFocusView({
 
   return (
     <div className="flex-1 relative min-h-0 overflow-hidden">
-      {/* Ambient gradient backdrop */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e] via-[#16213e] to-[#0f3460]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.18),transparent_60%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.12),transparent_60%)]" />
+      {/* Theme backdrop — three layered fills (base gradient + two
+          radial accents). Inline styles so we can swap on theme change
+          without rebuilding the Tailwind atom list. */}
+      <div className="absolute inset-0" style={{ background: theme.bg }} />
+      <div className="absolute inset-0" style={{ background: theme.accent1 }} />
+      <div className="absolute inset-0" style={{ background: theme.accent2 }} />
 
       {/* Ambient peers strip — recreates the "body double" effect by
           showing other members currently working solo. Pure presence,
@@ -889,29 +954,85 @@ function SoloFocusView({
           (the silent video grid already serves the presence purpose). */}
       {!hideAmbientStrip && <AmbientPeersStrip />}
 
-      <div className="relative h-full flex flex-col items-center justify-center px-6 py-8 text-center">
+      {/* Theme picker — small palette button bottom-right. Opens a tiny
+          panel of swatches; click one to apply + persist. Sits above
+          the music button (which is bottom-right but lower z-index of
+          the page surface; the music player portals separately). */}
+      <div className="absolute top-3 right-3 z-20">
+        <button
+          type="button"
+          onClick={() => setPickerOpen((v) => !v)}
+          aria-label="Change background theme"
+          title="Background"
+          className="w-8 h-8 rounded-full grid place-items-center bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors"
+        >
+          <Palette size={13} />
+        </button>
+        {pickerOpen && (
+          <div
+            className="absolute right-0 mt-2 w-48 rounded-2xl bg-black/70 backdrop-blur-md ring-1 ring-white/10 shadow-2xl p-2"
+            onMouseLeave={() => setPickerOpen(false)}
+          >
+            <p className="px-2 pt-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-widest text-white/50">
+              Background
+            </p>
+            <div className="grid grid-cols-3 gap-1.5 px-1 pb-1">
+              {SOLO_THEMES.map((t) => {
+                const active = t.id === theme.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => pickTheme(t)}
+                    aria-label={t.label}
+                    title={t.label}
+                    className={`relative aspect-square rounded-lg overflow-hidden ring-1 transition-all ${
+                      active ? 'ring-white shadow-md' : 'ring-white/15 hover:ring-white/40'
+                    }`}
+                    style={{ background: t.bg }}
+                  >
+                    {active && (
+                      <span className="absolute inset-0 grid place-items-center text-white">
+                        <Check size={14} strokeWidth={3} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold text-white/60 text-center">
+              {theme.label}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="relative h-full flex flex-col items-center justify-center px-4 sm:px-6 py-6 sm:py-8 text-center">
         {/* Circular timer — ring around a live mm:ss countdown. The
             ring colour shifts amber → rose as time runs low so the
             user gets peripheral-vision feedback without reading the
-            digits. Outer faint ring breathes ±2px so even a static
-            timer feels alive. */}
-        <div className="relative mb-8">
+            digits. Outer faint ring breathes so even a static timer
+            feels alive. */}
+        <div
+          className="relative mb-6 sm:mb-8"
+          style={{ width: ringPx, height: ringPx }}
+        >
           {/* Audio-reactive visualizer — orbits the timer with live
               frequency bars driven by the session music player. Fades
               to nothing when music isn't playing. Pure ambient layer:
               pointer-events: none, no DOM overhead. */}
           <div className="absolute inset-0 grid place-items-center pointer-events-none">
-            <SoloVisualizer size={360} innerRadius={148} barHeight={42} />
+            <SoloVisualizer size={haloPx} innerRadius={Math.round(haloPx * 0.41)} barHeight={Math.round(haloPx * 0.12)} />
           </div>
-          {/* Soft outer halo — slow breathing glow */}
+          {/* Soft outer halo — slow breathing glow, themed */}
           <div
             className="absolute inset-0 rounded-full blur-3xl opacity-40 pointer-events-none animate-pulse"
             style={{
-              background: 'radial-gradient(circle, rgba(167,139,250,0.45) 0%, transparent 65%)',
+              background: `radial-gradient(circle, ${theme.haloHex}73 0%, transparent 65%)`,
               animationDuration: '4s',
             }}
           />
-          <svg width="280" height="280" viewBox="0 0 280 280" className="-rotate-90 relative">
+          <svg width={ringPx} height={ringPx} viewBox="0 0 280 280" className="-rotate-90 relative">
             {/* Track */}
             <circle
               cx="140"
@@ -956,13 +1077,13 @@ function SoloFocusView({
               strokeDashoffset={strokeOffset}
               style={{
                 transition: 'stroke-dashoffset 1s linear, stroke 600ms ease',
-                filter: 'drop-shadow(0 0 8px rgba(167,139,250,0.35))',
+                filter: `drop-shadow(0 0 8px ${theme.haloHex}59)`,
               }}
             />
             <defs>
               <linearGradient id="solo-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#a78bfa" />
-                <stop offset="100%" stopColor="#60a5fa" />
+                <stop offset="0%" stopColor={theme.ringStops[0]} />
+                <stop offset="100%" stopColor={theme.ringStops[1]} />
               </linearGradient>
               <linearGradient id="solo-grad-warn" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#fbbf24" />
@@ -975,32 +1096,35 @@ function SoloFocusView({
             </defs>
           </svg>
 
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/45 mb-2">
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
+            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-white/45 mb-1 sm:mb-2">
               {phase}
             </p>
-            {/* Live mm:ss — the hero number. tabular-nums keeps the
-                digits from jittering as they count down. */}
-            <p className="text-[64px] sm:text-7xl font-extrabold text-white tabular-nums leading-none tracking-tight">
+            {/* Live mm:ss — the hero number. Clamped so it scales with
+                the ring across viewports without overflowing. */}
+            <p
+              className="font-extrabold text-white tabular-nums leading-none tracking-tight"
+              style={{ fontSize: `clamp(44px, ${ringPx * 0.24}px, 76px)` }}
+            >
               {formatRemaining(secondsRemaining)}
             </p>
-            <p className="text-[11px] text-white/45 mt-3 tabular-nums">
+            <p className="text-[10px] sm:text-[11px] text-white/45 mt-2 sm:mt-3 tabular-nums">
               {elapsedMin} / {totalMin} min in
             </p>
           </div>
         </div>
 
         {/* Goal */}
-        <div className="max-w-md">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">
+        <div className="max-w-md px-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5">
             You declared
           </p>
-          <p className="text-lg font-bold text-white leading-snug">
+          <p className="text-base sm:text-lg font-bold text-white leading-snug">
             {goal || 'Your session'}
           </p>
         </div>
 
-        <p className="text-xs text-white/40 mt-10 max-w-xs leading-relaxed">
+        <p className="text-[11px] sm:text-xs text-white/40 mt-6 sm:mt-8 max-w-xs leading-relaxed px-4">
           No room, no audience. Just you and the work. Come back when you're done.
         </p>
       </div>
