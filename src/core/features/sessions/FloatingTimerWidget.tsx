@@ -34,6 +34,15 @@ export function FloatingTimerWidget() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // All hooks must run unconditionally — early returns go below.
+  // Colour shifts amber/rose in the last 5 / 1 minutes so the peripheral
+  // cue stays consistent with the big timer.
+  const stroke = useMemo(() => {
+    if (timerSecondsRemaining <= 60) return '#fb7185';
+    if (timerSecondsRemaining <= 300) return '#fbbf24';
+    return '#a78bfa';
+  }, [timerSecondsRemaining]);
+
   // Hide when there's no active session OR the user is already on the
   // session surface (the dedicated timer there is much richer).
   const onSessionPage = location.pathname.startsWith('/session/');
@@ -47,14 +56,6 @@ export function FloatingTimerWidget() {
   const r = 13;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - progress);
-
-  // Colour shifts amber/rose in the last 5 / 1 minutes — same logic as
-  // the big timer so the peripheral cue stays consistent.
-  const stroke = useMemo(() => {
-    if (timerSecondsRemaining <= 60) return '#fb7185';
-    if (timerSecondsRemaining <= 300) return '#fbbf24';
-    return '#a78bfa';
-  }, [timerSecondsRemaining]);
 
   const label = sessionGoal || 'Focus session';
 
