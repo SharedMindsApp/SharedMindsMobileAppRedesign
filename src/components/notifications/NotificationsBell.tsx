@@ -12,6 +12,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell, Loader2, CheckCheck, MessageCircle, Heart, UserPlus, Sparkles, Calendar,
   FolderPlus, CornerDownRight, HelpCircle, AlertCircle, Check, X,
+  Zap, Clock, Users, Settings,
 } from 'lucide-react';
 import {
   listNotifications, fetchUnreadCount, markRead, markAllRead, dismissNotification,
@@ -25,6 +26,7 @@ import { useAuth } from '../../core/auth/AuthProvider';
 const TYPE_META: Record<NotificationType, { Icon: typeof Bell; cls: string }> = {
   session_reminder_24h:        { Icon: Calendar,    cls: 'text-cyan-600 bg-cyan-50' },
   session_reminder_15min:      { Icon: Calendar,    cls: 'text-amber-600 bg-amber-50' },
+  session_reminder_5min:       { Icon: Zap,         cls: 'text-amber-600 bg-amber-50' },
   weekly_review_prompt:        { Icon: Sparkles,    cls: 'text-violet-600 bg-violet-50' },
   onboarding_day_1:            { Icon: Sparkles,    cls: 'text-primary bg-primary/10' },
   onboarding_day_3:            { Icon: Sparkles,    cls: 'text-primary bg-primary/10' },
@@ -37,6 +39,18 @@ const TYPE_META: Record<NotificationType, { Icon: typeof Bell; cls: string }> = 
   connection_accepted:         { Icon: UserPlus,    cls: 'text-emerald-600 bg-emerald-50' },
   project_invite:              { Icon: FolderPlus,  cls: 'text-cyan-600 bg-cyan-50' },
   stuck_help_offered:          { Icon: HelpCircle,  cls: 'text-amber-600 bg-amber-50' },
+  // Session lifecycle — previously missing, which made every "Session
+  // complete — nice work" row fall through to the generic AlertCircle.
+  // Now they each get a recognisable icon + tone.
+  partner_joined:              { Icon: Users,       cls: 'text-cyan-600 bg-cyan-50' },
+  session_now:                 { Icon: Zap,         cls: 'text-amber-600 bg-amber-50' },
+  partner_no_show:             { Icon: Clock,       cls: 'text-slate-500 bg-slate-100' },
+  session_completed:           { Icon: CheckCheck,  cls: 'text-emerald-600 bg-emerald-50' },
+  // 'You missed it' — slate to read as muted rather than alarming;
+  // we don't want to make the user feel attacked for skipping.
+  session_missed:              { Icon: Clock,       cls: 'text-slate-600 bg-slate-100' },
+  // Streak nudge — warm orange "flame" tone signals momentum/heat.
+  streak_at_risk:              { Icon: Zap,         cls: 'text-orange-600 bg-orange-50' },
 };
 
 // ── Time grouping ──────────────────────────────────────────────
@@ -154,9 +168,13 @@ export function NotificationsBell() {
   }, [open]);
 
   async function handleClick(n: Notification) {
+    // Mark-as-read = dismiss from view. The row stays in the DB with
+    // `read_at` set but disappears from the visible inbox — matches
+    // the user's mental model ("I've actioned it, it's done"). Old
+    // behaviour kept rows around looking grey, which everyone read as
+    // "didn't work."
     if (!n.read_at) {
-      // Optimistic
-      setItems((prev) => prev.map((x) => x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x));
+      setItems((prev) => prev.filter((x) => x.id !== n.id));
       setUnread((c) => Math.max(0, c - 1));
       markRead(n.id).catch(() => refresh());
     }
@@ -168,14 +186,13 @@ export function NotificationsBell() {
   }
 
   async function handleMarkAllRead() {
-    // Optimistic update + immediate UI feedback.
-    const nowIso = new Date().toISOString();
-    setItems((prev) => prev.map((x) => x.read_at ? x : { ...x, read_at: nowIso }));
+    // Optimistic: clear the visible list + zero the unread count. The
+    // rows persist in the DB (read_at populated) for any future archive
+    // view.
+    setItems([]);
     setUnread(0);
     try {
       const updated = await markAllRead();
-      // If the service returned 0 rows but we showed unread items, something
-      // server-side (RLS, auth) blocked the write. Pull the truth + restore.
       if (updated === 0) {
         console.warn('[Notifications] markAllRead affected 0 rows — re-syncing from server');
         await refresh();
@@ -206,39 +223,57 @@ export function NotificationsBell() {
   if (!user) return null;
   const buckets = groupByBucket(items);
 
+  /** Mobile breakpoint check — bell navigates to the full-screen
+   *  /notifications page on phones (iOS / native messenger convention)
+   *  rather than opening a tiny dropdown squeezed under the header.
+   *  Desktop keeps the dropdown, which is the right pattern when the
+   *  bell sits in a wider top nav. */
+  function handleBellClick() {
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      navigate('/notifications');
+      return;
+    }
+    setOpen((v) => !v);
+  }
+
   return (
     <div ref={containerRef} className="relative">
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="relative w-9 h-9 rounded-full hover:bg-surface-container-low flex items-center justify-center transition-colors"
+        onClick={handleBellClick}
+        className="relative w-10 h-10 rounded-full hover:bg-surface-container-low active:bg-surface-container flex items-center justify-center transition-colors"
         aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
       >
-        <Bell size={18} className="stitch-text-secondary" />
+        <Bell size={20} className="stitch-text-secondary" strokeWidth={1.75} />
         {unread > 0 && (
-          <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center leading-none">
+          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center leading-none ring-2 ring-white tabular-nums">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
-      {/* Dropdown panel — portalled to body so the nav's overflow:hidden doesn't clip it */}
+      {/* Dropdown panel — desktop only. On phones the bell navigates
+          to the full-screen /notifications page (see handleBellClick).
+          Portalled so the nav's overflow:hidden doesn't clip it. */}
       {open && createPortal(
         <>
-          {/* Backdrop to catch outside clicks */}
           <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />
           <div
-            className="fixed z-[95] w-[360px] max-h-[70vh] bg-surface rounded-2xl shadow-2xl ring-1 ring-surface-container/60 flex flex-col overflow-hidden"
+            className="fixed z-[95] w-[380px] max-h-[70vh] bg-surface rounded-2xl shadow-2xl ring-1 ring-surface-container/60 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
             style={{ top: dropdownPos.top, right: dropdownPos.right }}
           >
-            {/* Header */}
-            <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-surface-container/60">
+            {/* Header — taller + a touch more breathing room on mobile.
+                The bell glyph next to the title doubles as a visual
+                anchor so the panel reads as a continuation of the icon. */}
+            <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-3.5 border-b border-surface-container/60">
               <div className="flex items-center gap-2">
-                <Bell size={14} className="text-primary" />
-                <p className="text-sm font-extrabold stitch-text-primary">Notifications</p>
+                <div className="w-7 h-7 rounded-full bg-primary/10 grid place-items-center">
+                  <Bell size={14} className="text-primary" strokeWidth={2.25} />
+                </div>
+                <p className="text-base font-extrabold stitch-text-primary">Notifications</p>
                 {unread > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold tabular-nums">
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold tabular-nums">
                     {unread > 9 ? '9+' : unread}
                   </span>
                 )}
@@ -247,7 +282,7 @@ export function NotificationsBell() {
                 <button
                   type="button"
                   onClick={handleMarkAllRead}
-                  className="text-[11px] font-bold text-primary hover:underline"
+                  className="text-xs font-bold text-primary hover:underline active:scale-95 transition-transform"
                 >
                   Mark all read
                 </button>
@@ -281,15 +316,19 @@ export function NotificationsBell() {
               )}
             </div>
 
-            {/* Footer */}
-            <div className="shrink-0 px-3 py-2 border-t border-surface-container/60 flex items-center justify-between">
-              <Link
-                to="/profile?tab=notifications"
-                className="text-[11px] font-semibold stitch-text-secondary hover:stitch-text-primary"
-              >
-                Notification settings
-              </Link>
-            </div>
+            {/* Footer — actionable row, not a tiny text link. Easy to
+                tap on mobile (44px tall) and visually distinct from the
+                notification list above. */}
+            <Link
+              to="/profile?tab=notifications"
+              className="shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-t border-surface-container/60 hover:bg-surface-container-low active:bg-surface-container transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Settings size={14} className="stitch-text-secondary" />
+                <span className="text-xs font-semibold stitch-text-primary">Notification settings</span>
+              </span>
+              <span className="text-[10px] stitch-text-secondary">›</span>
+            </Link>
           </div>
         </>,
         document.body
@@ -321,30 +360,30 @@ function NotificationRow({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
       }}
-      className={`group relative w-full text-left flex items-start gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
-        isUnread ? 'bg-primary/[0.03] hover:bg-primary/[0.06]' : 'hover:bg-surface-container-low'
+      className={`group relative w-full text-left flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
+        isUnread ? 'bg-primary/[0.04] hover:bg-primary/[0.07] active:bg-primary/[0.10]' : 'hover:bg-surface-container-low active:bg-surface-container'
       }`}
     >
-      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${meta.cls}`}>
-        <Icon size={14} strokeWidth={2.5} />
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.cls}`}>
+        <Icon size={16} strokeWidth={2.25} />
       </div>
-      <div className="flex-1 min-w-0 pr-6">
+      <div className="flex-1 min-w-0 pr-5">
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
-          <p className={`text-xs ${isUnread ? 'font-extrabold stitch-text-primary' : 'font-bold stitch-text-primary'}`}>
+          <p className={`text-sm leading-tight ${isUnread ? 'font-extrabold stitch-text-primary' : 'font-bold stitch-text-primary'}`}>
             {notification.title}
           </p>
-          <span className="text-[10px] stitch-text-secondary shrink-0 tabular-nums">
+          <span className="text-[11px] stitch-text-secondary shrink-0 tabular-nums">
             {formatTimeAgo(notification.created_at)}
           </span>
         </div>
-        <p className={`text-[11px] leading-snug line-clamp-2 ${
+        <p className={`text-xs leading-snug line-clamp-2 ${
           isUnread ? 'stitch-text-primary' : 'stitch-text-secondary'
         }`}>
           {notification.body}
         </p>
       </div>
       {isUnread && (
-        <span className="w-1.5 h-1.5 mt-1.5 rounded-full bg-primary shrink-0" />
+        <span className="w-2 h-2 mt-2 rounded-full bg-primary shrink-0" />
       )}
       {/* X dismiss — hover-revealed, click bubbles stopped so the row
           onClick doesn't fire alongside. */}

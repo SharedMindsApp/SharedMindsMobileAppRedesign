@@ -80,6 +80,8 @@ type PreferenceKey =
 const TYPE_TO_PREFERENCE: Record<string, PreferenceKey> = {
   session_reminder_24h: 'email_session_reminders',
   session_reminder_15min: 'email_session_reminders',
+  session_reminder_5min: 'email_session_reminders',
+  session_missed: 'email_session_reminders',
   community_session_reminder: 'email_community_sessions',
   new_dm: 'email_messages',
   post_reply: 'email_post_replies',
@@ -101,6 +103,10 @@ const TYPE_TO_PREFERENCE: Record<string, PreferenceKey> = {
 const TYPE_TO_COLOR: Record<string, string> = {
   session_reminder_24h: '#0891b2',
   session_reminder_15min: '#0891b2',
+  session_reminder_5min: '#d97706',
+  session_missed: '#475569',  // slate — muted, non-alarming
+  // streak_at_risk has no email entry above: it's habit_nudges
+  // category which is intentionally in-app only. No email key needed.
   community_session_reminder: '#0891b2',
   weekly_review_prompt: '#7c3aed',
   onboarding_day_1: '#7c3aed',

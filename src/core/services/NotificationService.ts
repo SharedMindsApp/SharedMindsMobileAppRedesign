@@ -12,6 +12,7 @@ export type NotificationType =
   // Scheduled
   | 'session_reminder_24h'
   | 'session_reminder_15min'
+  | 'session_reminder_5min'
   | 'weekly_review_prompt'
   | 'onboarding_day_1'
   | 'onboarding_day_3'
@@ -29,7 +30,9 @@ export type NotificationType =
   | 'partner_joined'
   | 'session_now'
   | 'partner_no_show'
-  | 'session_completed';
+  | 'session_completed'
+  | 'session_missed'
+  | 'streak_at_risk';
 
 export interface Notification {
   id: string;
@@ -50,6 +53,8 @@ export interface Notification {
 
 export interface NotificationPreferences {
   user_id: string;
+
+  // ── Email channel toggles (legacy — predate the inapp_* split) ──
   email_session_reminders: boolean;
   email_messages: boolean;
   email_post_replies: boolean;
@@ -58,6 +63,29 @@ export interface NotificationPreferences {
   email_onboarding: boolean;
   email_community_sessions: boolean;
   email_marketing: boolean;
+
+  // ── In-app channel toggles (one per category) ──────────────────
+  // See migration 20260527000018. The DB has a BEFORE INSERT trigger
+  // on `notifications` that silently skips inserts when the matching
+  // inapp_* is false (or quiet hours are active for habit_nudges).
+  inapp_session_reminders: boolean;
+  inapp_session_activity: boolean;
+  inapp_drop_in_opportunities: boolean;   // opt-IN
+  inapp_habit_nudges: boolean;            // opt-IN
+  inapp_messages: boolean;
+  inapp_community: boolean;
+  inapp_social: boolean;
+  inapp_weekly_review: boolean;
+  inapp_onboarding: boolean;
+  inapp_marketing: boolean;
+
+  // ── Quiet hours (habit_nudges category only) ───────────────────
+  // Server stores UTC clock times; the picker UI converts to/from
+  // the user's local browser timezone.
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string;  // HH:MM:SS (Postgres `time` serializes this way)
+  quiet_hours_end:   string;
+
   digest_mode: 'realtime' | 'daily' | 'off';
   dm_inactivity_threshold_hours: number;
   push_enabled: boolean;
@@ -66,14 +94,28 @@ export interface NotificationPreferences {
 
 // ── Notifications ──────────────────────────────────────────────
 
-/** Fetch recent notifications (up to `limit`). Unread + read mixed,
- *  reverse-chronological. */
-export async function listNotifications(limit = 30): Promise<Notification[]> {
-  const { data, error } = await supabase
+/** Fetch recent notifications (up to `limit`). Defaults to UNREAD ONLY
+ *  — the bell dropdown + /notifications page are inbox-style surfaces,
+ *  not a permanent log. Read notifications are dismissed from the
+ *  visible list (the row stays in the DB with `read_at` set so we can
+ *  build an archive view later if it's actually useful).
+ *
+ *  Pass `{ includeRead: true }` for the future archive view. */
+export async function listNotifications(
+  limit = 30,
+  opts: { includeRead?: boolean } = {},
+): Promise<Notification[]> {
+  let query = supabase
     .from('notifications')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(limit);
+
+  if (!opts.includeRead) {
+    query = query.is('read_at', null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('[NotificationService] listNotifications:', error);

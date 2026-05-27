@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
+import { getSessionSfxEnabled, setSessionSfxEnabled, previewAllSounds } from '../sessions/sessionSounds';
 import { SurfaceCard } from '../../ui/CorePage';
 import { CountryPicker } from '../../ui/CountryPicker';
 import { CityAutocomplete } from '../../ui/CityAutocomplete';
@@ -614,6 +615,134 @@ function PrivacyToggle({
   );
 }
 
+// ── ChannelToggle ──────────────────────────────────────────────────────────
+//
+// Single pill button that represents one channel (in-app or email) for a
+// notification category. Off-state shows the channel label in muted text;
+// on-state fills with the channel's accent colour. Disabled (channel
+// not applicable to this category) renders as a dim placeholder so the
+// layout column stays aligned across rows.
+
+function ChannelToggle({
+  channel, value, onClick, ariaLabel,
+}: {
+  channel: 'inapp' | 'email';
+  value: boolean | null;
+  onClick: () => void;
+  ariaLabel: string;
+}) {
+  // Channel not applicable → render an empty placeholder slot of the
+  // same width so the In-app/Email columns line up across rows.
+  if (value === null) {
+    return <div className="w-[58px] h-7 shrink-0" aria-hidden />;
+  }
+  const label = channel === 'inapp' ? 'App' : 'Email';
+  const onColor = channel === 'inapp'
+    ? 'bg-primary text-white ring-primary/30'
+    : 'bg-blue-500 text-white ring-blue-300/40';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-pressed={value}
+      className={`shrink-0 w-[58px] h-7 inline-flex items-center justify-center gap-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ring-1 transition-all active:scale-95 ${
+        value
+          ? `${onColor} shadow-sm`
+          : 'bg-surface-container-low stitch-text-secondary ring-surface-container/60 hover:bg-surface-container'
+      }`}
+    >
+      {value && <Check size={10} strokeWidth={3} />}
+      {label}
+    </button>
+  );
+}
+
+// ── TimePicker ─────────────────────────────────────────────────────────────
+//
+// Thin wrapper around <input type="time"> with a label. Used for quiet
+// hours. The browser shows a native picker on mobile (iOS scroll wheel,
+// Android dialog) and a typeable HH:MM field on desktop.
+//
+// Postgres `time` columns serialize as "HH:MM:SS"; the input wants
+// "HH:MM" — we slice/pad in the value props below.
+
+function TimePicker({
+  label, value, onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const hhmm = (value || '00:00:00').slice(0, 5);
+  return (
+    <label className="flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white ring-1 ring-amber-200/60">
+      <span className="text-[10px] font-bold text-amber-900/70 uppercase tracking-wider">{label}</span>
+      <input
+        type="time"
+        value={hhmm}
+        onChange={(e) => onChange(e.target.value + ':00')}
+        className="flex-1 text-sm font-bold text-amber-900 bg-transparent outline-none tabular-nums"
+      />
+    </label>
+  );
+}
+
+// ── SessionSfxRow ──────────────────────────────────────────────────────────
+//
+// Toggle for the session sound effects (join chime, leave, phase
+// transition, knock) introduced with the open-to-match flow. The state
+// lives in localStorage via sessionSounds.ts because audio prefs are
+// inherently per-device — what the user wants on their phone might
+// differ from desktop. A "Preview" button auditions the four sounds in
+// sequence so users can decide before disabling.
+
+function SessionSfxRow() {
+  const [enabled, setEnabledLocal] = useState<boolean>(() => getSessionSfxEnabled());
+
+  function handleToggle() {
+    const next = !enabled;
+    setEnabledLocal(next);
+    setSessionSfxEnabled(next);
+  }
+
+  function handlePreview(e: React.MouseEvent) {
+    e.stopPropagation();
+    previewAllSounds();
+  }
+
+  return (
+    <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-container-low transition-colors">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold stitch-text-primary leading-tight">
+          Session sound effects
+        </p>
+        <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+          Subtle chimes for join, leave, and phase transitions in matched sessions.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handlePreview}
+        disabled={!enabled}
+        title="Preview all four sounds"
+        className="shrink-0 text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:stitch-text-primary px-2 py-1 rounded-md hover:bg-surface-container transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+      >
+        Preview
+      </button>
+      <button
+        type="button"
+        onClick={handleToggle}
+        aria-pressed={enabled}
+        aria-label="Toggle session sound effects"
+        className={`shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors ${enabled ? 'bg-primary' : 'bg-surface-container'}`}
+      >
+        <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+      </button>
+    </div>
+  );
+}
+
 // ── PushNotificationRow ────────────────────────────────────────────────────
 
 function PushNotificationRow() {
@@ -746,45 +875,199 @@ function NotificationPreferencesPanel() {
     );
   }
 
-  const rows: { key: keyof typeof prefs; label: string; help: string }[] = [
-    { key: 'email_session_reminders',  label: 'Session reminders',     help: '24 hours and 15 minutes before sessions you have booked' },
-    { key: 'email_messages',           label: 'Direct messages',       help: 'Only when you have been offline for a while' },
-    { key: 'email_post_replies',       label: 'Replies to your posts', help: 'When someone replies in the community feed' },
-    { key: 'email_connection_requests',label: 'Connection requests',   help: 'When someone wants to connect with you' },
-    { key: 'email_weekly_review',      label: 'Weekly review prompt',  help: 'Sunday evening nudge to reflect on your week' },
-    { key: 'email_community_sessions', label: 'Community sessions',    help: 'Reminders for admin-scheduled recurring sessions' },
-    { key: 'email_onboarding',         label: 'Onboarding tips',       help: 'First-week guidance — auto-stops after 7 days' },
-    { key: 'email_marketing',          label: 'Product updates',       help: 'Occasional emails about new features and tips (opt-in)' },
+  /** Each row groups one notification CATEGORY (not one type — types
+   *  are too granular for a settings UI). Each category may surface
+   *  an in-app toggle, an email toggle, or both. `optIn=true` marks
+   *  categories that default to OFF — the row gets a "opt-in" pill so
+   *  users understand why their default is off.
+   *
+   *  In-app keys map 1:1 to the `inapp_*` columns added in migration
+   *  20260527000018. Email keys reuse the legacy `email_*` columns;
+   *  categories whose notifications don't make sense as email (drop-in
+   *  pings, habit nudges, partner-joined moments) have no email key. */
+  const rows: {
+    label: string;
+    help: string;
+    inappKey: keyof typeof prefs | null;
+    emailKey: keyof typeof prefs | null;
+    optIn?: boolean;
+  }[] = [
+    {
+      label: 'Session reminders',
+      help: 'Before booked sessions: 24h, 5 min, and "starts now"',
+      inappKey: 'inapp_session_reminders',
+      emailKey: 'email_session_reminders',
+    },
+    {
+      label: 'Session activity',
+      help: 'When a partner joins, leaves, or a session ends',
+      inappKey: 'inapp_session_activity',
+      emailKey: null,
+    },
+    {
+      label: 'Drop-in opportunities',
+      help: 'Ping me when someone opens a session for drop-ins',
+      inappKey: 'inapp_drop_in_opportunities',
+      emailKey: null,
+      optIn: true,
+    },
+    {
+      label: 'Habit nudges',
+      help: 'Streak-at-risk, first session of day, stuck-task pings',
+      inappKey: 'inapp_habit_nudges',
+      emailKey: null,
+      optIn: true,
+    },
+    {
+      label: 'Direct messages',
+      help: 'When someone sends you a DM',
+      inappKey: 'inapp_messages',
+      emailKey: 'email_messages',
+    },
+    {
+      label: 'Community activity',
+      help: 'Replies + reactions on your community posts',
+      inappKey: 'inapp_community',
+      emailKey: 'email_post_replies',
+    },
+    {
+      label: 'Social',
+      help: 'Connection requests, project invites, offers of help',
+      inappKey: 'inapp_social',
+      emailKey: 'email_connection_requests',
+    },
+    {
+      label: 'Weekly review prompt',
+      help: 'Sunday evening nudge to reflect on your week',
+      inappKey: 'inapp_weekly_review',
+      emailKey: 'email_weekly_review',
+    },
+    {
+      label: 'Onboarding tips',
+      help: 'First-week guidance — auto-stops after 7 days',
+      inappKey: 'inapp_onboarding',
+      emailKey: 'email_onboarding',
+    },
+    {
+      label: 'Product updates',
+      help: 'New features + occasional tips',
+      inappKey: 'inapp_marketing',
+      emailKey: 'email_marketing',
+      optIn: true,
+    },
   ];
 
   return (
     <div className="space-y-1">
-      {/* Push notification toggle — shown only if browser supports it */}
-      <div className="mb-3 pb-3 border-b border-surface-container/50">
+      {/* Per-device settings — push notifications + session SFX. Both
+          live in localStorage / browser-specific state rather than the
+          notification_preferences row, so they're explicitly labelled
+          "This device" to avoid the "I turned this on in Chrome but my
+          phone is still silent" confusion. */}
+      <div className="mb-3 pb-3 border-b border-surface-container/50 space-y-1">
         <p className="text-[11px] stitch-text-secondary mb-1 px-3 leading-relaxed">This device:</p>
         <PushNotificationRow />
+        <SessionSfxRow />
       </div>
 
-      <p className="text-[11px] stitch-text-secondary mb-2 leading-relaxed">Email me about:</p>
+      {/* ── Per-category matrix ──
+          Each row: label + help on the left, two pill-style toggles
+          (In-app / Email) on the right. Rows for categories without an
+          email channel show the In-app pill only. */}
+      <div className="flex items-center justify-between mb-2 px-3">
+        <p className="text-[11px] font-semibold stitch-text-secondary uppercase tracking-wider">
+          Notify me about
+        </p>
+        <div className="hidden sm:flex items-center gap-1.5">
+          <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider w-[58px] text-center">In-app</span>
+          <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider w-[58px] text-center">Email</span>
+        </div>
+      </div>
       {rows.map((row) => {
-        const value = !!prefs[row.key];
+        const inappValue = row.inappKey ? !!prefs[row.inappKey] : null;
+        const emailValue = row.emailKey ? !!prefs[row.emailKey] : null;
         return (
-          <button
-            key={row.key}
-            type="button"
-            onClick={() => toggle(row.key as any)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-container-low transition-colors text-left"
+          <div
+            key={row.label}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-container-low transition-colors"
           >
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold stitch-text-primary leading-tight">{row.label}</p>
+              <p className="text-sm font-semibold stitch-text-primary leading-tight flex items-center gap-1.5">
+                {row.label}
+                {row.optIn && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                    Opt-in
+                  </span>
+                )}
+              </p>
               <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">{row.help}</p>
             </div>
-            <div className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-surface-container'}`}>
-              <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${value ? 'translate-x-4' : 'translate-x-0'}`} />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <ChannelToggle
+                ariaLabel={`In-app notifications for ${row.label}`}
+                channel="inapp"
+                value={inappValue}
+                onClick={() => row.inappKey && toggle(row.inappKey as any)}
+              />
+              <ChannelToggle
+                ariaLabel={`Email notifications for ${row.label}`}
+                channel="email"
+                value={emailValue}
+                onClick={() => row.emailKey && toggle(row.emailKey as any)}
+              />
             </div>
-          </button>
+          </div>
         );
       })}
+
+      {/* ── Quiet hours — only relevant for habit nudges. Shown when
+            inapp_habit_nudges is on (otherwise irrelevant). UTC clock
+            stored server-side; UI converts to the browser's local
+            timezone via the time input element. */}
+      {prefs.inapp_habit_nudges && (
+        <div className="mt-3 ml-3 mr-3 px-3.5 py-3 rounded-xl bg-amber-50/60 ring-1 ring-amber-100/80">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-amber-900 leading-tight">Quiet hours for habit nudges</p>
+              <p className="text-[11px] text-amber-700/80 leading-snug mt-0.5">
+                Suppress streak / pattern pings during this window. Other notifications still fire.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => toggle('quiet_hours_enabled' as any)}
+              aria-label="Toggle quiet hours"
+              className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                prefs.quiet_hours_enabled ? 'bg-amber-500' : 'bg-amber-200'
+              }`}
+            >
+              <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                prefs.quiet_hours_enabled ? 'translate-x-4' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+          {prefs.quiet_hours_enabled && (
+            <div className="mt-3 flex items-center gap-2">
+              <TimePicker
+                label="From"
+                value={prefs.quiet_hours_start}
+                onChange={async (v) => {
+                  setPrefs({ ...prefs, quiet_hours_start: v });
+                  await updatePreferences({ quiet_hours_start: v }).catch(() => load());
+                }}
+              />
+              <TimePicker
+                label="To"
+                value={prefs.quiet_hours_end}
+                onChange={async (v) => {
+                  setPrefs({ ...prefs, quiet_hours_end: v });
+                  await updatePreferences({ quiet_hours_end: v }).catch(() => load());
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 pt-4 border-t border-surface-container/50">
         <p className="text-[11px] stitch-text-secondary mb-2 leading-relaxed">Email delivery:</p>
