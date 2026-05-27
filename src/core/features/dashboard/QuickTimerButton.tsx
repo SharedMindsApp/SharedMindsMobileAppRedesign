@@ -19,10 +19,11 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Timer, ChevronDown, Calendar, Plus } from 'lucide-react';
+import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2 } from 'lucide-react';
 import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { ActivityService, type UserActivity } from '../../services/ActivityService';
+import { ActivityManagerSheet } from './ActivityManagerSheet';
 
 const PRESETS: Array<{ minutes: number; label: string }> = [
   { minutes: 10, label: '10 min' },
@@ -140,6 +141,23 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   // ── Scheduling state ───────────────────────────────────────
   const [scheduleMode, setScheduleMode] = useState(false);
   const [customDatetime, setCustomDatetime] = useState<string>('');
+
+  // ── Manager sheet ──────────────────────────────────────────
+  const [managerOpen, setManagerOpen] = useState(false);
+  /** Re-fetch activities after the manager closes — the user may have
+   *  archived rows, added customs, or adopted templates. */
+  async function reloadActivities() {
+    try {
+      const mine = await ActivityService.listMine();
+      setActivities(mine);
+      // If the currently-selected activity was archived, clear selection.
+      if (selectedActivity && !mine.some((a) => a.id === selectedActivity.id)) {
+        setSelectedActivity(null);
+      }
+    } catch (e) {
+      console.warn('[QuickTimer] reload activities failed', e);
+    }
+  }
 
   // Lazy-load + seed activities on first menu open. Cheaper than a
   // global mount-time fetch since most users won't open the dropdown
@@ -291,9 +309,19 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
               the chip becomes active and the duration auto-fills from
               the activity's default. */}
           <div className="px-3 pt-3 pb-2 max-h-[180px] overflow-y-auto">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-2">
-              Quick activities
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+                Quick activities
+              </p>
+              <button
+                type="button"
+                onClick={() => setManagerOpen(true)}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:opacity-70 transition-opacity"
+                title="Manage your activities"
+              >
+                <Settings2 size={10} /> Manage
+              </button>
+            </div>
             {activities.length === 0 ? (
               <p className="text-xs stitch-text-secondary italic py-2">
                 Loading…
@@ -465,6 +493,13 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         <p className={`absolute top-full mt-2 text-[11px] font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-100 rounded-lg px-2.5 py-1.5 z-30 ${align === 'left' ? 'left-0' : 'right-0'}`}>
           {error}
         </p>
+      )}
+
+      {managerOpen && (
+        <ActivityManagerSheet
+          onClose={() => setManagerOpen(false)}
+          onChanged={() => { reloadActivities(); }}
+        />
       )}
     </div>
   );
