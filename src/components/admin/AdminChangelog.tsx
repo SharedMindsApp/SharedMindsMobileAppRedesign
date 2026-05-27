@@ -19,6 +19,7 @@
 
 import { useMemo, useState } from 'react';
 import { FileText, Filter, Printer, Copy, Check, Sparkles, Wrench, RotateCcw, Plus } from 'lucide-react';
+import { AdminLayout } from './AdminLayout';
 import changelogSource from '../../../CHANGELOG.md?raw';
 
 // ── Markdown parsing ────────────────────────────────────────────────
@@ -269,6 +270,7 @@ export function AdminChangelog() {
   }, [latest]);
 
   return (
+    <AdminLayout>
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 print:py-0 print:px-0 print:max-w-none">
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3 flex-wrap mb-6 print:mb-4">
@@ -494,5 +496,6 @@ export function AdminChangelog() {
         }
       `}</style>
     </div>
+    </AdminLayout>
   );
 }
