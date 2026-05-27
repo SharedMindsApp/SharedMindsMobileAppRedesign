@@ -3027,7 +3027,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   // moments, body-doubling). Violet is the neurodiversity infinity
   // colour, paired with cyan/teal for the broader brand.
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-violet-50 via-surface to-cyan-50 gap-5 overflow-hidden wiz-anim">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-surface gap-5 overflow-hidden wiz-anim">
+      {/* Background tint — opacity-blended so it adapts to light AND
+          dark theme tokens. The violet→cyan wash reads as a warm
+          neurodiversity-palette glow on a light bg, and a soft
+          coloured halo on a dark bg. No theme branching needed. */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-violet-500/[0.07] via-transparent to-cyan-500/[0.07]" />
+
       <style>{WIZARD_ANIM_CSS}</style>
       <style>{`
         @keyframes wizFloat {
@@ -3042,6 +3048,23 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         @keyframes wizOrbit {
           from { transform: rotate(0deg)   translateX(38px) rotate(0deg);   }
           to   { transform: rotate(360deg) translateX(38px) rotate(-360deg); }
+        }
+
+        /* Reduced-motion respect — important for the neurodiversity
+           audience this product targets. Vestibular sensitivity
+           overlaps significantly with ADHD/autism. We keep the
+           one-shot pop + fade-up (brief, doesn't loop) but kill the
+           three looping animations: the rising icons, the pulsing
+           halo, and the orbiting spark. Users still see a clean
+           celebration — just without motion that could trigger
+           discomfort. */
+        @media (prefers-reduced-motion: reduce) {
+          .wiz-anim [data-anim="float"],
+          .wiz-anim [data-anim="pulse"],
+          .wiz-anim [data-anim="orbit"] {
+            animation: none !important;
+            opacity: 0 !important;
+          }
         }
       `}</style>
 
@@ -3061,6 +3084,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           <c.Icon
             key={i}
             size={28}
+            data-anim="float"
             className={`absolute ${c.cls}`}
             style={{
               left: `${c.left}%`,
@@ -3080,11 +3104,13 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       <div className="relative w-32 h-32 flex items-center justify-center">
         {/* Pulsing halo */}
         <span
+          data-anim="pulse"
           className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-400 to-cyan-400 blur-2xl"
           style={{ animation: 'wizPulse 2400ms ease-in-out infinite' }}
         />
         {/* Orbiting spark — implies momentum + connection */}
         <span
+          data-anim="orbit"
           className="absolute w-2 h-2 rounded-full bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.7)]"
           style={{ animation: 'wizOrbit 3.6s linear infinite' }}
         />
