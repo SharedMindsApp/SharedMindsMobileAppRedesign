@@ -862,7 +862,14 @@ function SoloFocusView({
     return () => window.removeEventListener('resize', fn);
   }, []);
   const ringPx = Math.min(320, vp);          // SVG render size (viewBox stays 280)
-  const haloPx = Math.round(ringPx * 1.28);  // visualizer canvas wraps around the ring
+  // Visualizer math — anchored to the ring's actual displayed radius
+  // (not the canvas size) so bars start just outside the ring edge
+  // regardless of viewport. ringRadiusPx = the rendered radius in CSS
+  // pixels; the SVG's intrinsic radius is 118 within a 280-unit viewBox.
+  const ringRadiusPx = 118 * (ringPx / 280);
+  const vizInnerRadius = Math.round(ringRadiusPx + 8);     // small gap from the ring
+  const vizBarHeight = Math.round(ringPx * 0.13);          // bar height proportional to ring
+  const haloPx = (vizInnerRadius + vizBarHeight) * 2 + 12; // canvas just big enough for the bars
 
   // Friendly "phase" hint based on progress
   const phase =
@@ -1022,7 +1029,7 @@ function SoloFocusView({
               to nothing when music isn't playing. Pure ambient layer:
               pointer-events: none, no DOM overhead. */}
           <div className="absolute inset-0 grid place-items-center pointer-events-none">
-            <SoloVisualizer size={haloPx} innerRadius={Math.round(haloPx * 0.41)} barHeight={Math.round(haloPx * 0.12)} />
+            <SoloVisualizer size={haloPx} innerRadius={vizInnerRadius} barHeight={vizBarHeight} />
           </div>
           {/* Soft outer halo — slow breathing glow, themed */}
           <div
