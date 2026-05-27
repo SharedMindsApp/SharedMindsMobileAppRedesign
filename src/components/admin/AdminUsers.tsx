@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Filter, Edit, AlertCircle, CheckCircle, UserRound, Mail } from 'lucide-react';
+import { Search, Filter, Edit, AlertCircle, CheckCircle, UserRound, Mail, Send, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { getUsers, updateUserRole, type User } from '../../lib/admin';
+import { resendSignupConfirmation } from '../../lib/auth';
 import { useAuth } from '../../contexts/AuthContext';
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -51,6 +52,37 @@ export function AdminUsers() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  /** Tracks which user a resend was just sent for + the outcome.
+   *  Resets after ~3 seconds so the row goes back to its default
+   *  state. Keyed by user.id so multiple admins / multiple resends
+   *  don't blur into one another. */
+  const [resendState, setResendState] = useState<Record<string, 'sending' | 'sent' | 'error'>>({});
+
+  async function handleResendVerification(user: User) {
+    if (!user.email) return;
+    setResendState((s) => ({ ...s, [user.id]: 'sending' }));
+    try {
+      await resendSignupConfirmation(user.email);
+      setResendState((s) => ({ ...s, [user.id]: 'sent' }));
+      setTimeout(() => {
+        setResendState((s) => {
+          const next = { ...s };
+          if (next[user.id] === 'sent') delete next[user.id];
+          return next;
+        });
+      }, 3000);
+    } catch (e) {
+      console.warn('[AdminUsers] resend failed:', e);
+      setResendState((s) => ({ ...s, [user.id]: 'error' }));
+      setTimeout(() => {
+        setResendState((s) => {
+          const next = { ...s };
+          if (next[user.id] === 'error') delete next[user.id];
+          return next;
+        });
+      }, 3500);
+    }
+  }
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [newRole, setNewRole] = useState<'free' | 'premium' | 'admin'>('free');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -220,16 +252,69 @@ export function AdminUsers() {
                           </div>
                         </td>
 
-                        {/* Email */}
+                        {/* Email + confirmation status. Unconfirmed users
+                            get an amber "Unconfirmed" pill + a Resend
+                            button right there — handles the support case
+                            where someone signed up but never clicked the
+                            link (lost it, link expired, landed in spam). */}
                         <td className="py-3 px-5">
                           {user.email ? (
-                            <a
-                              href={`mailto:${user.email}`}
-                              className="flex items-center gap-1.5 text-gray-700 hover:text-blue-600 truncate"
-                            >
-                              <Mail size={12} className="text-gray-400 shrink-0" />
-                              <span className="truncate">{user.email}</span>
-                            </a>
+                            <div className="space-y-1 min-w-0">
+                              <a
+                                href={`mailto:${user.email}`}
+                                className="flex items-center gap-1.5 text-gray-700 hover:text-blue-600 truncate"
+                              >
+                                <Mail size={12} className="text-gray-400 shrink-0" />
+                                <span className="truncate">{user.email}</span>
+                              </a>
+                              {user.email_confirmed_at ? (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full ring-1 ring-emerald-200"
+                                  title={`Confirmed on ${new Date(user.email_confirmed_at).toLocaleString('en-GB')}`}
+                                >
+                                  <ShieldCheck size={9} />
+                                  Verified
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full ring-1 ring-amber-200">
+                                    <ShieldAlert size={9} />
+                                    Unconfirmed
+                                  </span>
+                                  {(() => {
+                                    const state = resendState[user.id];
+                                    if (state === 'sent') {
+                                      return (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700">
+                                          <CheckCircle size={10} />
+                                          Sent
+                                        </span>
+                                      );
+                                    }
+                                    if (state === 'error') {
+                                      return (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700" title="Resend failed — check Supabase Auth logs">
+                                          <AlertCircle size={10} />
+                                          Failed
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResendVerification(user)}
+                                        disabled={state === 'sending'}
+                                        title="Send a new verification email to this user"
+                                        className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-50"
+                                      >
+                                        <Send size={9} />
+                                        {state === 'sending' ? 'Sending…' : 'Resend'}
+                                      </button>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-gray-400 text-xs">unknown</span>
                           )}

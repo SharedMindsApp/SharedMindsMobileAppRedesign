@@ -38,6 +38,10 @@ export interface User {
   onboarding_completed: boolean;
   created_at: string;
   last_sign_in_at: string | null;
+  /** From auth.users — null means the user never clicked the
+   *  confirmation link. Admin UI surfaces this as an "Unconfirmed"
+   *  badge + Resend-verification action. */
+  email_confirmed_at: string | null;
 }
 
 export interface AnalyticsSummary {
