@@ -28,6 +28,19 @@ type PlayingListener = (playing: boolean) => void;
 const listeners = new Set<PlayingListener>();
 let currentPlaying = false;
 
+// Mute state lives at the bus level so any surface (the full music
+// player AND the floating timer widget) can toggle it. Persisted to
+// localStorage so it survives reloads — users who want silence stay
+// silenced until they explicitly unmute.
+type MutedListener = (muted: boolean) => void;
+const mutedListeners = new Set<MutedListener>();
+const LS_MUTED = 'sm.musicMuted';
+let currentMuted = (() => {
+  if (typeof window === 'undefined') return false;
+  try { return window.localStorage.getItem(LS_MUTED) === 'true'; }
+  catch { return false; }
+})();
+
 function ensureContext(): void {
   if (ctx) return;
   const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -89,5 +102,30 @@ export const musicAudioBus = {
   /** Visualizer pulls frequency data each animation frame via this. */
   getAnalyser(): AnalyserNode | null {
     return analyser;
+  },
+
+  // ── Mute control ─────────────────────────────────────────
+  // The player and the floating widget both surface a mute button;
+  // they share the same state via the bus.
+
+  getMuted(): boolean { return currentMuted; },
+
+  setMuted(muted: boolean): void {
+    if (muted === currentMuted) return;
+    currentMuted = muted;
+    try { window.localStorage.setItem(LS_MUTED, String(muted)); } catch { /* private */ }
+    // The actual volume application is owned by SessionMusicPlayer's
+    // useEffect on the audio element. It subscribes to muted changes
+    // and updates audio.volume accordingly. We could also force-set
+    // audio.volume here, but that'd race the player's own effect.
+    mutedListeners.forEach((fn) => fn(muted));
+  },
+
+  toggleMuted(): void { this.setMuted(!currentMuted); },
+
+  subscribeMuted(fn: MutedListener): () => void {
+    mutedListeners.add(fn);
+    fn(currentMuted);
+    return () => { mutedListeners.delete(fn); };
   },
 };

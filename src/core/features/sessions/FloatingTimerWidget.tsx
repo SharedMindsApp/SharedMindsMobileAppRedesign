@@ -9,17 +9,18 @@
 // Behaviour:
 //   • Only renders when there's an active session AND the user is
 //     NOT currently on /session/:id (would be redundant).
-//   • Click → navigates back to /session/:id (full focus view).
-//   • Compact pill (~120px wide) — tabular mm:ss + tiny progress ring.
-//   • Bottom-left so it doesn't fight with the chat bubble (bottom-right).
+//   • Click the body → navigates back to /session/:id (full focus view).
+//   • Click the mute icon → toggles music mute via musicAudioBus, so
+//     the user can silence the background track from any page without
+//     opening the player.
 //
-// We mount it inside Layout so it survives route changes. The
-// FocusSessionContext is already provided at the app root.
+// Mute state is shared with SessionMusicPlayer through musicAudioBus.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Timer, Maximize2 } from 'lucide-react';
+import { Timer, Maximize2, Volume2, VolumeX } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
+import { musicAudioBus } from './musicAudioBus';
 
 function pad(n: number): string { return n.toString().padStart(2, '0'); }
 function formatRemaining(secs: number): string {
@@ -35,13 +36,16 @@ export function FloatingTimerWidget() {
   const location = useLocation();
 
   // All hooks must run unconditionally — early returns go below.
-  // Colour shifts amber/rose in the last 5 / 1 minutes so the peripheral
-  // cue stays consistent with the big timer.
   const stroke = useMemo(() => {
     if (timerSecondsRemaining <= 60) return '#fb7185';
     if (timerSecondsRemaining <= 300) return '#fbbf24';
     return '#a78bfa';
   }, [timerSecondsRemaining]);
+
+  // Subscribe to mute state from the bus so this widget and the full
+  // music player stay in sync.
+  const [muted, setMuted] = useState<boolean>(() => musicAudioBus.getMuted());
+  useEffect(() => musicAudioBus.subscribeMuted(setMuted), []);
 
   // Hide when there's no active session OR the user is already on the
   // session surface (the dedicated timer there is much richer).
@@ -60,34 +64,55 @@ export function FloatingTimerWidget() {
   const label = sessionGoal || 'Focus session';
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(`/session/${activeSession.id}`)}
-      title="Return to session"
-      className="fixed bottom-4 left-4 z-[60] inline-flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md text-white shadow-xl ring-1 ring-white/10 hover:bg-slate-800 hover:-translate-y-0.5 transition-all group"
-      aria-label={`Return to focus session: ${label}, ${formatRemaining(timerSecondsRemaining)} remaining`}
+    <div
+      className="fixed bottom-4 left-4 z-[60] inline-flex items-center gap-1 rounded-full bg-slate-900/90 backdrop-blur-md text-white shadow-xl ring-1 ring-white/10"
     >
-      {/* Tiny progress ring */}
-      <span className="relative w-7 h-7 shrink-0">
-        <svg width="28" height="28" viewBox="0 0 28 28" className="-rotate-90 absolute inset-0">
-          <circle cx="14" cy="14" r={r} stroke="rgba(255,255,255,0.12)" strokeWidth="2" fill="none" />
-          <circle
-            cx="14" cy="14" r={r}
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinecap="round"
-            fill="none"
-            strokeDasharray={c}
-            strokeDashoffset={offset}
-            style={{ transition: 'stroke-dashoffset 1s linear, stroke 600ms ease' }}
-          />
-        </svg>
-        <Timer size={11} className="absolute inset-0 m-auto text-white/80" />
-      </span>
-      <span className="text-xs font-extrabold tabular-nums leading-none">
-        {formatRemaining(timerSecondsRemaining)}
-      </span>
-      <Maximize2 size={10} className="text-white/50 group-hover:text-white/80 transition-colors" />
-    </button>
+      {/* Main pill — click to return to the session view. */}
+      <button
+        type="button"
+        onClick={() => navigate(`/session/${activeSession.id}`)}
+        title="Return to session"
+        className="inline-flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full hover:bg-white/5 transition-colors group"
+        aria-label={`Return to focus session: ${label}, ${formatRemaining(timerSecondsRemaining)} remaining`}
+      >
+        {/* Tiny progress ring */}
+        <span className="relative w-7 h-7 shrink-0">
+          <svg width="28" height="28" viewBox="0 0 28 28" className="-rotate-90 absolute inset-0">
+            <circle cx="14" cy="14" r={r} stroke="rgba(255,255,255,0.12)" strokeWidth="2" fill="none" />
+            <circle
+              cx="14" cy="14" r={r}
+              stroke={stroke}
+              strokeWidth="2"
+              strokeLinecap="round"
+              fill="none"
+              strokeDasharray={c}
+              strokeDashoffset={offset}
+              style={{ transition: 'stroke-dashoffset 1s linear, stroke 600ms ease' }}
+            />
+          </svg>
+          <Timer size={11} className="absolute inset-0 m-auto text-white/80" />
+        </span>
+        <span className="text-xs font-extrabold tabular-nums leading-none">
+          {formatRemaining(timerSecondsRemaining)}
+        </span>
+        <Maximize2 size={10} className="text-white/50 group-hover:text-white/80 transition-colors" />
+      </button>
+
+      {/* Mute toggle — independent button so clicking it doesn't
+          navigate back to the session. */}
+      <button
+        type="button"
+        onClick={() => musicAudioBus.toggleMuted()}
+        title={muted ? 'Unmute music' : 'Mute music'}
+        aria-label={muted ? 'Unmute music' : 'Mute music'}
+        className={`shrink-0 mr-1 w-7 h-7 rounded-full grid place-items-center transition-colors ${
+          muted
+            ? 'bg-white/10 text-rose-300 hover:bg-white/20'
+            : 'bg-transparent text-white/60 hover:bg-white/10 hover:text-white'
+        }`}
+      >
+        {muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+      </button>
+    </div>
   );
 }

@@ -71,7 +71,15 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
   const [volume, setVolume] = useState<number>(() =>
     readLocal(LS_VOLUME, 0.35, (v) => Math.min(1, Math.max(0, parseFloat(v)))),
   );
-  const [muted, setMuted] = useState(false);
+  // Muted state lives in musicAudioBus so the FloatingTimerWidget
+  // (mounted on every page) and this player share one source of
+  // truth. Local React state mirrors it via subscribeMuted.
+  const [muted, setMutedLocal] = useState<boolean>(() => musicAudioBus.getMuted());
+  useEffect(() => musicAudioBus.subscribeMuted(setMutedLocal), []);
+  const setMuted = (v: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? (v as (p: boolean) => boolean)(musicAudioBus.getMuted()) : v;
+    musicAudioBus.setMuted(next);
+  };
 
   // Per-session state.
   const [track, setTrack] = useState<SessionTrack | null>(null);

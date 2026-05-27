@@ -13,6 +13,7 @@ import { fetchTotalUnreadDms, subscribeToAnyIncomingDm, updateDmPrivacy, type Dm
 import { supabase } from '../lib/supabase';
 import { MessagingDock } from '../core/features/messages/MessagingDock';
 import { FloatingTimerWidget } from '../core/features/sessions/FloatingTimerWidget';
+import { PersistentMusicMount } from '../core/features/sessions/PersistentMusicMount';
 import { NotificationsBell } from './notifications/NotificationsBell';
 // SpaceSwitcher removed — replaced by SharedMinds brand text in header
 // Cleaned duplicate and missing imports
@@ -897,6 +898,11 @@ export function Layout({ children }: LayoutProps) {
           when we're already on the session page. Lets the user keep
           a Quick Timer running while they plan / edit / browse. */}
       <FloatingTimerWidget />
+
+      {/* Persistent music — keeps the <audio> element alive across
+          route changes so minimising the timer doesn't kill playback.
+          Self-hides on /session/:id (that page has its own player). */}
+      <PersistentMusicMount />
 
     </div>
   );

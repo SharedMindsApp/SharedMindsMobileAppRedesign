@@ -738,15 +738,9 @@ export function ActiveSessionPage() {
         </div>
       )}
 
-      {/* Floating music mini-bar — opt-in background tracks. In hosted
-          group sessions the host controls the track; participants can only
-          mute on their device. Solo / 1-on-1 sessions stay per-user. */}
-      <SessionMusicPlayer
-        category={musicCategory}
-        sessionId={activeSession?.id ?? null}
-        isGroupSession={isMusicGroupSession}
-        isHost={isMusicHost}
-      />
+      {/* SessionMusicPlayer is mounted by Layout (PersistentMusicMount)
+          so audio survives route changes — e.g. minimising the timer
+          shouldn't stop the music. The component used to live here. */}
 
       {/* Wizard overlay — covers the session when a guided experience is
           running. Host launches via the top-bar sparkles button. */}
