@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!--
+  SharedMinds — signup confirmation email.
+
+  Paste the contents of this file into:
+    Supabase Dashboard → Authentication → Email Templates → "Confirm signup"
+    → Message (HTML) tab.
+
+  Suggested Subject line:
+    Welcome to SharedMinds — one tap to confirm your email
+
+  Supabase variables available in this template:
+    {{ .ConfirmationURL }}  — the one-click confirm link (use this for the button)
+    {{ .Email }}            — recipient's address
+    {{ .SiteURL }}          — your configured Site URL
+    {{ .Token }}            — 6-digit OTP (offered as a fallback)
+
+  Design rules:
+    * Table-based layout — most reliable across Gmail / Outlook / Apple Mail
+    * All CSS inline — <style> tags get stripped by some clients
+    * Web-safe fonts only — system font stack
+    * No external images — the only "logo" is a styled wordmark
+    * Mobile-first — single-column at every width
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Welcome to SharedMinds</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f4f6f8; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#0f172a;">
+    <!-- Preheader — the snippet preview most clients show next to the subject. -->
+    <span style="display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden;">
+      Confirm your email to start coworking on SharedMinds. One tap and you're in.
+    </span>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f6f8; padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px; width:100%; background-color:#ffffff; border-radius:16px; box-shadow:0 1px 3px rgba(15,23,42,0.06); overflow:hidden;">
+
+            <!-- Brand bar -->
+            <tr>
+              <td style="background:linear-gradient(135deg,#06b6d4 0%,#3b82f6 100%); padding:24px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr>
+                    <td style="font-size:18px; font-weight:800; color:#ffffff; letter-spacing:-0.01em;">
+                      SharedMinds
+                    </td>
+                    <td align="right" style="font-size:11px; font-weight:600; color:rgba(255,255,255,0.85); letter-spacing:0.08em; text-transform:uppercase;">
+                      Welcome
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Hero -->
+            <tr>
+              <td style="padding:36px 32px 8px 32px;">
+                <h1 style="margin:0 0 8px 0; font-size:24px; line-height:1.25; font-weight:800; color:#0f172a; letter-spacing:-0.02em;">
+                  One tap to confirm your email
+                </h1>
+                <p style="margin:0; font-size:15px; line-height:1.55; color:#475569;">
+                  Welcome to SharedMinds — a place to do focused work alongside other humans.
+                  Confirm your email so we know you own this address, and you're in.
+                </p>
+              </td>
+            </tr>
+
+            <!-- CTA -->
+            <tr>
+              <td style="padding:24px 32px 8px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="border-radius:12px; background:linear-gradient(135deg,#06b6d4 0%,#3b82f6 100%);">
+                      <a href="{{ .ConfirmationURL }}"
+                         style="display:inline-block; padding:14px 28px; font-size:15px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:12px;">
+                        Confirm my email →
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Fallback URL -->
+            <tr>
+              <td style="padding:8px 32px 0 32px;">
+                <p style="margin:0; font-size:12px; line-height:1.5; color:#64748b;">
+                  Button not working? Copy and paste this URL into your browser:
+                </p>
+                <p style="margin:6px 0 0 0; font-size:12px; line-height:1.4; word-break:break-all;">
+                  <a href="{{ .ConfirmationURL }}" style="color:#0891b2; text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- What's next -->
+            <tr>
+              <td style="padding:32px 32px 8px 32px;">
+                <p style="margin:0 0 12px 0; font-size:11px; font-weight:700; letter-spacing:0.1em; color:#94a3b8; text-transform:uppercase;">
+                  What's next
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr>
+                    <td style="padding:0 0 12px 0; font-size:14px; line-height:1.5; color:#334155;">
+                      <strong style="color:#0f172a;">1. Pick what you're working on</strong><br>
+                      A goal for the next 25 minutes — a draft, an email, a stuck task.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 0 12px 0; font-size:14px; line-height:1.5; color:#334155;">
+                      <strong style="color:#0f172a;">2. Open the door</strong><br>
+                      Solo, with a body double, or matched with someone working on something similar.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 0 0 0; font-size:14px; line-height:1.5; color:#334155;">
+                      <strong style="color:#0f172a;">3. Finish a thing</strong><br>
+                      Tell us what you got done. Tomorrow we'll nudge you to do the next one.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Sign-off -->
+            <tr>
+              <td style="padding:24px 32px 8px 32px;">
+                <p style="margin:0; font-size:14px; line-height:1.5; color:#475569;">
+                  Glad to have you,<br>
+                  <strong style="color:#0f172a;">The SharedMinds team</strong>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding:24px 32px 32px 32px; border-top:1px solid #e2e8f0; margin-top:16px;">
+                <p style="margin:0; font-size:11px; line-height:1.5; color:#94a3b8;">
+                  This confirmation was requested for <a href="mailto:{{ .Email }}" style="color:#64748b; text-decoration:none;">{{ .Email }}</a>.
+                  If it wasn't you, you can ignore this email — no account will be created until the link above is clicked.
+                </p>
+                <p style="margin:12px 0 0 0; font-size:11px; line-height:1.5; color:#94a3b8;">
+                  © SharedMinds · <a href="{{ .SiteURL }}" style="color:#64748b; text-decoration:none;">{{ .SiteURL }}</a>
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
