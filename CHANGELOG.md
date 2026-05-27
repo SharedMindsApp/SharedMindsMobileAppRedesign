@@ -1,0 +1,243 @@
+# Changelog
+
+All notable changes to SharedMinds. Format inspired by [Keep a Changelog](https://keepachangelog.com/).
+
+Pre-1.0 versioning: each numbered release groups a day of meaningful work.
+Bug fixes and small UX polish that ride alongside a feature ship are folded
+into that release rather than getting their own entry.
+
+
+## [v0.5.0] — 2026-05-27
+
+The community-coworking flywheel: open-to-match, real notifications, and the
+mobile redesign pass. Plus the route-level code splitting that finally gets
+cold-load time under control.
+
+### Added
+- **Open-to-match flow.** "Match me now" no longer drops you into a waiting
+  room. Clicking it starts a real solo session flagged `open_to_match=true`;
+  other online users see it in the new "Drop in · live now" lane (FindSessionsSheet
+  + a passive home-page strip) and claim a slot via the race-safe
+  `claim_open_session` RPC. No more wasted-wait failure mode.
+- **Matched-session choreography.** Synthesised join / leave / knock /
+  phase-transition chimes (Web Audio, no asset weight). Music ducks to 20%
+  during the intro phase. Intro overlay with vibe-aware countdown
+  (silent / brief_hi / chatty). Mics auto-mute on the intro→work boundary
+  when the host's vibe isn't "chatty".
+- **Reminder scheduler.** `session_reminder_5min` and `session_missed`
+  notifications actually fire now — the schema defined them but no code
+  ever created them. Plus a `session_now` ping if a scheduled session
+  passes its start time without being kicked off.
+- **Streak nudges + UI.** Daily `streak_at_risk` notification at 19:00 UTC
+  for opt-in users with a ≥2-day streak. Home-page streak chip ("3-day
+  streak") via new `current_streak()` RPC.
+- **In-app notification preferences.** 10 categories × 2 channels (in-app,
+  email) matrix in Settings. Quiet-hours window for habit nudges. BEFORE
+  INSERT gate at the DB level so disabled categories never bloat the unread
+  badge.
+- **Full-screen `/notifications` page.** Tapping the bell on mobile
+  navigates here instead of opening a cramped dropdown — iOS-style.
+- **People page filters redesigned.** Three horizontal-scroll chip rows
+  collapsed into a single bar with pop-out pickers (search-within for skills
+  and countries). Active filter shown inline on the pill; ✕ to clear.
+- **Chat page (mobile) redesigned.** Retired Community/Direct tabs in
+  favour of a messenger-style unified list — Community pinned at top,
+  edge-to-edge DM rows below, sticky search, + FAB above the bottom nav.
+- **Session SFX toggle.** New row in Settings → Notifications. "Preview"
+  button auditions all four chimes.
+- **Music albums expanded.** Dusk (Middle Eastern modal), Drive, and Score
+  doubled with thematic sibling tracks. Album "open" renamed to "zen" with
+  the Japanese East-Asian aesthetic.
+
+### Changed
+- **Mark-as-read** removes the row from the visible list instead of greying
+  it out. Same behaviour for "Mark all read" — clears the inbox. Rows
+  persist in the DB with `read_at` set for any future archive view.
+- **DM notifications retired from the bell.** The `dm_messages_notify`
+  trigger is dropped; the Chat tab badge is now the single source of truth
+  for DM unread, matching LinkedIn / Facebook / X.
+- **Cold load to `/sessions` is ~72% smaller.** Each authenticated route is
+  now `React.lazy()`-loaded. Was ~375 KB gzipped of JS-to-parse, now ~112 KB
+  (vendor cached). Layout chrome stays visible during chunk load via a
+  `Suspense` fallback inside the `Outlet`.
+
+### Fixed
+- Mobile PWA header was missing the notifications bell entirely — the
+  `<NotificationsBell />` was nested inside a `hidden md:flex` cluster.
+- `shouldShowNotificationBell()` was defined but never called — bell used
+  to show on auth / onboarding / landing routes where it shouldn't.
+- `create_session_reminders()` DB function referenced a renamed column
+  (`fs.goal` → `fs.session_goal`); dropped (superseded by
+  `schedule_session_reminders`).
+- `get_shared_project_view()` was declared `STABLE` but writes to
+  `last_viewed_at`; marked `VOLATILE`.
+- Debrief opens immediately when timer hits 0 (was lagging up to 1s).
+- Pure-white light themes; music UI restored on the session page.
+- Pinned activity label appears immediately on page load.
+- Quick Timer dropdown overflow in the sessions sidebar.
+- Custom-activity duration field accepts free typing.
+
+### Added (earlier in the day, before the open-to-match push)
+- **Session templates.** Structured solo + group focus sessions with
+  configurable segments.
+- **End-of-session chimes + completion burst animation.**
+- **Even-distribution audio visualizer** with 3 styles + off toggle.
+- **TIMER vs SOLO pill** on the calendar — distinguishes Quick Timer rows
+  from full Solo sessions.
+- **Edit + cancel scheduled sessions** directly from the calendar.
+- **Pin a go-to activity** in the Quick Timer.
+- **Activity Manager** — prune, customise, browse a library of activities.
+- **Search across activities + library** in the Quick Timer dropdown.
+- **Quick Activities + scheduling** on the Quick Timer.
+- **Audio-reactive visualizer** on the solo focus view.
+- **Solo focus theme picker** + responsive ring sizing.
+- **Custom Quick Timer durations** + remember last used.
+
+### Removed
+- `MatchWaitingSheet` component + `matchMeNow` / `joinPendingMatch` /
+  `fetchLiveWaitingMatches` / `cancelPendingMatch` service functions.
+  The waiting-room flow they implemented is replaced by open-to-match.
+
+
+## [v0.4.0] — 2026-05-26
+
+Projects pivot deepens: covers, external sharing, task tabs. Music + host
+controls land for sessions. The home page graduates from progressive paint
+to a single server-side RPC.
+
+### Added
+- **Phase A: No-gap-no-shame tone reset** — forgiving momentum band
+  (never a hard streak count) + Quick Restart card for returners.
+- **Phase B: "Make this smaller" task breakdown helper** — ADHD-friendly
+  three-prompt forcing function to shrink stuck goals.
+- **Phase C: Real-world / offline-capable sessions** — solo mode for tasks
+  away from the screen.
+- **Phase D: Simple external project sharing** — accountability-view link
+  for someone outside the platform to follow along.
+- **Project Tasks tab** with Day / Week views + Backlog + carry-forward.
+- **Project covers** — drag-to-reposition + zoom + fit mode + background
+  colour + text-colour toggle.
+- **Project completion bar** + nested milestones with weights.
+- **Co-host + lock-joins moderation** for matched sessions.
+- **Host controls**: break wizard + extend session +15 / +30 min.
+- **Binaural beats layer** — opt-in subliminal tone per music category.
+- **Session music**, host control, wizards, and a state-driven taxonomy.
+- **Scheduled-session gate** — only eligible hosts publish to the public
+  calendar.
+
+### Changed
+- **Home page** is now a single server-side RPC — one round-trip, everything
+  paints together. Previously four staggered queries.
+- **Admin** replaces the duplicate header link with **Projects**.
+- **Project hero** — "Find a session" alongside "Start a session".
+- **Project delete** — themed modal instead of a native `confirm()` prompt.
+- **Notifications** — "Mark all read" now verifies + per-row dismiss via ✕.
+
+### Fixed
+- Project card progress reflects the whole project, not just the current
+  weekly task slice.
+- Hero edit pencil adapts to text colour so it stays visible on light
+  covers; "Read more" opens a modal instead of expanding inline.
+- Replaced `LockOpen` with `Unlock` for older `lucide-react` compatibility.
+- Dead `TasksTab` + `TaskRow` duplicates removed (were causing build
+  failure).
+- Multiple cover hero polish passes — text-on-image stacking, gradient,
+  backdrop-blur panel, themed Read more.
+
+
+## [v0.3.0] — 2026-05-21
+
+Sessions reliability sprint. JaaS (Jitsi-as-a-Service) JWT auth replaces
+the raw iframe with a properly authenticated meeting layer.
+
+### Added
+- **JaaS JWT auth** — permanent host, lobby, emoji reactions, moderation.
+- **DeclareSessionModal: 1-on-1 default** + inline When picker.
+- **Inline task creation** in DeclareSessionModal.
+
+### Fixed
+- Session page blank — router state handoff + dark loading background +
+  JaaS fallback.
+- JaaS blank screen — hide iframe during load, disable prejoin correctly.
+- JaaS CSP, session restore, HMR stability, task deletion UX.
+- JaaS script URL + session page fills viewport correctly.
+
+
+## [v0.2.0] — 2026-05-20
+
+Notifications foundation + communal chat + the Today/Week planner. The
+admin panel gets rebuilt around platform events. Push notifications +
+email dispatch wired.
+
+### Added
+- **Phase 1.A: Notifications foundation** — schema + service + bell +
+  Settings panel.
+- **Phase 1.B: Email dispatch pipeline** — Edge function reads
+  notifications and sends emails through the prefs gate.
+- **Push notifications** wired through the browser Notifications API.
+- **Persistent floating chat dock** — LinkedIn / Reddit style on desktop.
+- **Communal chat** — global room, presence indicators, desktop bubble.
+- **DM privacy / Do Not Disturb** setting.
+- **Today + Week time-block planner** on the home page.
+- **ADHD microtask breakdown** + side-by-side intentions layout.
+- **Skills step** in onboarding + final CTA polish.
+- **Admin Activity Logs** rebuilt as a real platform event feed.
+- **Admin Settings page** replaced with real controls.
+- **Replaced raw Jitsi iframe** with External API component + return-to-session chip.
+
+### Changed
+- **Profile page** redesigned with richer stats, completion card, highlights.
+- **People page** — skill filter chips; Settings merged into `/profile` tabs.
+- **People page** feels alive: presence, working-now, smart sort.
+- **Chat page** — two-column layout, live sidebar, richer empty state.
+- **Nav consolidated** + chat/messages merged into a single unified dock.
+
+### Fixed
+- Founder account set to `role=admin` in DB (was previously empty).
+- Infinite RLS recursion on `dm_participants` → 500s on all queries.
+- `fetch notification_preferences` separately to avoid schema cache join error.
+- Multiple migration safety fixes — `DROP POLICY IF EXISTS` guards across
+  connections + public visibility + email pipeline migrations.
+- Admin role badge stale state; theme picker moved to Profile > Account tab.
+- Notification settings link + resilient prefs panel.
+- Notifications bell dropdown clipped by nav `overflow` — portalled to body.
+- `dm_privacy` migration: removed invalid `INTO STRICT...USING` syntax.
+- Communal chat migration: `DROP POLICY IF EXISTS` before `CREATE`.
+- Email pipeline: guard all triggers with table-existence checks.
+- `pg_cron` nested dollar-quote syntax.
+- Notifications migration: bridge old `is_read` schema.
+
+
+## [v0.1.0] — 2026-05-19
+
+The post-pivot foundation. SharedMinds becomes a community-coworking
+accountability platform. Sessions and Calendar merged into one surface.
+Projects MVP. People directory + DMs. Recurring admin-curated sessions.
+
+### Added
+- **Sessions + Calendar unified** — Focusmate-style hour grid replaces the
+  list-style page.
+- **Projects MVP** — schema + service + list / detail / editor + sharing.
+- **DeclareSessionModal**: popup on web, bottom sheet on mobile, inline
+  task save.
+- **People directory** + DM UI + unread badge (Phase A: Connections expansion).
+- **Community feed** — hybrid manual posts + auto activity (Phase B).
+- **Weekly Review ritual** — 3 intentions in / 3 reviewed out.
+- **IntentionWizard** — guided multi-step flow for setting weekly intentions.
+- **Admin-scheduled recurring group sessions.**
+- **Home page v2** rebuilt around a single answer to "what now?".
+- **Migration: anon read** for public scheduled + active community sessions.
+
+### Changed
+- **Admin panel redesigned** for the community coworking product.
+- **Avatar moderation** fails open + Settings upload tile.
+- **Rename Ship → Finish** across user-facing copy.
+
+### Fixed
+- Admin User Management: show email + all users + drop legacy fields.
+- Refresh admin sidebar profile so role badge isn't stale.
+
+### Removed
+- Excised the last of guardrails (pre-pivot module) from the active codebase.
+- Landing page moved to its own sibling repo.
+- Pre-pivot code archived to sibling legacy repo.

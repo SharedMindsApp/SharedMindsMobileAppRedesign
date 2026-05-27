@@ -55,6 +55,7 @@ const AdminSettings         = lazy(() => import('../components/admin/AdminSettin
 const AdminRecurringSessions = lazy(() => import('../components/admin/AdminRecurringSessions').then(m => ({ default: m.AdminRecurringSessions })));
 const AdminModerationQueue  = lazy(() => import('../components/admin/AdminModerationQueue').then(m => ({ default: m.AdminModerationQueue })));
 const AdminSafetyEscalation = lazy(() => import('../components/admin/AdminSafetyEscalation').then(m => ({ default: m.AdminSafetyEscalation })));
+const AdminChangelog        = lazy(() => import('../components/admin/AdminChangelog').then(m => ({ default: m.AdminChangelog })));
 
 const TermsOfServicePage    = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.TermsOfServicePage })));
 const PrivacyPolicyPage     = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.PrivacyPolicyPage })));
@@ -252,6 +253,7 @@ function AppContent() {
                     <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
                     <Route path="analytics" element={<AdminAnalytics />} />
                     <Route path="logs" element={<AdminLogs />} />
+                    <Route path="changelog" element={<AdminChangelog />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Routes>
                 </Suspense>

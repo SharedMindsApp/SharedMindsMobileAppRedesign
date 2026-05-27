@@ -14,6 +14,7 @@ import {
   CalendarRange,
   ShieldCheck,
   ShieldAlert,
+  FileText,
 } from 'lucide-react';
 import { getOpenFlagCount } from '../../core/services/ModerationService';
 import { useAuth } from '../../core/auth/AuthProvider';
@@ -59,6 +60,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin/recurring-sessions',  icon: CalendarRange,   label: 'Recurring Sessions', badge: 0 },
     { path: '/admin/analytics',           icon: BarChart3,       label: 'Analytics',          badge: 0 },
     { path: '/admin/logs',                icon: ScrollText,      label: 'Activity Logs',      badge: 0 },
+    { path: '/admin/changelog',           icon: FileText,        label: 'Release notes',      badge: 0 },
     { path: '/admin/settings',            icon: Settings,        label: 'Settings',           badge: 0 },
   ];
 
