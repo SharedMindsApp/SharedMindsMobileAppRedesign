@@ -29,9 +29,11 @@ export function PersistentMusicMount() {
   // No session → nothing to play.
   if (!activeSession) return null;
 
-  // The session page renders its own player (with richer chrome + the
-  // ambient peers strip nearby). Don't double-mount.
-  if (location.pathname.startsWith('/session/')) return null;
+  // (Previously we hid the player on /session/:id on the assumption
+  // the session page rendered its own. Since the in-page player was
+  // removed during the persistence refactor, the persistent mount is
+  // now the single source of truth for music UI everywhere.)
+  void location;
 
   const isGroupSession = activeSession.session_mode === 'group';
   const isHost = activeSession.user_id === user?.id;
