@@ -122,12 +122,12 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/20 backdrop-blur-md"
+      className="fixed inset-0 z-[80] flex items-end sm:items-start justify-center p-0 sm:pt-8 sm:p-4 bg-black/20 backdrop-blur-md overflow-y-auto"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-4rem)] overflow-hidden my-auto sm:my-0"
       >
         {/* Header */}
         <div className="shrink-0 flex items-start justify-between gap-3 px-5 pt-5 pb-3">
