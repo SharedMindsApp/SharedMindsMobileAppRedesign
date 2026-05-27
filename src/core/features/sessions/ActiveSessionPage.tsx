@@ -772,7 +772,7 @@ function SoloFocusView({
   const progress = totalSeconds > 0 ? Math.max(0, 1 - secondsRemaining / totalSeconds) : 0;
   const elapsedMin = Math.max(0, Math.floor((totalSeconds - secondsRemaining) / 60));
   const totalMin = Math.round(totalSeconds / 60);
-  const radius = 110;
+  const radius = 118;
   const circumference = 2 * Math.PI * radius;
   const strokeOffset = circumference * (1 - progress);
 
@@ -865,46 +865,96 @@ function SoloFocusView({
       {!hideAmbientStrip && <AmbientPeersStrip />}
 
       <div className="relative h-full flex flex-col items-center justify-center px-6 py-8 text-center">
-        {/* Circular progress + elapsed/total in centre */}
+        {/* Circular timer — ring around a live mm:ss countdown. The
+            ring colour shifts amber → rose as time runs low so the
+            user gets peripheral-vision feedback without reading the
+            digits. Outer faint ring breathes ±2px so even a static
+            timer feels alive. */}
         <div className="relative mb-8">
-          <svg width="260" height="260" viewBox="0 0 260 260" className="-rotate-90">
+          {/* Soft outer halo — slow breathing glow */}
+          <div
+            className="absolute inset-0 rounded-full blur-3xl opacity-40 pointer-events-none animate-pulse"
+            style={{
+              background: 'radial-gradient(circle, rgba(167,139,250,0.45) 0%, transparent 65%)',
+              animationDuration: '4s',
+            }}
+          />
+          <svg width="280" height="280" viewBox="0 0 280 280" className="-rotate-90 relative">
+            {/* Track */}
             <circle
-              cx="130"
-              cy="130"
+              cx="140"
+              cy="140"
               r={radius}
-              stroke="rgba(255,255,255,0.08)"
-              strokeWidth="6"
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth="10"
               fill="none"
             />
+            {/* Tick marks at 12 / 3 / 6 / 9 — subtle clock-face hint */}
+            {[0, 90, 180, 270].map((deg) => {
+              const rad = (deg * Math.PI) / 180;
+              const r1 = radius + 8;
+              const r2 = radius + 14;
+              return (
+                <line
+                  key={deg}
+                  x1={140 + r1 * Math.cos(rad)}
+                  y1={140 + r1 * Math.sin(rad)}
+                  x2={140 + r2 * Math.cos(rad)}
+                  y2={140 + r2 * Math.sin(rad)}
+                  stroke="rgba(255,255,255,0.15)"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+            {/* Progress arc */}
             <circle
-              cx="130"
-              cy="130"
+              cx="140"
+              cy="140"
               r={radius}
-              stroke="url(#solo-grad)"
-              strokeWidth="6"
+              stroke={secondsRemaining <= 60
+                ? 'url(#solo-grad-end)'
+                : secondsRemaining <= 300
+                ? 'url(#solo-grad-warn)'
+                : 'url(#solo-grad)'}
+              strokeWidth="10"
               strokeLinecap="round"
               fill="none"
               strokeDasharray={circumference}
               strokeDashoffset={strokeOffset}
-              style={{ transition: 'stroke-dashoffset 1s linear' }}
+              style={{
+                transition: 'stroke-dashoffset 1s linear, stroke 600ms ease',
+                filter: 'drop-shadow(0 0 8px rgba(167,139,250,0.35))',
+              }}
             />
             <defs>
               <linearGradient id="solo-grad" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#a78bfa" />
                 <stop offset="100%" stopColor="#60a5fa" />
               </linearGradient>
+              <linearGradient id="solo-grad-warn" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#fbbf24" />
+                <stop offset="100%" stopColor="#fb923c" />
+              </linearGradient>
+              <linearGradient id="solo-grad-end" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#fb7185" />
+                <stop offset="100%" stopColor="#ef4444" />
+              </linearGradient>
             </defs>
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/45 mb-2">
               {phase}
             </p>
-            <p className="text-5xl font-extrabold text-white tabular-nums">
-              {elapsedMin}
-              <span className="text-2xl text-white/50">/{totalMin}</span>
+            {/* Live mm:ss — the hero number. tabular-nums keeps the
+                digits from jittering as they count down. */}
+            <p className="text-[64px] sm:text-7xl font-extrabold text-white tabular-nums leading-none tracking-tight">
+              {formatRemaining(secondsRemaining)}
             </p>
-            <p className="text-xs text-white/50 mt-1">minutes</p>
+            <p className="text-[11px] text-white/45 mt-3 tabular-nums">
+              {elapsedMin} / {totalMin} min in
+            </p>
           </div>
         </div>
 
