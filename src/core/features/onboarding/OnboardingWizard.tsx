@@ -26,10 +26,11 @@
  *    atomically on the final "done" step.
  */
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowRight, ArrowLeft, Loader2, Camera, Target, Flag, CheckSquare,
   Calendar, Sparkles, Check, Plus, X, Search, Wand2, Briefcase, Clock,
+  Brain, Users, Coffee, Headphones,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
@@ -1332,6 +1333,18 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // No-project path: the trimmed onboarding flow skips steps 6-9
+    // entirely, so projectTitle is always empty when arriving at done.
+    // We just stamp wizard_v2_completed_at and return — no space
+    // bootstrap, no project insert, no milestones, no tasks. Saves
+    // a round-trip and avoids RLS / NULL-title errors.
+    if (!projectTitle.trim()) {
+      await supabase.from('profiles').update({
+        wizard_v2_completed_at: new Date().toISOString(),
+      }).eq('id', user.id);
+      return;
+    }
+
     // 0. Make sure the user has a personal space and grab its id.
     //    The projects table requires space_id (not null) and RLS only
     //    permits inserts where the user is a space_member. Bootstrapping
@@ -1447,6 +1460,25 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       setSaving(false);
     }
   }
+
+  // Auto-finalize when stepping into 'done'. The trimmed onboarding
+  // (welcome → … → intentions → done) doesn't have a final form-submit
+  // step like the old wizard's 'tasks' page did — so without this
+  // effect, advance('done') just lands the user on the celebration
+  // screen forever, with no wizard_v2_completed_at stamp + no
+  // onComplete() call to navigate them out. Guard with hasFinalizedRef
+  // so re-renders / strict-mode double-mounts don't re-fire.
+  const hasFinalizedRef = useRef(false);
+  useEffect(() => {
+    if (step !== 'done') return;
+    if (hasFinalizedRef.current) return;
+    hasFinalizedRef.current = true;
+    void handleComplete();
+    // handleComplete deps are stable callbacks captured at render
+    // time — re-running this effect on its identity change would
+    // double-fire the API call, which we explicitly prevent above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   // ── Primary button helper ──────────────────────────────────────
 
@@ -2980,49 +3012,115 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     );
   }
 
-  // ── 9. Done ───────────────────────────────────────────────────
-  // (Normally onComplete() navigates away before this renders,
-  //  but keep it as a fallback loading state with a celebration.)
+  // ── Done — the celebration ────────────────────────────────────
+  //
+  // The auto-finalize useEffect above fires handleComplete() on first
+  // render of this step; that call ultimately invokes onComplete()
+  // which navigates the user out. This screen is what they see for
+  // the ~300–800ms between save + redirect.
+  //
+  // Themed for SharedMinds: coworking + focus + neurodiversity. The
+  // hero icon is a stylised "two minds together" composition rather
+  // than a generic ✓. Ambient symbols (Brain, Headphones, Target,
+  // Coffee, Users) float up the gradient — each maps to a piece of
+  // the product (deep work, music room, declared goals, shared
+  // moments, body-doubling). Violet is the neurodiversity infinity
+  // colour, paired with cyan/teal for the broader brand.
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-surface gap-4 overflow-hidden wiz-anim">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-violet-50 via-surface to-cyan-50 gap-5 overflow-hidden wiz-anim">
       <style>{WIZARD_ANIM_CSS}</style>
+      <style>{`
+        @keyframes wizFloat {
+          0%   { transform: translate(0, 0) rotate(0deg);   opacity: 0; }
+          15%  { opacity: 0.85; }
+          100% { transform: translate(var(--dx), -120vh) rotate(var(--rot)); opacity: 0; }
+        }
+        @keyframes wizPulse {
+          0%, 100% { transform: scale(1);    opacity: 0.6; }
+          50%      { transform: scale(1.18); opacity: 0.9; }
+        }
+        @keyframes wizOrbit {
+          from { transform: rotate(0deg)   translateX(38px) rotate(0deg);   }
+          to   { transform: rotate(360deg) translateX(38px) rotate(-360deg); }
+        }
+      `}</style>
 
-      {/* Confetti burst */}
-      <div className="absolute inset-0 pointer-events-none">
-        {['🎉', '✨', '🚀', '💫', '🎊', '⭐', '🌟', '💜'].map((emoji, i) => (
-          <span
+      {/* Ambient float — themed icons rising up the screen. Each carries
+          a meaning rather than a generic confetti burst. Positions are
+          spread across the width so it reads as motion, not a stack. */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {([
+          { Icon: Brain,      left: 8,  delay: 0,   dx: 12,  rot: 8,   cls: 'text-violet-400/80' },
+          { Icon: Users,      left: 22, delay: 220, dx: -8,  rot: -6,  cls: 'text-cyan-500/80' },
+          { Icon: Target,     left: 36, delay: 110, dx: 14,  rot: 12,  cls: 'text-emerald-500/80' },
+          { Icon: Headphones, left: 52, delay: 380, dx: -16, rot: -10, cls: 'text-fuchsia-500/80' },
+          { Icon: Sparkles,   left: 66, delay: 60,  dx: 10,  rot: 6,   cls: 'text-amber-500/80' },
+          { Icon: Coffee,     left: 80, delay: 300, dx: -12, rot: -8,  cls: 'text-orange-500/80' },
+          { Icon: Brain,      left: 92, delay: 170, dx: 6,   rot: 4,   cls: 'text-blue-500/80' },
+        ] as const).map((c, i) => (
+          <c.Icon
             key={i}
-            className="absolute text-2xl"
+            size={28}
+            className={`absolute ${c.cls}`}
             style={{
-              left: `${10 + i * 11}%`,
-              top: '60%',
-              animation: `wizConfettiBurst 1.8s cubic-bezier(0.16, 1, 0.3, 1) ${i * 80}ms both`,
+              left: `${c.left}%`,
+              top: '70%',
+              ['--dx' as any]: `${c.dx}px`,
+              ['--rot' as any]: `${c.rot}deg`,
+              animation: `wizFloat 2400ms cubic-bezier(0.22, 1, 0.36, 1) ${c.delay}ms both`,
             }}
-          >
-            {emoji}
-          </span>
+          />
         ))}
       </div>
 
-      <div
-        className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/40"
-        style={{ animation: 'wizPop 600ms cubic-bezier(0.16, 1, 0.3, 1) both' }}
-      >
-        <Check size={36} className="text-white" strokeWidth={3} />
+      {/* Hero composition — a glowing badge with two figures + a soft
+          pulsing halo. The halo lives behind everything via z-stacking.
+          Two Users icons overlap to suggest the "shared" in SharedMinds
+          (two minds coworking) without forcing a literal brain emoji. */}
+      <div className="relative w-32 h-32 flex items-center justify-center">
+        {/* Pulsing halo */}
+        <span
+          className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-400 to-cyan-400 blur-2xl"
+          style={{ animation: 'wizPulse 2400ms ease-in-out infinite' }}
+        />
+        {/* Orbiting spark — implies momentum + connection */}
+        <span
+          className="absolute w-2 h-2 rounded-full bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.7)]"
+          style={{ animation: 'wizOrbit 3.6s linear infinite' }}
+        />
+        {/* The badge itself */}
+        <div
+          className="relative z-10 w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-500 flex items-center justify-center shadow-xl shadow-violet-500/40"
+          style={{ animation: 'wizPop 600ms cubic-bezier(0.16, 1, 0.3, 1) both' }}
+        >
+          <Users size={34} className="text-white" strokeWidth={2.25} />
+        </div>
       </div>
+
       <h2
-        className="stitch-headline text-2xl font-extrabold"
+        className="stitch-headline text-2xl font-extrabold tracking-tight text-center px-6"
         style={{ animation: 'wizFadeUp 500ms cubic-bezier(0.16, 1, 0.3, 1) 200ms both' }}
       >
-        You're all set 🚀
+        Welcome to the room
       </h2>
       <p
-        className="text-sm stitch-text-secondary"
+        className="text-sm stitch-text-secondary text-center max-w-xs px-6"
         style={{ animation: 'wizFadeUp 500ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both' }}
       >
-        Opening the room…
+        Pulling up your seat at the focus table…
       </p>
-      <Loader2 size={20} className="animate-spin stitch-text-secondary mt-2" />
+
+      {/* Loading state hint — only shown if the redirect takes long. */}
+      <Loader2 size={18} className="animate-spin stitch-text-secondary opacity-70 mt-1" />
+
+      {error && (
+        <p
+          className="text-xs font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-200 rounded-xl px-3 py-2 max-w-xs text-center"
+          style={{ animation: 'wizFadeUp 400ms ease-out both' }}
+        >
+          {error} · <button type="button" onClick={() => { hasFinalizedRef.current = false; void handleComplete(); }} className="underline font-bold">Retry</button>
+        </p>
+      )}
     </div>
   );
 }
