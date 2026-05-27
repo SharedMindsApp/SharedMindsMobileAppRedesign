@@ -58,7 +58,15 @@ export interface CommunityPost {
 // ── Feed ────────────────────────────────────────────────────────
 
 /** Fetch the most recent N posts. Pulls authors, reactions, and reply
- *  counts via joins so the feed renders in one round-trip. */
+ *  counts via joins so the feed renders in one round-trip.
+ *
+ *  Defensive filter: we exclude `is_auto = true AND post_type =
+ *  'project_started'` even when no explicit types filter is set.
+ *  The trigger that creates those auto-posts was retired in
+ *  20260528000001 (projects are too sensitive to be public-unless-
+ *  flagged), but any rows from before the migration applies — or
+ *  from a Supabase env where the migration hasn't run yet — should
+ *  still disappear from the visible feed. Belt-and-braces. */
 export async function fetchFeed(opts: { limit?: number; types?: CommunityPostType[] } = {}): Promise<CommunityPost[]> {
   const limit = opts.limit ?? 50;
   let query = supabase
@@ -76,6 +84,12 @@ export async function fetchFeed(opts: { limit?: number; types?: CommunityPostTyp
   if (opts.types && opts.types.length > 0) {
     query = query.in('post_type', opts.types);
   }
+
+  // Filter out auto-shared projects regardless of any types filter.
+  // PostgREST's .not() with a compound predicate isn't directly
+  // expressible — we use .or() to express "NOT (is_auto AND type=project_started)"
+  // as "is_auto IS false OR post_type IS NOT project_started".
+  query = query.or('is_auto.is.false,post_type.neq.project_started');
 
   const { data, error } = await query;
   if (error) {
