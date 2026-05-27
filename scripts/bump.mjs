@@ -49,9 +49,14 @@ const bumpType = args.find((a) => ['patch', 'minor', 'major'].includes(a));
 const dryRun = args.includes('--dry-run');
 const noTag = args.includes('--no-tag');
 const allowDirty = args.includes('--allow-dirty');
+// --launch is the explicit opt-in to cross the v1.0.0 boundary. Pre-launch
+// we want v1.0.0 to be a deliberate decision tied to the public release —
+// never something that can happen via a routine `npm run bump:major`.
+// See the pre-1.0 guard below.
+const launch = args.includes('--launch');
 
 if (!bumpType) {
-  console.error('Usage: node scripts/bump.mjs <patch|minor|major> [--dry-run] [--no-tag] [--allow-dirty]');
+  console.error('Usage: node scripts/bump.mjs <patch|minor|major> [--dry-run] [--no-tag] [--allow-dirty] [--launch]');
   process.exit(1);
 }
 
@@ -100,6 +105,37 @@ const next =
   bumpType === 'major' ? `${maj + 1}.0.0` :
   bumpType === 'minor' ? `${maj}.${min + 1}.0` :
                          `${maj}.${min}.${pat + 1}`;
+
+// ── 2b. Pre-1.0 guard ──────────────────────────────────────────────
+// Semver convention: 0.x.y is pre-release / unstable; v1.0.0 signals
+// public stability. We don't want a routine `bump:major` to cross
+// that boundary by accident — launch should be deliberate. Require
+// --launch to opt in. Inside 0.x.y, the `minor` segment carries the
+// "breaking change" meaning (0.5.0 → 0.6.0 = breaking), so `major`
+// has no day-to-day purpose pre-launch.
+const crossingV1 = maj === 0 && bumpType === 'major';
+if (crossingV1 && !launch) {
+  fail(
+    'Refusing to cross the v1.0.0 boundary on a routine bump.\n\n' +
+    `Current: v${current} (pre-1.0)\n` +
+    `Would become: v${next}\n\n` +
+    'v1.0.0 marks the public launch. Pre-launch, use:\n' +
+    '  • bump:patch — bug fix (0.5.0 → 0.5.1)\n' +
+    '  • bump:minor — feature or breaking change (0.5.0 → 0.6.0)\n\n' +
+    'When you are actually launching, run:\n' +
+    '  npm run bump:launch\n'
+  );
+}
+
+if (crossingV1 && launch) {
+  console.log('');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('  🚀  CROSSING THE v1.0.0 BOUNDARY  🚀');
+  console.log(`     v${current} → v${next}`);
+  console.log('     This release signals public stability.');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+}
 
 // ── 3. Parse + rewrite CHANGELOG.md ────────────────────────────────
 

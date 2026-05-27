@@ -6,9 +6,15 @@ Pre-1.0 versioning: each numbered release groups a day of meaningful work.
 Bug fixes and small UX polish that ride alongside a feature ship are folded
 into that release rather than getting their own entry.
 
+**v1.0.0 is reserved for the public launch.** Pre-launch, all releases
+stay in the 0.x.y range — semver convention treats `0.x` as pre-release
+and uses the minor segment for breaking changes.
+
 To cut a release: add entries under `[Unreleased]` as you ship, then run
-`npm run bump:patch` (or `:minor` / `:major`). The script stamps the
-section with today's date + the new version and tags the commit.
+`npm run bump:patch` (bug fix) or `npm run bump:minor` (feature, including
+breaking changes pre-1.0). The script stamps the section with today's date
++ the new version and tags the commit. `npm run bump:launch` is the
+explicit opt-in to cross the v1.0.0 boundary on launch day.
 
 
 ## [Unreleased]

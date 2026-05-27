@@ -12,7 +12,7 @@
     "repair:pantry-quantities": "node scripts/repair-pantry-quantities.mjs",
     "bump:patch": "node scripts/bump.mjs patch",
     "bump:minor": "node scripts/bump.mjs minor",
-    "bump:major": "node scripts/bump.mjs major",
+    "bump:launch": "node scripts/bump.mjs major --launch",
     "bump:dry": "node scripts/bump.mjs patch --dry-run"
   },
   "dependencies": {
