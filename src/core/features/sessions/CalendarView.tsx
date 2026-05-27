@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Play, ChevronLeft, ChevronRight, Calendar as CalIcon,
   Users, UserPlus, User, Loader2, X, Clock, StopCircle, Plus,
-  CalendarPlus, List as ListIcon, LayoutGrid,
+  CalendarPlus, List as ListIcon, LayoutGrid, Pencil, Trash2, Check,
 } from 'lucide-react';
 import { SessionsListView, type ListSession } from './SessionsListView';
 import { QuickTimerButton } from '../dashboard/QuickTimerButton';
@@ -31,6 +31,8 @@ import {
   fetchUpcomingScheduledSessions,
   joinOneOnOneSession,
   markSessionEnded,
+  updateScheduledSession,
+  deleteScheduledSession,
   type ScheduledSessionWithProfile,
 } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
@@ -698,6 +700,13 @@ export function CalendarView() {
             setDetail(null);
             navigate(`/session/${navigatedId}`);
           }}
+          onChanged={() => {
+            // Re-fetch the scheduled list so the grid / list view
+            // reflects the edit or delete the user just made.
+            fetchUpcomingScheduledSessions(user?.id)
+              .then(setScheduled)
+              .catch((e) => console.warn('[CalendarView] refresh after edit failed', e));
+          }}
         />
       )}
     </div>
@@ -953,12 +962,15 @@ function ActiveSessionBanner({
 // ── Session detail sheet ────────────────────────────────────────
 
 function SessionDetailSheet({
-  session, isMine, onClose, onJoined,
+  session, isMine, onClose, onJoined, onChanged,
 }: {
   session: GridSession;
   isMine: boolean;
   onClose: () => void;
   onJoined: (id: string) => void;
+  /** Called after the user edits or deletes the session so the
+   *  parent can re-fetch the scheduled list and re-render the grid. */
+  onChanged?: () => void;
 }) {
   const [joining, setJoining] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -966,8 +978,59 @@ function SessionDetailSheet({
   const { setActiveSession } = useFocusSession();
 
   const isActive = session.status === 'active';
+  const isScheduled = session.status === 'scheduled';
   const isOneOnOne = session.session_mode === 'one_on_one';
   const partnerOpen = isOneOnOne && !session.partner_user_id;
+
+  // ── Edit state ─────────────────────────────────────────────
+  // Only scheduled sessions are editable. Inline form (no separate
+  // modal) — quicker for small tweaks like changing the start time.
+  const [editing, setEditing] = useState(false);
+  const [editGoal, setEditGoal] = useState<string>(session.session_goal ?? session.session_title ?? '');
+  const [editMinutes, setEditMinutes] = useState<string>(String(session.intended_duration_minutes));
+  const [editDatetime, setEditDatetime] = useState<string>(() => {
+    const d = session.startsAt;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  async function handleSaveEdit() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const parsedMinutes = parseInt(editMinutes, 10);
+      const minutes = Number.isFinite(parsedMinutes)
+        ? Math.min(180, Math.max(5, parsedMinutes))
+        : session.intended_duration_minutes;
+      const when = new Date(editDatetime);
+      if (Number.isNaN(when.getTime())) throw new Error('Pick a valid date and time.');
+      await updateScheduledSession(session.id, {
+        goalText: editGoal.trim() || null,
+        scheduledAt: when,
+        durationMinutes: minutes,
+      });
+      onChanged?.();
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Could not save changes.');
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await deleteScheduledSession(session.id);
+      onChanged?.();
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Could not delete.');
+      setSaving(false);
+    }
+  }
 
   async function handleJoin1on1() {
     setJoining(true);
@@ -1057,9 +1120,43 @@ function SessionDetailSheet({
           />
         </div>
 
-        <p className="text-sm stitch-text-primary leading-snug mb-4">
-          {session.session_goal ?? session.session_title ?? 'Working on something'}
-        </p>
+        {/* Edit form for owner-edit on scheduled sessions; otherwise
+            just the read-only goal text. */}
+        {editing && isMine && isScheduled ? (
+          <div className="space-y-2 mb-4">
+            <input
+              type="text"
+              value={editGoal}
+              onChange={(e) => setEditGoal(e.target.value)}
+              placeholder="What are you working on?"
+              className="w-full px-3 py-2 rounded-lg text-sm stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="datetime-local"
+                value={editDatetime}
+                onChange={(e) => setEditDatetime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-xs stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+              />
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={5}
+                  max={180}
+                  value={editMinutes}
+                  onChange={(e) => setEditMinutes(e.target.value)}
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg text-xs font-bold stitch-text-primary tabular-nums bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+                />
+                <span className="text-[11px] stitch-text-secondary font-semibold">min</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm stitch-text-primary leading-snug mb-4">
+            {session.session_goal ?? session.session_title ?? 'Working on something'}
+          </p>
+        )}
 
         {err && (
           <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{err}</p>
@@ -1096,21 +1193,93 @@ function SessionDetailSheet({
               Group sessions are open — start your own session at the same time to join the room.
             </div>
           )}
-          <button
-            type="button"
-            onClick={handleAddToCalendar}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
-          >
-            <CalendarPlus size={14} />
-            Add to calendar
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 rounded-xl text-sm font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
-          >
-            Close
-          </button>
+          {/* Edit + Delete — only for the user's own scheduled sessions.
+              Active sessions can't be edited (they're running); past
+              sessions can't either (they're history). */}
+          {isMine && isScheduled && !editing && !confirmingDelete && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="w-full inline-flex items-center justify-center gap-1.5 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
+              >
+                <Pencil size={13} /> Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="w-full inline-flex items-center justify-center gap-1.5 py-3 rounded-xl bg-rose-50 text-rose-700 text-sm font-bold hover:bg-rose-100 transition-colors"
+              >
+                <Trash2 size={13} /> Cancel
+              </button>
+            </div>
+          )}
+          {editing && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                disabled={saving}
+                className="w-full py-3 rounded-xl text-sm font-bold stitch-text-secondary bg-surface-container-low hover:bg-surface-container transition-colors disabled:opacity-50"
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="w-full inline-flex items-center justify-center gap-1.5 py-3 rounded-xl stitch-btn--primary text-white text-sm font-bold disabled:opacity-60"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                Save
+              </button>
+            </div>
+          )}
+          {confirmingDelete && (
+            <div className="space-y-2">
+              <p className="text-xs stitch-text-secondary text-center px-2">
+                Cancel this scheduled session? It will be removed from your calendar.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={saving}
+                  className="w-full py-3 rounded-xl text-sm font-bold stitch-text-secondary bg-surface-container-low hover:bg-surface-container transition-colors disabled:opacity-50"
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={saving}
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-3 rounded-xl bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 transition-colors disabled:opacity-60"
+                >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+          {!editing && !confirmingDelete && (
+            <>
+              <button
+                type="button"
+                onClick={handleAddToCalendar}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
+              >
+                <CalendarPlus size={14} />
+                Add to calendar
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3 rounded-xl text-sm font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
+              >
+                Close
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>,

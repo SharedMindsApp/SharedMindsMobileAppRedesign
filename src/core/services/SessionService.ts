@@ -522,6 +522,69 @@ export async function createScheduledSession(
   return data as FocusSession;
 }
 
+/** Update a scheduled session's editable fields. RLS gates to owner.
+ *  Only meaningful for sessions in status='scheduled' — once a session
+ *  is active the timer can be extended via extendSession but the goal
+ *  and start time shouldn't change mid-flight. */
+export async function updateScheduledSession(
+  sessionId: string,
+  patch: {
+    goalText?: string | null;
+    title?: string | null;
+    scheduledAt?: Date;
+    durationMinutes?: number;
+  }
+): Promise<FocusSession> {
+  const updates: Record<string, unknown> = {};
+  if (patch.goalText !== undefined) updates.session_goal = patch.goalText;
+  if (patch.title !== undefined) updates.session_title = patch.title;
+  if (patch.scheduledAt) {
+    updates.scheduled_at = patch.scheduledAt.toISOString();
+    updates.start_time = patch.scheduledAt.toISOString();
+  }
+  if (patch.durationMinutes !== undefined) {
+    updates.intended_duration_minutes = patch.durationMinutes;
+    const startBase = patch.scheduledAt ?? new Date(); // recompute target_end from the new start
+    if (patch.scheduledAt) {
+      updates.target_end_time = new Date(startBase.getTime() + patch.durationMinutes * 60 * 1000).toISOString();
+    }
+  }
+  // If duration changed without a new scheduledAt, refresh target_end
+  // from the existing start_time so the calendar block resizes.
+  if (patch.durationMinutes !== undefined && !patch.scheduledAt) {
+    const { data: existing } = await supabase
+      .from('focus_sessions')
+      .select('start_time')
+      .eq('id', sessionId)
+      .single();
+    if (existing?.start_time) {
+      const startMs = new Date(existing.start_time).getTime();
+      updates.target_end_time = new Date(startMs + patch.durationMinutes * 60 * 1000).toISOString();
+    }
+  }
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .update(updates)
+    .eq('id', sessionId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FocusSession;
+}
+
+/** Hard-delete a scheduled session. RLS gates to owner.
+ *  Active or completed sessions should NOT be deleted — they're part of
+ *  the user's history. The caller is responsible for only invoking this
+ *  on status='scheduled' rows. */
+export async function deleteScheduledSession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('focus_sessions')
+    .delete()
+    .eq('id', sessionId)
+    .eq('status', 'scheduled'); // belt + braces: refuse to delete active/completed
+  if (error) throw error;
+}
+
 export async function startScheduledSession(sessionId: string): Promise<FocusSession> {
   const now = new Date();
   const { data: session, error: fetchError } = await supabase
