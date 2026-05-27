@@ -151,8 +151,10 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [selectedActivity, setSelectedActivity] = useState<UserActivity | null>(null);
   /** Pinned activity id from localStorage — survives refresh. The
-   *  pinned activity is auto-selected when activities load and
-   *  rendered first in the chip row with a filled pin marker. */
+   *  pinned activity becomes the *default* effective selection: it's
+   *  used whenever the user hasn't explicitly picked another chip
+   *  (or typed a custom goal). Rendered first in the chip row with
+   *  a filled pin marker. */
   const [pinnedId, setPinnedId] = useState<string | null>(() => readPinned());
   function togglePin(id: string) {
     const next = pinnedId === id ? null : id;
@@ -160,11 +162,19 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
     writePinned(next);
   }
   const [customGoal, setCustomGoal] = useState<string>('');
+  /** The pinned activity hydrated from the user's list. Re-derived
+   *  every render so it stays in sync if `activities` updates. */
+  const pinnedActivity = pinnedId ? activities.find((a) => a.id === pinnedId) ?? null : null;
+  /** Effective = explicit selection OR pinned fallback. Used
+   *  everywhere downstream — goal text, duration default, chip
+   *  highlight, primary button label. Custom goal text in the
+   *  one-off field overrides this entirely (see resolveGoalText). */
+  const effectiveActivity = selectedActivity ?? pinnedActivity;
   // The duration that actually goes to the backend — derived from
-  // (in priority order) the selected activity's default, the inline
-  // duration override, or the user's last-used minutes.
+  // (in priority order) the inline override, the effective activity's
+  // default, or the user's last-used minutes.
   const [overrideMinutes, setOverrideMinutes] = useState<number | null>(null);
-  const minutes = overrideMinutes ?? selectedActivity?.default_minutes ?? defaultMinutes;
+  const minutes = overrideMinutes ?? effectiveActivity?.default_minutes ?? defaultMinutes;
 
   // ── Scheduling state ───────────────────────────────────────
   const [scheduleMode, setScheduleMode] = useState(false);
@@ -219,14 +229,13 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
       if (cancelled) return;
       setActivities(mine);
       setActivitiesLoaded(true);
-      // Auto-select the pinned activity if it still exists in the
-      // user's list. If the pin points at an archived activity,
-      // clear it so we don't show a stale label.
+      // If the pin points at an activity that's been archived/removed,
+      // clear it so we don't show a stale label. No need to seed
+      // selectedActivity from the pin — effectiveActivity derives it
+      // implicitly whenever selectedActivity is null.
       if (pinnedId) {
         const pinned = mine.find((a) => a.id === pinnedId);
-        if (pinned && !selectedActivity) {
-          setSelectedActivity(pinned);
-        } else if (!pinned) {
+        if (!pinned) {
           setPinnedId(null);
           writePinned(null);
         }
@@ -242,7 +251,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   /** The goal text that ends up on the focus_sessions row.
    *  Priority: selected activity → typed custom goal → fallback. */
   function resolveGoalText(): string {
-    if (selectedActivity) return selectedActivity.label;
+    if (effectiveActivity) return effectiveActivity.label;
     const c = customGoal.trim();
     if (c) return c;
     return 'Quick focus';
@@ -261,7 +270,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         projectId: projectId ?? undefined,
       });
       writeLast(safe);
-      if (selectedActivity) ActivityService.bumpUsage(selectedActivity.id).catch(() => {});
+      if (effectiveActivity) ActivityService.bumpUsage(effectiveActivity.id).catch(() => {});
       setActiveSession(session as any);
       navigate(`/session/${session.id}`);
     } catch (e: any) {
@@ -289,7 +298,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         projectId: projectId ?? undefined,
       });
       writeLast(safe);
-      if (selectedActivity) ActivityService.bumpUsage(selectedActivity.id).catch(() => {});
+      if (effectiveActivity) ActivityService.bumpUsage(effectiveActivity.id).catch(() => {});
       setMenuOpen(false);
       setBusy(false);
       // Light user feedback — navigate to the sessions list so they
@@ -330,8 +339,8 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   }
 
   // ── Main button + dropdown ─────────────────────────────────
-  const primaryLabel = selectedActivity
-    ? `${selectedActivity.emoji} ${selectedActivity.label} · ${minutes}m`
+  const primaryLabel = effectiveActivity
+    ? `${effectiveActivity.emoji} ${effectiveActivity.label} · ${minutes}m`
     : `Quick timer · ${minutes}m`;
 
   return (
@@ -433,7 +442,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                   <div className="flex flex-wrap gap-1.5">
                     {/* Cap at 10 — the rest live behind Manage. */}
                     {ordered.slice(0, 10).map((a) => {
-                      const active = selectedActivity?.id === a.id;
+                      const active = effectiveActivity?.id === a.id;
                       const pinned = pinnedId === a.id;
                       return (
                         <div
@@ -503,7 +512,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
               return (
                 <ul className="space-y-0.5">
                   {matchesMine.map((a) => {
-                    const active = selectedActivity?.id === a.id;
+                    const active = effectiveActivity?.id === a.id;
                     return (
                       <li key={`mine-${a.id}`}>
                         <button
@@ -688,7 +697,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
 
           <div className="border-t border-surface-container px-3 py-2 bg-surface-container-low/30">
             <p className="text-[10px] stitch-text-secondary leading-snug">
-              {selectedActivity || customGoal.trim()
+              {effectiveActivity || customGoal.trim()
                 ? <>Logs as a solo session — counts toward momentum and shows up in your calendar.</>
                 : <>No goal needed. Logs as "Quick focus" — you can rename later from the calendar.</>}
             </p>
