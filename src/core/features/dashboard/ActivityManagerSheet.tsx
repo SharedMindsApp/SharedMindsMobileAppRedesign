@@ -41,7 +41,10 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
   // Custom add state
   const [newLabel, setNewLabel] = useState('');
   const [newEmoji, setNewEmoji] = useState('⏱️');
-  const [newMinutes, setNewMinutes] = useState<number>(25);
+  // String state so the user can clear the field and type a new
+  // number without the input snapping back to its default mid-type.
+  // We coerce to a number (clamped 5-180) only at submit time.
+  const [newMinutes, setNewMinutes] = useState<string>('25');
   const [adding, setAdding] = useState(false);
 
   async function refresh() {
@@ -89,13 +92,19 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
     setAdding(true);
     setError(null);
     try {
+      // Coerce + clamp at submit time so the user can leave the field
+      // empty or mid-typed without us snapping it back to the default.
+      const parsed = parseInt(newMinutes, 10);
+      const minutes = Number.isFinite(parsed)
+        ? Math.min(180, Math.max(5, parsed))
+        : 25;
       const created = await ActivityService.addCustom({
-        label, emoji: newEmoji, defaultMinutes: newMinutes,
+        label, emoji: newEmoji, defaultMinutes: minutes,
       });
       if (created) {
         setNewLabel('');
         setNewEmoji('⏱️');
-        setNewMinutes(25);
+        setNewMinutes('25');
         await refresh();
         onChanged?.();
       } else {
@@ -252,13 +261,11 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
             <div className="flex items-center gap-1.5">
               <input
                 type="number"
+                inputMode="numeric"
                 min={5}
                 max={180}
                 value={newMinutes}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  setNewMinutes(Number.isFinite(n) ? n : 25);
-                }}
+                onChange={(e) => setNewMinutes(e.target.value)}
                 className="w-16 px-2 py-1 rounded-md text-xs font-bold stitch-text-primary tabular-nums bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
               />
               <span className="text-[11px] stitch-text-secondary">min · default duration</span>
