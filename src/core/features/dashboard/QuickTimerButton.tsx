@@ -25,6 +25,7 @@ import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useAuth } from '../../auth/AuthProvider';
 import { ActivityService, type UserActivity, type ActivityTemplate } from '../../services/ActivityService';
 import { ActivityManagerSheet } from './ActivityManagerSheet';
+import { ActivityPickerSheet } from './ActivityPickerSheet';
 
 const PRESETS: Array<{ minutes: number; label: string }> = [
   { minutes: 10, label: '10 min' },
@@ -179,25 +180,24 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
     }
   }
 
-  // Lazy-load + seed activities on first menu open. Cheaper than a
-  // global mount-time fetch since most users won't open the dropdown
-  // every page load.
+  // Lazy-load activities on first menu open. If the user has none we
+  // surface the picker overlay (let them choose explicitly) instead
+  // of guessing via the auto-seed — that consistently picked things
+  // people didn't actually do.
   const [activitiesLoaded, setActivitiesLoaded] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => {
     if (!menuOpen || activitiesLoaded) return;
     let cancelled = false;
     (async () => {
-      let mine = await ActivityService.listMine();
-      if (mine.length === 0) {
-        // Day-zero — seed from the library based on the user's
-        // work_types. Then re-list to get the seeded rows.
-        await ActivityService.seedFromWorkTypes(5);
-        mine = await ActivityService.listMine();
-      }
-      if (!cancelled) {
-        setActivities(mine);
-        setActivitiesLoaded(true);
-      }
+      const mine = await ActivityService.listMine();
+      if (cancelled) return;
+      setActivities(mine);
+      setActivitiesLoaded(true);
+      // Day-zero — kick the user into the picker so they curate
+      // their own shortcuts instead of inheriting whatever the seed
+      // guessed. Only auto-opens once per dropdown lifecycle.
+      if (mine.length === 0) setPickerOpen(true);
     })().catch((e) => console.warn('[QuickTimer] activity load failed', e));
     return () => { cancelled = true; };
   }, [menuOpen, activitiesLoaded]);
@@ -368,7 +368,20 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
               const q = search.trim().toLowerCase();
               if (!q) {
                 if (activities.length === 0) {
-                  return <p className="text-xs stitch-text-secondary italic py-2">Loading…</p>;
+                  return (
+                    <div className="py-2 space-y-1.5">
+                      <p className="text-xs stitch-text-secondary">
+                        No shortcuts yet — pick a few activities you actually do.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setPickerOpen(true)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        <Plus size={11} /> Pick activities
+                      </button>
+                    </div>
+                  );
                 }
                 return (
                   <div className="flex flex-wrap gap-1.5">
@@ -624,6 +637,13 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         <ActivityManagerSheet
           onClose={() => setManagerOpen(false)}
           onChanged={() => { reloadActivities(); }}
+        />
+      )}
+
+      {pickerOpen && (
+        <ActivityPickerSheet
+          onClose={() => setPickerOpen(false)}
+          onDone={() => { reloadActivities(); }}
         />
       )}
     </div>

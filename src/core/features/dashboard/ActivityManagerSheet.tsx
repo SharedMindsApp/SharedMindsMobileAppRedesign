@@ -14,9 +14,10 @@
 //      the template into user_activities.
 
 import { useEffect, useState } from 'react';
-import { X, Plus, Trash2, Library, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { X, Plus, Trash2, Library, ChevronDown, ChevronUp, Loader2, Sparkles } from 'lucide-react';
 import { ActivityService, type UserActivity, type ActivityTemplate } from '../../services/ActivityService';
 import { useAuth } from '../../auth/AuthProvider';
+import { ActivityPickerSheet } from './ActivityPickerSheet';
 
 const EMOJI_PALETTE = ['⏱️', '☎️', '📝', '🔍', '📊', '🧠', '💡', '🎯', '📧', '🛠️', '🎨', '🎬', '🤝', '💰', '📚', '🧹', '✍️', '🔥'];
 
@@ -34,6 +35,7 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Custom add state
   const [newLabel, setNewLabel] = useState('');
@@ -309,12 +311,35 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
             </p>
           )}
 
+          {/* ── Reset & pick again ──────────────────────────────
+              For users who want to start over — opens the curated
+              picker, which archives existing rows on save. */}
+          {mine.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold stitch-text-secondary hover:bg-surface-container-low transition-colors"
+            >
+              <Sparkles size={11} /> Reset & pick again
+            </button>
+          )}
+
           <p className="text-[10px] stitch-text-secondary leading-snug px-1">
             Removing an activity hides it from your shortcuts but doesn't delete past
             sessions tagged with it — your history stays intact.
           </p>
         </div>
       </div>
+
+      {pickerOpen && (
+        <ActivityPickerSheet
+          title="Reset your activities"
+          subtitle="Pick the ones you actually do — your previous list will be replaced."
+          replaceExisting
+          onClose={() => setPickerOpen(false)}
+          onDone={() => { setPickerOpen(false); refresh(); onChanged?.(); }}
+        />
+      )}
     </div>
   );
 }
