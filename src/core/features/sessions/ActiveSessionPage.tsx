@@ -773,9 +773,8 @@ export function ActiveSessionPage() {
 // timer ring + halo colours derive from the theme so the whole surface
 // feels coherent — no more violet ring on a forest backdrop.
 
-interface SoloTheme {
-  id: string;
-  label: string;
+/** A single visual variant of a theme — either light or dark mode. */
+interface SoloThemeVariant {
   /** CSS gradient for the body backdrop. */
   bg: string;
   /** Two radial accents painted on top of the bg for depth. */
@@ -785,18 +784,161 @@ interface SoloTheme {
   haloHex: string;
   /** SVG linear gradient stops [start, end] for the progress arc. */
   ringStops: [string, string];
+  /** Text tones for digits, labels, subtitles. */
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
   /** Used by the picker swatch — small color sample. */
   swatchHex: string;
+  /** Track stroke under the progress arc. */
+  trackStroke: string;
+  /** Tick mark stroke (12/3/6/9 cue). */
+  tickStroke: string;
+}
+
+interface SoloTheme {
+  id: string;
+  label: string;
+  dark: SoloThemeVariant;
+  light: SoloThemeVariant;
 }
 
 const SOLO_THEMES: SoloTheme[] = [
-  { id: 'midnight', label: 'Midnight', bg: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', accent1: 'radial-gradient(circle at 30% 20%, rgba(99,102,241,0.18), transparent 60%)', accent2: 'radial-gradient(circle at 70% 80%, rgba(168,85,247,0.12), transparent 60%)', haloHex: '#a78bfa', ringStops: ['#a78bfa', '#60a5fa'], swatchHex: '#3730a3' },
-  { id: 'aurora',   label: 'Aurora',   bg: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)', accent1: 'radial-gradient(circle at 20% 30%, rgba(34,211,238,0.22), transparent 60%)', accent2: 'radial-gradient(circle at 80% 70%, rgba(167,139,250,0.18), transparent 60%)', haloHex: '#22d3ee', ringStops: ['#22d3ee', '#a78bfa'], swatchHex: '#5b21b6' },
-  { id: 'forest',   label: 'Forest',   bg: 'linear-gradient(135deg, #064e3b 0%, #022c22 50%, #0f1f1c 100%)', accent1: 'radial-gradient(circle at 25% 25%, rgba(16,185,129,0.20), transparent 60%)', accent2: 'radial-gradient(circle at 75% 75%, rgba(45,212,191,0.14), transparent 60%)', haloHex: '#34d399', ringStops: ['#34d399', '#2dd4bf'], swatchHex: '#065f46' },
-  { id: 'sunset',   label: 'Sunset',   bg: 'linear-gradient(135deg, #451a03 0%, #7c2d12 50%, #4c0519 100%)', accent1: 'radial-gradient(circle at 30% 20%, rgba(251,146,60,0.20), transparent 60%)', accent2: 'radial-gradient(circle at 70% 80%, rgba(244,63,94,0.16), transparent 60%)', haloHex: '#fb923c', ringStops: ['#fb923c', '#f43f5e'], swatchHex: '#c2410c' },
-  { id: 'ocean',    label: 'Ocean',    bg: 'linear-gradient(135deg, #082f49 0%, #0c4a6e 50%, #134e4a 100%)', accent1: 'radial-gradient(circle at 25% 20%, rgba(56,189,248,0.20), transparent 60%)', accent2: 'radial-gradient(circle at 75% 80%, rgba(45,212,191,0.14), transparent 60%)', haloHex: '#38bdf8', ringStops: ['#38bdf8', '#2dd4bf'], swatchHex: '#0369a1' },
-  { id: 'mono',     label: 'Mono',     bg: 'linear-gradient(135deg, #18181b 0%, #27272a 50%, #09090b 100%)', accent1: 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.06), transparent 60%)', accent2: 'radial-gradient(circle at 70% 80%, rgba(255,255,255,0.04), transparent 60%)', haloHex: '#a1a1aa', ringStops: ['#e4e4e7', '#a1a1aa'], swatchHex: '#3f3f46' },
+  {
+    id: 'midnight', label: 'Midnight',
+    dark: {
+      bg: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+      accent1: 'radial-gradient(circle at 30% 20%, rgba(99,102,241,0.18), transparent 60%)',
+      accent2: 'radial-gradient(circle at 70% 80%, rgba(168,85,247,0.12), transparent 60%)',
+      haloHex: '#a78bfa', ringStops: ['#a78bfa', '#60a5fa'],
+      textPrimary: '#ffffff', textSecondary: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.40)',
+      swatchHex: '#3730a3',
+      trackStroke: 'rgba(255,255,255,0.06)', tickStroke: 'rgba(255,255,255,0.15)',
+    },
+    light: {
+      bg: 'linear-gradient(135deg, #eef0ff 0%, #e0e7ff 50%, #f5f3ff 100%)',
+      accent1: 'radial-gradient(circle at 30% 20%, rgba(99,102,241,0.10), transparent 60%)',
+      accent2: 'radial-gradient(circle at 70% 80%, rgba(168,85,247,0.08), transparent 60%)',
+      haloHex: '#c4b5fd', ringStops: ['#8b5cf6', '#3b82f6'],
+      textPrimary: '#1e1b4b', textSecondary: 'rgba(30,27,75,0.65)', textMuted: 'rgba(30,27,75,0.45)',
+      swatchHex: '#c7d2fe',
+      trackStroke: 'rgba(30,27,75,0.10)', tickStroke: 'rgba(30,27,75,0.25)',
+    },
+  },
+  {
+    id: 'aurora', label: 'Aurora',
+    dark: {
+      bg: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)',
+      accent1: 'radial-gradient(circle at 20% 30%, rgba(34,211,238,0.22), transparent 60%)',
+      accent2: 'radial-gradient(circle at 80% 70%, rgba(167,139,250,0.18), transparent 60%)',
+      haloHex: '#22d3ee', ringStops: ['#22d3ee', '#a78bfa'],
+      textPrimary: '#ffffff', textSecondary: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.40)',
+      swatchHex: '#5b21b6',
+      trackStroke: 'rgba(255,255,255,0.06)', tickStroke: 'rgba(255,255,255,0.15)',
+    },
+    light: {
+      bg: 'linear-gradient(135deg, #f0fdfa 0%, #ecfeff 50%, #faf5ff 100%)',
+      accent1: 'radial-gradient(circle at 20% 30%, rgba(34,211,238,0.12), transparent 60%)',
+      accent2: 'radial-gradient(circle at 80% 70%, rgba(167,139,250,0.10), transparent 60%)',
+      haloHex: '#a5f3fc', ringStops: ['#0891b2', '#7c3aed'],
+      textPrimary: '#164e63', textSecondary: 'rgba(22,78,99,0.65)', textMuted: 'rgba(22,78,99,0.45)',
+      swatchHex: '#cffafe',
+      trackStroke: 'rgba(22,78,99,0.10)', tickStroke: 'rgba(22,78,99,0.25)',
+    },
+  },
+  {
+    id: 'forest', label: 'Forest',
+    dark: {
+      bg: 'linear-gradient(135deg, #064e3b 0%, #022c22 50%, #0f1f1c 100%)',
+      accent1: 'radial-gradient(circle at 25% 25%, rgba(16,185,129,0.20), transparent 60%)',
+      accent2: 'radial-gradient(circle at 75% 75%, rgba(45,212,191,0.14), transparent 60%)',
+      haloHex: '#34d399', ringStops: ['#34d399', '#2dd4bf'],
+      textPrimary: '#ffffff', textSecondary: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.40)',
+      swatchHex: '#065f46',
+      trackStroke: 'rgba(255,255,255,0.06)', tickStroke: 'rgba(255,255,255,0.15)',
+    },
+    light: {
+      bg: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #f0fdfa 100%)',
+      accent1: 'radial-gradient(circle at 25% 25%, rgba(16,185,129,0.12), transparent 60%)',
+      accent2: 'radial-gradient(circle at 75% 75%, rgba(45,212,191,0.08), transparent 60%)',
+      haloHex: '#6ee7b7', ringStops: ['#059669', '#0d9488'],
+      textPrimary: '#064e3b', textSecondary: 'rgba(6,78,59,0.65)', textMuted: 'rgba(6,78,59,0.45)',
+      swatchHex: '#a7f3d0',
+      trackStroke: 'rgba(6,78,59,0.10)', tickStroke: 'rgba(6,78,59,0.25)',
+    },
+  },
+  {
+    id: 'sunset', label: 'Sunset',
+    dark: {
+      bg: 'linear-gradient(135deg, #451a03 0%, #7c2d12 50%, #4c0519 100%)',
+      accent1: 'radial-gradient(circle at 30% 20%, rgba(251,146,60,0.20), transparent 60%)',
+      accent2: 'radial-gradient(circle at 70% 80%, rgba(244,63,94,0.16), transparent 60%)',
+      haloHex: '#fb923c', ringStops: ['#fb923c', '#f43f5e'],
+      textPrimary: '#ffffff', textSecondary: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.40)',
+      swatchHex: '#c2410c',
+      trackStroke: 'rgba(255,255,255,0.06)', tickStroke: 'rgba(255,255,255,0.15)',
+    },
+    light: {
+      bg: 'linear-gradient(135deg, #fff7ed 0%, #fee2e2 50%, #ffe4e6 100%)',
+      accent1: 'radial-gradient(circle at 30% 20%, rgba(251,146,60,0.12), transparent 60%)',
+      accent2: 'radial-gradient(circle at 70% 80%, rgba(244,63,94,0.10), transparent 60%)',
+      haloHex: '#fdba74', ringStops: ['#ea580c', '#e11d48'],
+      textPrimary: '#7c2d12', textSecondary: 'rgba(124,45,18,0.65)', textMuted: 'rgba(124,45,18,0.45)',
+      swatchHex: '#fed7aa',
+      trackStroke: 'rgba(124,45,18,0.10)', tickStroke: 'rgba(124,45,18,0.25)',
+    },
+  },
+  {
+    id: 'ocean', label: 'Ocean',
+    dark: {
+      bg: 'linear-gradient(135deg, #082f49 0%, #0c4a6e 50%, #134e4a 100%)',
+      accent1: 'radial-gradient(circle at 25% 20%, rgba(56,189,248,0.20), transparent 60%)',
+      accent2: 'radial-gradient(circle at 75% 80%, rgba(45,212,191,0.14), transparent 60%)',
+      haloHex: '#38bdf8', ringStops: ['#38bdf8', '#2dd4bf'],
+      textPrimary: '#ffffff', textSecondary: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.40)',
+      swatchHex: '#0369a1',
+      trackStroke: 'rgba(255,255,255,0.06)', tickStroke: 'rgba(255,255,255,0.15)',
+    },
+    light: {
+      bg: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #ecfeff 100%)',
+      accent1: 'radial-gradient(circle at 25% 20%, rgba(56,189,248,0.12), transparent 60%)',
+      accent2: 'radial-gradient(circle at 75% 80%, rgba(45,212,191,0.08), transparent 60%)',
+      haloHex: '#7dd3fc', ringStops: ['#0284c7', '#0d9488'],
+      textPrimary: '#0c4a6e', textSecondary: 'rgba(12,74,110,0.65)', textMuted: 'rgba(12,74,110,0.45)',
+      swatchHex: '#bae6fd',
+      trackStroke: 'rgba(12,74,110,0.10)', tickStroke: 'rgba(12,74,110,0.25)',
+    },
+  },
+  {
+    id: 'mono', label: 'Mono',
+    dark: {
+      bg: 'linear-gradient(135deg, #18181b 0%, #27272a 50%, #09090b 100%)',
+      accent1: 'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.06), transparent 60%)',
+      accent2: 'radial-gradient(circle at 70% 80%, rgba(255,255,255,0.04), transparent 60%)',
+      haloHex: '#a1a1aa', ringStops: ['#e4e4e7', '#a1a1aa'],
+      textPrimary: '#ffffff', textSecondary: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.40)',
+      swatchHex: '#3f3f46',
+      trackStroke: 'rgba(255,255,255,0.06)', tickStroke: 'rgba(255,255,255,0.15)',
+    },
+    light: {
+      bg: 'linear-gradient(135deg, #fafafa 0%, #f4f4f5 50%, #ffffff 100%)',
+      accent1: 'radial-gradient(circle at 30% 20%, rgba(0,0,0,0.04), transparent 60%)',
+      accent2: 'radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 60%)',
+      haloHex: '#d4d4d8', ringStops: ['#52525b', '#a1a1aa'],
+      textPrimary: '#18181b', textSecondary: 'rgba(24,24,27,0.65)', textMuted: 'rgba(24,24,27,0.45)',
+      swatchHex: '#e4e4e7',
+      trackStroke: 'rgba(24,24,27,0.10)', tickStroke: 'rgba(24,24,27,0.25)',
+    },
+  },
 ];
+
+/** Resolves a theme to the right variant based on the active app
+ *  theme class on document root. Falls back to dark if no class is
+ *  set or running on the server. */
+function resolveThemeVariant(theme: SoloTheme): SoloThemeVariant {
+  if (typeof document === 'undefined') return theme.dark;
+  return document.documentElement.classList.contains('theme-light') ? theme.light : theme.dark;
+}
 
 const LS_SOLO_THEME = 'sm.solo.theme';
 
@@ -842,6 +984,18 @@ function SoloFocusView({
     setTheme(t);
     try { window.localStorage.setItem(LS_SOLO_THEME, t.id); } catch { /* private */ }
   }
+
+  // Light/dark variant of the active theme. Listens to <html> class
+  // mutations so toggling app theme in Settings re-renders this view
+  // without needing to navigate away.
+  const [variant, setVariant] = useState<SoloThemeVariant>(() => resolveThemeVariant(theme));
+  useEffect(() => {
+    setVariant(resolveThemeVariant(theme));
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => setVariant(resolveThemeVariant(theme)));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [theme]);
 
   // Responsive ring size — scales to viewport so mobile gets a smaller
   // (but still dominant) timer. Recomputed on resize so the page rotates
@@ -944,9 +1098,9 @@ function SoloFocusView({
       {/* Theme backdrop — three layered fills (base gradient + two
           radial accents). Inline styles so we can swap on theme change
           without rebuilding the Tailwind atom list. */}
-      <div className="absolute inset-0" style={{ background: theme.bg }} />
-      <div className="absolute inset-0" style={{ background: theme.accent1 }} />
-      <div className="absolute inset-0" style={{ background: theme.accent2 }} />
+      <div className="absolute inset-0" style={{ background: variant.bg }} />
+      <div className="absolute inset-0" style={{ background: variant.accent1 }} />
+      <div className="absolute inset-0" style={{ background: variant.accent2 }} />
 
       {/* Ambient peers strip — recreates the "body double" effect by
           showing other members currently working solo. Pure presence,
@@ -990,7 +1144,7 @@ function SoloFocusView({
                     className={`relative aspect-square rounded-lg overflow-hidden ring-1 transition-all ${
                       active ? 'ring-white shadow-md' : 'ring-white/15 hover:ring-white/40'
                     }`}
-                    style={{ background: t.bg }}
+                    style={{ background: resolveThemeVariant(t).bg }}
                   >
                     {active && (
                       <span className="absolute inset-0 grid place-items-center text-white">
@@ -1029,7 +1183,7 @@ function SoloFocusView({
           <div
             className="absolute inset-0 rounded-full blur-3xl opacity-40 pointer-events-none animate-pulse"
             style={{
-              background: `radial-gradient(circle, ${theme.haloHex}73 0%, transparent 65%)`,
+              background: `radial-gradient(circle, ${variant.haloHex}73 0%, transparent 65%)`,
               animationDuration: '4s',
             }}
           />
@@ -1039,7 +1193,7 @@ function SoloFocusView({
               cx="140"
               cy="140"
               r={radius}
-              stroke="rgba(255,255,255,0.06)"
+              stroke={variant.trackStroke}
               strokeWidth="10"
               fill="none"
             />
@@ -1055,7 +1209,7 @@ function SoloFocusView({
                   y1={140 + r1 * Math.sin(rad)}
                   x2={140 + r2 * Math.cos(rad)}
                   y2={140 + r2 * Math.sin(rad)}
-                  stroke="rgba(255,255,255,0.15)"
+                  stroke={variant.tickStroke}
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -1078,13 +1232,13 @@ function SoloFocusView({
               strokeDashoffset={strokeOffset}
               style={{
                 transition: 'stroke-dashoffset 1s linear, stroke 600ms ease',
-                filter: `drop-shadow(0 0 8px ${theme.haloHex}59)`,
+                filter: `drop-shadow(0 0 8px ${variant.haloHex}59)`,
               }}
             />
             <defs>
               <linearGradient id="solo-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor={theme.ringStops[0]} />
-                <stop offset="100%" stopColor={theme.ringStops[1]} />
+                <stop offset="0%" stopColor={variant.ringStops[0]} />
+                <stop offset="100%" stopColor={variant.ringStops[1]} />
               </linearGradient>
               <linearGradient id="solo-grad-warn" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#fbbf24" />
@@ -1098,18 +1252,24 @@ function SoloFocusView({
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
-            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-white/45 mb-1 sm:mb-2">
+            <p
+              className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest mb-1 sm:mb-2"
+              style={{ color: variant.textSecondary }}
+            >
               {phase}
             </p>
             {/* Live mm:ss — the hero number. Clamped so it scales with
                 the ring across viewports without overflowing. */}
             <p
-              className="font-extrabold text-white tabular-nums leading-none tracking-tight"
-              style={{ fontSize: `clamp(44px, ${ringPx * 0.24}px, 76px)` }}
+              className="font-extrabold tabular-nums leading-none tracking-tight"
+              style={{ fontSize: `clamp(44px, ${ringPx * 0.24}px, 76px)`, color: variant.textPrimary }}
             >
               {formatRemaining(secondsRemaining)}
             </p>
-            <p className="text-[10px] sm:text-[11px] text-white/45 mt-2 sm:mt-3 tabular-nums">
+            <p
+              className="text-[10px] sm:text-[11px] mt-2 sm:mt-3 tabular-nums"
+              style={{ color: variant.textMuted }}
+            >
               {elapsedMin} / {totalMin} min in
             </p>
           </div>
@@ -1117,15 +1277,24 @@ function SoloFocusView({
 
         {/* Goal */}
         <div className="max-w-md px-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5">
+          <p
+            className="text-[10px] font-bold uppercase tracking-widest mb-1.5"
+            style={{ color: variant.textMuted }}
+          >
             You declared
           </p>
-          <p className="text-base sm:text-lg font-bold text-white leading-snug">
+          <p
+            className="text-base sm:text-lg font-bold leading-snug"
+            style={{ color: variant.textPrimary }}
+          >
             {goal || 'Your session'}
           </p>
         </div>
 
-        <p className="text-[11px] sm:text-xs text-white/40 mt-6 sm:mt-8 max-w-xs leading-relaxed px-4">
+        <p
+          className="text-[11px] sm:text-xs mt-6 sm:mt-8 max-w-xs leading-relaxed px-4"
+          style={{ color: variant.textMuted }}
+        >
           No room, no audience. Just you and the work. Come back when you're done.
         </p>
       </div>
