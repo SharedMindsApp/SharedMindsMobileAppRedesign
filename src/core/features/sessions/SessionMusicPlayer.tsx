@@ -409,9 +409,8 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
               <p className="text-xs font-bold text-white truncate" title={track?.title}>
                 {track?.title ?? 'Waiting for host…'}
               </p>
-              {track?.artist && (
-                <p className="text-[10px] text-white/50 truncate">{track.artist}</p>
-              )}
+              {/* Artist intentionally hidden — first-party SharedMinds
+                  music, no need to surface the upstream tool/generator. */}
             </div>
             <button
               type="button"
@@ -465,9 +464,8 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
               <p className="text-xs font-bold text-white truncate" title={track?.title}>
                 {loading ? 'Loading…' : noTracks ? 'No tracks in this mood yet' : track?.title ?? '—'}
               </p>
-              {track?.artist && (
-                <p className="text-[10px] text-white/50 truncate">{track.artist}</p>
-              )}
+              {/* Artist intentionally hidden — first-party SharedMinds
+                  music, no need to surface the upstream tool/generator. */}
             </div>
 
             {/* Transport */}
