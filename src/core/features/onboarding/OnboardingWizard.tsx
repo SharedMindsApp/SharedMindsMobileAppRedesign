@@ -1445,16 +1445,38 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     setStep(previous);
   }
 
+  // Guard so the auto-finalize useEffect below (and a re-render of
+  // the celebration screen) don't double-call handleComplete().
+  // Reset on error inside handleComplete to allow the Retry link.
+  const hasFinalizedRef = useRef(false);
+
   async function handleComplete() {
     if (saving) return;
     setError(null);
     setSaving(true);
     try {
-      await saveProjectAndComplete();
-      await saveIntentionsIfSet();
-      await refreshProfile();
+      // Minimum-dwell so the celebration screen is actually visible —
+      // the save + profile refresh together run in ~200–400ms which
+      // isn't long enough for the pop, fade-ups, and ambient float to
+      // play through. We run the save sequence in parallel with a
+      // ~1.8s timer; navigation only happens when BOTH resolve. If
+      // the save somehow takes longer than 1.8s, the timer is moot
+      // and we wait on the save. The user perceives a deliberate
+      // beat where the welcome animation lands, then transitions.
+      const MIN_DWELL_MS = 1800;
+      await Promise.all([
+        (async () => {
+          await saveProjectAndComplete();
+          await saveIntentionsIfSet();
+          await refreshProfile();
+        })(),
+        new Promise<void>((r) => setTimeout(r, MIN_DWELL_MS)),
+      ]);
       onComplete();
     } catch {
+      // Allow retry — clear the auto-finalize guard so the Retry
+      // link in the celebration screen actually re-runs this path.
+      hasFinalizedRef.current = false;
       setError('Something went wrong — please try again.');
     } finally {
       setSaving(false);
@@ -1466,9 +1488,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   // step like the old wizard's 'tasks' page did — so without this
   // effect, advance('done') just lands the user on the celebration
   // screen forever, with no wizard_v2_completed_at stamp + no
-  // onComplete() call to navigate them out. Guard with hasFinalizedRef
-  // so re-renders / strict-mode double-mounts don't re-fire.
-  const hasFinalizedRef = useRef(false);
+  // onComplete() call to navigate them out. The hasFinalizedRef
+  // declared above guards against double-fires.
   useEffect(() => {
     if (step !== 'done') return;
     if (hasFinalizedRef.current) return;
