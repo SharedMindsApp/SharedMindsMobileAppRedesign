@@ -368,6 +368,14 @@ export function ActiveSessionPage() {
 
   // Portal to document.body so we escape Layout's <main> containing block.
   // (.core-main has a CSS animation, which traps position:fixed descendants.)
+  //
+  // The page-shell backgroundColor must match the active app theme so
+  // any uncovered area (below the focus body, behind translucent top
+  // bar) doesn't show hardcoded dark navy when the user is in light
+  // mode. Read the app theme class on document root.
+  const isLightApp = typeof document !== 'undefined'
+    && document.documentElement.classList.contains('theme-light');
+  const pageBackground = isLightApp ? '#ffffff' : '#1a1a2e';
   return createPortal(
     <div
       style={{
@@ -376,7 +384,7 @@ export function ActiveSessionPage() {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: '#1a1a2e',
+        backgroundColor: pageBackground,
         display: 'flex',
         flexDirection: 'column',
         zIndex: 55,
