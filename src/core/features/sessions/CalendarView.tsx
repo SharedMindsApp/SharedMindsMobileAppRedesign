@@ -403,7 +403,7 @@ export function CalendarView() {
             solo session, no goal, no video. Still logs for momentum. */}
         {!activeSession && (
           <div className="w-full flex justify-center">
-            <QuickTimerButton />
+            <QuickTimerButton align="left" />
           </div>
         )}
 

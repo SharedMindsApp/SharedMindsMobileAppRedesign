@@ -110,10 +110,16 @@ interface Props {
   projectId?: string | null;
   /** Compact = pill button, no expand menu. Default false. */
   compact?: boolean;
+  /** Which side of the button the dropdown anchors to. Default 'right'
+   *  works for buttons sitting on the right of the content area (home
+   *  hero). Use 'left' when the button sits on the left edge (e.g.
+   *  inside a narrow sidebar) so the dropdown extends rightward into
+   *  the page rather than off-screen. */
+  align?: 'left' | 'right';
   className?: string;
 }
 
-export function QuickTimerButton({ projectId = null, compact = false, className = '' }: Props) {
+export function QuickTimerButton({ projectId = null, compact = false, align = 'right', className = '' }: Props) {
   const navigate = useNavigate();
   const { setActiveSession } = useFocusSession();
   const [busy, setBusy] = useState(false);
@@ -278,7 +284,7 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
       </div>
 
       {menuOpen && !busy && (
-        <div className="absolute z-30 right-0 mt-2 w-80 rounded-2xl bg-surface ring-1 ring-surface-container-high shadow-2xl overflow-hidden">
+        <div className={`absolute z-30 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-surface ring-1 ring-surface-container-high shadow-2xl overflow-hidden ${align === 'left' ? 'left-0' : 'right-0'}`}>
 
           {/* ── Activities row ────────────────────────────────────
               Most-recent first (sorted server-side). Tap to select —
@@ -456,7 +462,7 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
       )}
 
       {error && (
-        <p className="absolute top-full mt-2 right-0 text-[11px] font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-100 rounded-lg px-2.5 py-1.5 z-30">
+        <p className={`absolute top-full mt-2 text-[11px] font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-100 rounded-lg px-2.5 py-1.5 z-30 ${align === 'left' ? 'left-0' : 'right-0'}`}>
           {error}
         </p>
       )}
