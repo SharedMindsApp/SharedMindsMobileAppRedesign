@@ -19,10 +19,11 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2 } from 'lucide-react';
+import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2, Search, Library } from 'lucide-react';
 import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import { ActivityService, type UserActivity } from '../../services/ActivityService';
+import { useAuth } from '../../auth/AuthProvider';
+import { ActivityService, type UserActivity, type ActivityTemplate } from '../../services/ActivityService';
 import { ActivityManagerSheet } from './ActivityManagerSheet';
 
 const PRESETS: Array<{ minutes: number; label: string }> = [
@@ -123,6 +124,7 @@ interface Props {
 export function QuickTimerButton({ projectId = null, compact = false, align = 'right', className = '' }: Props) {
   const navigate = useNavigate();
   const { setActiveSession } = useFocusSession();
+  const { profile } = useAuth();
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +143,24 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   // ── Scheduling state ───────────────────────────────────────
   const [scheduleMode, setScheduleMode] = useState(false);
   const [customDatetime, setCustomDatetime] = useState<string>('');
+
+  // ── Search across my list + library ────────────────────────
+  // The user's chip row only shows the top 10 by default. When they
+  // start typing in the search box we filter MY activities AND lazy-
+  // load the full library so they can find anything without opening
+  // the Manage sheet first. A library match doesn't auto-adopt — it
+  // just sets the goal text for THIS session, keeping the dropdown
+  // light and uncluttered.
+  const [search, setSearch] = useState('');
+  const [allTemplates, setAllTemplates] = useState<ActivityTemplate[] | null>(null);
+  useEffect(() => {
+    if (!menuOpen || allTemplates !== null) return;
+    let cancelled = false;
+    ActivityService.listTemplates(profile?.work_types ?? undefined)
+      .then((t) => { if (!cancelled) setAllTemplates(t); })
+      .catch((e) => console.warn('[QuickTimer] templates load failed', e));
+    return () => { cancelled = true; };
+  }, [menuOpen, allTemplates, profile?.work_types]);
 
   // ── Manager sheet ──────────────────────────────────────────
   const [managerOpen, setManagerOpen] = useState(false);
@@ -307,8 +327,14 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
           {/* ── Activities row ────────────────────────────────────
               Most-recent first (sorted server-side). Tap to select —
               the chip becomes active and the duration auto-fills from
-              the activity's default. */}
-          <div className="px-3 pt-3 pb-2 max-h-[180px] overflow-y-auto">
+              the activity's default.
+
+              When the search box has text we switch to a flat list of
+              matches across BOTH the user's activities and the full
+              library, so they can find anything without opening Manage.
+              Library matches use a "use once" picker that sets the
+              goal text without permanently adopting the template. */}
+          <div className="px-3 pt-3 pb-2 max-h-[220px] overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
                 Quick activities
@@ -322,39 +348,136 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                 <Settings2 size={10} /> Manage
               </button>
             </div>
-            {activities.length === 0 ? (
-              <p className="text-xs stitch-text-secondary italic py-2">
-                Loading…
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {/* Cap at 10 — the rest live behind Manage so the
-                    dropdown stays scannable. */}
-                {activities.slice(0, 10).map((a) => {
-                  const active = selectedActivity?.id === a.id;
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedActivity(active ? null : a);
-                        setOverrideMinutes(null); // re-derive from activity default
-                        setCustomGoal('');
-                      }}
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold transition-colors ${
-                        active
-                          ? 'bg-primary text-white'
-                          : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
-                      }`}
-                      title={`${a.label} · ${a.default_minutes}min`}
-                    >
-                      <span>{a.emoji}</span>
-                      <span className="truncate max-w-[110px]">{a.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+
+            {/* Search — filters my list + library when present */}
+            <div className="relative mb-2">
+              <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 stitch-text-secondary pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search activities…"
+                className="w-full pl-7 pr-2 py-1.5 rounded-lg text-xs stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+              />
+            </div>
+
+            {(() => {
+              // Build the visible result set based on whether the user
+              // is searching. Empty search = the curated top-10 chip
+              // row. Non-empty = filtered list w/ library matches.
+              const q = search.trim().toLowerCase();
+              if (!q) {
+                if (activities.length === 0) {
+                  return <p className="text-xs stitch-text-secondary italic py-2">Loading…</p>;
+                }
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    {/* Cap at 10 — the rest live behind Manage. */}
+                    {activities.slice(0, 10).map((a) => {
+                      const active = selectedActivity?.id === a.id;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedActivity(active ? null : a);
+                            setOverrideMinutes(null);
+                            setCustomGoal('');
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                            active
+                              ? 'bg-primary text-white'
+                              : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                          }`}
+                          title={`${a.label} · ${a.default_minutes}min`}
+                        >
+                          <span>{a.emoji}</span>
+                          <span className="truncate max-w-[110px]">{a.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // Filtered view — search both buckets, dedupe by lowercase
+              // label so a library template the user has already adopted
+              // doesn't appear twice.
+              const matchesMine = activities.filter((a) => a.label.toLowerCase().includes(q));
+              const mineLabels = new Set(matchesMine.map((a) => a.label.toLowerCase()));
+              const matchesLib = (allTemplates ?? []).filter(
+                (t) => t.label.toLowerCase().includes(q) && !mineLabels.has(t.label.toLowerCase())
+              );
+              const total = matchesMine.length + matchesLib.length;
+
+              if (total === 0) {
+                return (
+                  <p className="text-xs stitch-text-secondary italic py-3 text-center">
+                    No matches. Type a one-off goal below ↓ or add it via Manage.
+                  </p>
+                );
+              }
+
+              return (
+                <ul className="space-y-0.5">
+                  {matchesMine.map((a) => {
+                    const active = selectedActivity?.id === a.id;
+                    return (
+                      <li key={`mine-${a.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedActivity(active ? null : a);
+                            setOverrideMinutes(null);
+                            setCustomGoal('');
+                            setSearch('');
+                          }}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition-colors ${
+                            active
+                              ? 'bg-primary/15 stitch-text-primary'
+                              : 'hover:bg-surface-container-low'
+                          }`}
+                        >
+                          <span className="text-base shrink-0">{a.emoji}</span>
+                          <span className="flex-1 truncate font-bold">{a.label}</span>
+                          <span className="text-[10px] stitch-text-secondary tabular-nums shrink-0">
+                            {a.default_minutes}m
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {matchesLib.length > 0 && matchesMine.length > 0 && (
+                    <li className="pt-1.5 pb-0.5 px-1 text-[9px] font-bold uppercase tracking-widest stitch-text-secondary flex items-center gap-1">
+                      <Library size={9} /> From library
+                    </li>
+                  )}
+                  {matchesLib.map((t) => (
+                    <li key={`lib-${t.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Use the library activity for THIS session
+                          // only. Adopting permanently goes through the
+                          // Manage sheet — keeps this dropdown light.
+                          setSelectedActivity(null);
+                          setCustomGoal(t.label);
+                          setOverrideMinutes(t.default_minutes);
+                          setSearch('');
+                        }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs hover:bg-surface-container-low transition-colors"
+                      >
+                        <span className="text-base shrink-0">{t.emoji}</span>
+                        <span className="flex-1 truncate font-semibold">{t.label}</span>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-1 py-0.5 rounded shrink-0">
+                          Use once
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
           </div>
 
           {/* ── Custom goal input ──────────────────────────────── */}
