@@ -1,23 +1,28 @@
 // QuickTimerButton
 //
-// One-tap "I just want to focus right now" entry. Spins up a solo
-// session with sensible defaults (25min, no goal required, no video,
-// no ceremony) and drops the user straight into ActiveSessionPage.
+// The low-friction lane for starting a focus session. Two clicks max
+// from anywhere in the app, with three ways to choose what you're
+// doing:
 //
-// Conceptually this is a stopwatch with zero friction. Under the hood
-// it's still a focus_sessions row so momentum / stats / streaks stay
-// honest — the user shouldn't feel a difference between "I started a
-// timer" and "I started a session." Just less paperwork up front.
+//   1. Pick a Quick Activity (Cold calling, Research, Social posts…)
+//      — seeded from the user's work_types via ActivityService.
+//   2. Type a custom one-off goal in the inline input.
+//   3. Just start with no goal — falls back to "Quick focus".
 //
-// A small "+ details" affordance lets the user pop into the full
-// DeclareSessionModal if they want to set a goal, change duration,
-// pin a project, etc.
+// And two ways to choose WHEN:
+//   • Now (default) — solo session starts immediately.
+//   • Schedule for later — picks a future slot via 4 time chips
+//     (Tonight / Tomorrow / Custom). Creates a scheduled_session row.
+//
+// Solo Session (DeclareSessionModal) remains the deliberate lane for
+// bespoke goals + project pinning + body-double / real-world modes.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Timer, ChevronDown } from 'lucide-react';
-import { startCommunitySession } from '../../services/SessionService';
+import { Loader2, Timer, ChevronDown, Calendar, Plus } from 'lucide-react';
+import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
+import { ActivityService, type UserActivity } from '../../services/ActivityService';
 
 const PRESETS: Array<{ minutes: number; label: string }> = [
   { minutes: 10, label: '10 min' },
@@ -28,8 +33,6 @@ const PRESETS: Array<{ minutes: number; label: string }> = [
   { minutes: 90, label: '90 min' },
 ];
 
-/** Last-used custom duration, remembered so the picker reopens with
- *  the user's actual habit instead of always falling back to 25. */
 const LS_LAST = 'sm.quickTimer.lastMinutes';
 function readLast(): number {
   if (typeof window === 'undefined') return 25;
@@ -41,21 +44,72 @@ function writeLast(n: number): void {
 }
 
 /** Backend constraint: durationMinutes is typed as 25 | 50 | 90 but the
- *  underlying focus_sessions column accepts any integer. We cast through
- *  the type system here intentionally — the row stores intended_duration
- *  unmodified and the timer derives target_end_time = start + minutes. */
+ *  underlying focus_sessions column accepts any integer. The cast is
+ *  intentional — see comment in SessionService.startCommunitySession. */
 function asValidDuration(n: number): 25 | 50 | 90 {
-  // The literal union is just a guard against typos in callers; the DB
-  // happily takes any positive integer. Cast wide.
   return n as 25 | 50 | 90;
 }
 
+// ── Scheduling helpers ──────────────────────────────────────────
+
+interface TimeChip {
+  id: string;
+  label: string;
+  /** Returns the absolute Date this chip resolves to at click-time. */
+  resolve: () => Date;
+}
+
+/** Quick time chips. Resolution is intentionally lazy so e.g.
+ *  "Tonight 7pm" updates relative to *when the user clicks*, not when
+ *  the dropdown was first rendered. */
+const TIME_CHIPS: TimeChip[] = [
+  {
+    id: 'tonight',
+    label: 'Tonight 7pm',
+    resolve: () => {
+      const d = new Date();
+      d.setHours(19, 0, 0, 0);
+      if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+      return d;
+    },
+  },
+  {
+    id: 'tomorrow-am',
+    label: 'Tomorrow 9am',
+    resolve: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(9, 0, 0, 0);
+      return d;
+    },
+  },
+  {
+    id: 'tomorrow-pm',
+    label: 'Tomorrow 2pm',
+    resolve: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(14, 0, 0, 0);
+      return d;
+    },
+  },
+];
+
+function isoLocal(d: Date): string {
+  // YYYY-MM-DDTHH:mm — local-time format for <input type="datetime-local">
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ── Component ───────────────────────────────────────────────────
+
 interface Props {
-  /** Optional project to pin the timer to. */
+  /** Optional project to pin the timer to. Currently unused by the
+   *  Quick Timer (activities are project-less by design) but kept for
+   *  future "start a timer for this project" entry points. */
   projectId?: string | null;
   /** Compact = pill button, no expand menu. Default false. */
   compact?: boolean;
-  /** Optional extra classes for the outer container. */
   className?: string;
 }
 
@@ -66,23 +120,67 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [defaultMinutes] = useState<number>(() => readLast());
-  // Custom-minute input — controlled string so the user can type freely
-  // (including a transient empty value) without us coercing it back.
-  const [customInput, setCustomInput] = useState<string>('');
 
-  async function startTimer(minutes: number) {
+  // ── Activity state ─────────────────────────────────────────
+  const [activities, setActivities] = useState<UserActivity[]>([]);
+  const [selectedActivity, setSelectedActivity] = useState<UserActivity | null>(null);
+  const [customGoal, setCustomGoal] = useState<string>('');
+  // The duration that actually goes to the backend — derived from
+  // (in priority order) the selected activity's default, the inline
+  // duration override, or the user's last-used minutes.
+  const [overrideMinutes, setOverrideMinutes] = useState<number | null>(null);
+  const minutes = overrideMinutes ?? selectedActivity?.default_minutes ?? defaultMinutes;
+
+  // ── Scheduling state ───────────────────────────────────────
+  const [scheduleMode, setScheduleMode] = useState(false);
+  const [customDatetime, setCustomDatetime] = useState<string>('');
+
+  // Lazy-load + seed activities on first menu open. Cheaper than a
+  // global mount-time fetch since most users won't open the dropdown
+  // every page load.
+  const [activitiesLoaded, setActivitiesLoaded] = useState(false);
+  useEffect(() => {
+    if (!menuOpen || activitiesLoaded) return;
+    let cancelled = false;
+    (async () => {
+      let mine = await ActivityService.listMine();
+      if (mine.length === 0) {
+        // Day-zero — seed from the library based on the user's
+        // work_types. Then re-list to get the seeded rows.
+        await ActivityService.seedFromWorkTypes(5);
+        mine = await ActivityService.listMine();
+      }
+      if (!cancelled) {
+        setActivities(mine);
+        setActivitiesLoaded(true);
+      }
+    })().catch((e) => console.warn('[QuickTimer] activity load failed', e));
+    return () => { cancelled = true; };
+  }, [menuOpen, activitiesLoaded]);
+
+  /** The goal text that ends up on the focus_sessions row.
+   *  Priority: selected activity → typed custom goal → fallback. */
+  function resolveGoalText(): string {
+    if (selectedActivity) return selectedActivity.label;
+    const c = customGoal.trim();
+    if (c) return c;
+    return 'Quick focus';
+  }
+
+  async function startNow() {
     if (busy) return;
     const safe = Math.min(180, Math.max(5, Math.round(minutes)));
     setBusy(true);
     setError(null);
     try {
       const session = await startCommunitySession({
-        goalText: 'Quick focus',
+        goalText: resolveGoalText(),
         durationMinutes: asValidDuration(safe),
         sessionMode: 'solo',
         projectId: projectId ?? undefined,
       });
       writeLast(safe);
+      if (selectedActivity) ActivityService.bumpUsage(selectedActivity.id).catch(() => {});
       setActiveSession(session as any);
       navigate(`/session/${session.id}`);
     } catch (e: any) {
@@ -91,21 +189,56 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
     }
   }
 
-  function handleCustomStart() {
-    const n = parseInt(customInput, 10);
-    if (!Number.isFinite(n) || n < 5 || n > 180) {
-      setError('Pick a duration between 5 and 180 minutes.');
+  async function schedule(at: Date) {
+    if (busy) return;
+    if (at.getTime() <= Date.now()) {
+      setError('Pick a future time.');
       return;
     }
-    setMenuOpen(false);
-    startTimer(n);
+    const safe = Math.min(180, Math.max(5, Math.round(minutes)));
+    setBusy(true);
+    setError(null);
+    try {
+      await createScheduledSession({
+        title: resolveGoalText(),
+        goalText: resolveGoalText(),
+        durationMinutes: asValidDuration(safe),
+        sessionMode: 'solo',
+        scheduledAt: at,
+        projectId: projectId ?? undefined,
+      });
+      writeLast(safe);
+      if (selectedActivity) ActivityService.bumpUsage(selectedActivity.id).catch(() => {});
+      setMenuOpen(false);
+      setBusy(false);
+      // Light user feedback — navigate to the sessions list so they
+      // see their newly-scheduled block on the calendar.
+      navigate('/sessions');
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not schedule the timer.');
+      setBusy(false);
+    }
   }
 
+  function handleCustomScheduleStart() {
+    if (!customDatetime) {
+      setError('Pick a date and time.');
+      return;
+    }
+    const d = new Date(customDatetime);
+    if (Number.isNaN(d.getTime())) {
+      setError('Invalid date.');
+      return;
+    }
+    schedule(d);
+  }
+
+  // ── Compact pill (used inline on cards) ────────────────────
   if (compact) {
     return (
       <button
         type="button"
-        onClick={() => startTimer(defaultMinutes)}
+        onClick={() => startNow()}
         disabled={busy}
         className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container transition-colors disabled:opacity-50 ${className}`}
       >
@@ -115,26 +248,29 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
     );
   }
 
+  // ── Main button + dropdown ─────────────────────────────────
+  const primaryLabel = selectedActivity
+    ? `${selectedActivity.emoji} ${selectedActivity.label} · ${minutes}m`
+    : `Quick timer · ${minutes}m`;
+
   return (
     <div className={`relative ${className}`}>
       <div className="inline-flex rounded-full overflow-hidden shadow-sm">
-        {/* Primary "start last-used duration" button. Defaults to 25 on
-            first run, then remembers whatever the user actually picked. */}
         <button
           type="button"
-          onClick={() => startTimer(defaultMinutes)}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-60"
+          onClick={() => (scheduleMode ? null : startNow())}
+          disabled={busy || scheduleMode}
+          title={scheduleMode ? 'Pick a time below' : 'Start now'}
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-60 max-w-[260px]"
         >
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Timer size={14} />}
-          Quick timer · {defaultMinutes} min
+          <span className="truncate">{primaryLabel}</span>
         </button>
-        {/* Expand for other durations */}
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
           disabled={busy}
-          aria-label="Pick duration"
+          aria-label="Pick activity or duration"
           className="inline-flex items-center justify-center w-9 bg-slate-800 hover:bg-slate-700 text-white border-l border-white/10 transition-colors disabled:opacity-60"
         >
           <ChevronDown size={14} />
@@ -142,62 +278,178 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
       </div>
 
       {menuOpen && !busy && (
-        <div
-          className="absolute z-30 right-0 mt-2 w-56 rounded-2xl bg-surface ring-1 ring-surface-container-high shadow-lg overflow-hidden"
-        >
-          <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
-            Start a quick timer
-          </p>
-          {/* Preset chips — 2 columns so 6 options fit cleanly */}
-          <div className="px-2 pb-2 grid grid-cols-2 gap-1">
-            {PRESETS.map(({ minutes, label }) => (
-              <button
-                key={minutes}
-                type="button"
-                onClick={() => { setMenuOpen(false); startTimer(minutes); }}
-                className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-colors text-center ${
-                  minutes === defaultMinutes
-                    ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                    : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* Custom input row */}
-          <div className="border-t border-surface-container px-3 py-2.5 space-y-1.5">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
-              Custom
+        <div className="absolute z-30 right-0 mt-2 w-80 rounded-2xl bg-surface ring-1 ring-surface-container-high shadow-2xl overflow-hidden">
+
+          {/* ── Activities row ────────────────────────────────────
+              Most-recent first (sorted server-side). Tap to select —
+              the chip becomes active and the duration auto-fills from
+              the activity's default. */}
+          <div className="px-3 pt-3 pb-2 max-h-[180px] overflow-y-auto">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-2">
+              Quick activities
             </p>
+            {activities.length === 0 ? (
+              <p className="text-xs stitch-text-secondary italic py-2">
+                Loading…
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {activities.slice(0, 12).map((a) => {
+                  const active = selectedActivity?.id === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedActivity(active ? null : a);
+                        setOverrideMinutes(null); // re-derive from activity default
+                        setCustomGoal('');
+                      }}
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                        active
+                          ? 'bg-primary text-white'
+                          : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                      }`}
+                      title={`${a.label} · ${a.default_minutes}min`}
+                    >
+                      <span>{a.emoji}</span>
+                      <span className="truncate max-w-[110px]">{a.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Custom goal input ──────────────────────────────── */}
+          <div className="border-t border-surface-container px-3 py-2">
+            <label className="block text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-1.5">
+              Or type a one-off goal
+            </label>
+            <input
+              type="text"
+              value={customGoal}
+              onChange={(e) => {
+                setCustomGoal(e.target.value);
+                if (e.target.value.trim()) setSelectedActivity(null);
+              }}
+              placeholder="e.g. Polish the pitch deck"
+              className="w-full px-2 py-1.5 rounded-lg text-sm stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+            />
+          </div>
+
+          {/* ── Duration presets + custom ──────────────────────── */}
+          <div className="border-t border-surface-container px-3 py-2.5 space-y-2">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+              Duration
+            </p>
+            <div className="grid grid-cols-3 gap-1">
+              {PRESETS.map(({ minutes: m, label }) => {
+                const active = minutes === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setOverrideMinutes(m)}
+                    className={`px-1.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                      active
+                        ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                        : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
             <div className="flex items-center gap-1.5">
               <input
                 type="number"
                 min={5}
                 max={180}
                 inputMode="numeric"
-                placeholder="e.g. 35"
-                value={customInput}
-                onChange={(e) => { setCustomInput(e.target.value); setError(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCustomStart(); }}
-                className="flex-1 min-w-0 px-2 py-1.5 rounded-lg text-sm font-bold stitch-text-primary tabular-nums bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+                placeholder="Custom"
+                value={overrideMinutes ?? ''}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setOverrideMinutes(Number.isFinite(n) ? n : null);
+                }}
+                className="w-20 px-2 py-1 rounded-md text-xs font-bold stitch-text-primary tabular-nums bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
               />
-              <span className="text-[11px] stitch-text-secondary font-semibold">min</span>
+              <span className="text-[11px] stitch-text-secondary">min · 5–180</span>
+            </div>
+          </div>
+
+          {/* ── Schedule toggle ─────────────────────────────────── */}
+          <div className="border-t border-surface-container px-3 py-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={scheduleMode}
+                onChange={(e) => setScheduleMode(e.target.checked)}
+                className="w-3.5 h-3.5 accent-primary"
+              />
+              <Calendar size={12} className="stitch-text-secondary" />
+              <span className="text-xs font-bold stitch-text-primary">
+                Schedule for later
+              </span>
+            </label>
+          </div>
+
+          {/* ── Action row ──────────────────────────────────────── */}
+          {!scheduleMode ? (
+            <div className="border-t border-surface-container px-3 py-2.5">
               <button
                 type="button"
-                onClick={handleCustomStart}
-                disabled={!customInput.trim()}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => { setMenuOpen(false); startNow(); }}
+                disabled={busy}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-extrabold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-60"
               >
-                Start
+                <Timer size={13} /> Start now
               </button>
             </div>
-            <p className="text-[10px] stitch-text-secondary">5–180 minutes</p>
-          </div>
+          ) : (
+            <div className="border-t border-surface-container px-3 py-2.5 space-y-2">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+                When?
+              </p>
+              <div className="grid grid-cols-3 gap-1">
+                {TIME_CHIPS.map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => schedule(chip.resolve())}
+                    className="px-1.5 py-1.5 rounded-md text-[11px] font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container transition-colors text-center"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="datetime-local"
+                  value={customDatetime}
+                  min={isoLocal(new Date(Date.now() + 5 * 60 * 1000))}
+                  onChange={(e) => setCustomDatetime(e.target.value)}
+                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg text-xs font-bold stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleCustomScheduleStart}
+                  disabled={!customDatetime}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Plus size={11} /> Add
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="border-t border-surface-container px-3 py-2 bg-surface-container-low/30">
             <p className="text-[10px] stitch-text-secondary leading-snug">
-              No goal, no video — just the clock. Still logs as a solo
-              session so it counts toward your momentum.
+              {selectedActivity || customGoal.trim()
+                ? <>Logs as a solo session — counts toward momentum and shows up in your calendar.</>
+                : <>No goal needed. Logs as "Quick focus" — you can rename later from the calendar.</>}
             </p>
           </div>
         </div>
@@ -211,3 +463,4 @@ export function QuickTimerButton({ projectId = null, compact = false, className 
     </div>
   );
 }
+

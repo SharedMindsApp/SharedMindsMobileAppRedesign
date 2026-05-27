@@ -6,6 +6,14 @@ export interface CreateScheduledSessionInput {
   scheduledAt: Date;
   durationMinutes: 25 | 50 | 90;
   projectId?: string;
+  /** Optional — defaults to 'group' (a public bookable slot). Pass
+   *  'solo' for private quick-timer-style scheduled blocks that don't
+   *  appear in anyone else's calendar. */
+  sessionMode?: 'group' | 'one_on_one' | 'solo';
+  /** Goal/activity text. Persisted as session_goal so the calendar
+   *  list view shows the activity label (e.g. "Cold calling") rather
+   *  than just the title. */
+  goalText?: string;
 }
 
 export interface ScheduledSessionWithProfile extends FocusSession {
@@ -496,6 +504,8 @@ export async function createScheduledSession(
       status: 'scheduled',
       session_type: 'scheduled',
       session_title: input.title,
+      session_goal: input.goalText ?? null,
+      session_mode: input.sessionMode ?? 'group',
       scheduled_at: input.scheduledAt.toISOString(),
       start_time: input.scheduledAt.toISOString(),
       target_end_time: targetEnd.toISOString(),
