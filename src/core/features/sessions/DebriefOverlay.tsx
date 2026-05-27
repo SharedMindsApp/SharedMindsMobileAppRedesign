@@ -38,6 +38,10 @@ interface DebriefOverlayProps {
   /** Called once the local user has submitted AND the debrief is fully done
       (timer expired OR everyone answered). Parent navigates to summary. */
   onFinalized: () => void;
+  /** Skip the "Waiting for everyone else" countdown — call onFinalized
+   *  immediately after the user picks an outcome. Used for solo
+   *  sessions where there is no "everyone else" to wait for. */
+  skipWait?: boolean;
 }
 
 type OutcomeWithProfile = SessionOutcomeRow & {
@@ -45,7 +49,7 @@ type OutcomeWithProfile = SessionOutcomeRow & {
 };
 
 export function DebriefOverlay({
-  sessionId, declaredGoal, currentUserId, taskId, onFinalized,
+  sessionId, declaredGoal, currentUserId, taskId, onFinalized, skipWait = false,
 }: DebriefOverlayProps) {
   const [outcomes, setOutcomes] = useState<OutcomeWithProfile[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -134,6 +138,13 @@ export function DebriefOverlay({
       // and the "continue from where you left off" badge next session.
       if (taskId) {
         await TaskService.applyOutcomeToTask(taskId, outcome);
+      }
+      // Solo sessions: no peers to wait for. Finalize the moment the
+      // user picks an outcome so the timer surface auto-dismisses
+      // straight to the summary page.
+      if (skipWait && !finalizedRef.current) {
+        finalizedRef.current = true;
+        onFinalized();
       }
     } catch (err) {
       console.error('[Debrief] submit failed:', err);

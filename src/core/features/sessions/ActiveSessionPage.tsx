@@ -595,7 +595,9 @@ export function ActiveSessionPage() {
             </aside>
           )}
 
-          {/* Solo debrief renders inline over the focus view */}
+          {/* Solo debrief renders inline over the focus view. skipWait
+              dismisses the overlay the moment the user picks an outcome —
+              there are no peers to wait for. */}
           {showDebrief && user && (
             <DebriefOverlay
               sessionId={session.id}
@@ -603,6 +605,7 @@ export function ActiveSessionPage() {
               currentUserId={user.id}
               taskId={session.session_task_id ?? null}
               onFinalized={handleDebriefFinalized}
+              skipWait
             />
           )}
         </div>
