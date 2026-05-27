@@ -115,6 +115,7 @@ type GridSession = {
   project_id?: string | null;
   project_title?: string | null;
   project_color?: string | null;
+  is_quick_timer?: boolean;
 };
 
 const PROJECT_DOT_HEX: Record<string, string> = {
@@ -141,6 +142,7 @@ function toGridSession(s: CommunitySession): GridSession {
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
+    is_quick_timer: !!(s as any).is_quick_timer,
   };
 }
 
@@ -161,6 +163,7 @@ function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
+    is_quick_timer: !!(s as any).is_quick_timer,
   };
 }
 
@@ -838,6 +841,7 @@ function SessionBlock({
               mode={session.session_mode}
               quietMode={session.quiet_mode}
               partnerOpen={partnerOpen}
+              isQuickTimer={session.is_quick_timer}
               size="sm"
             />
           </div>
@@ -886,6 +890,7 @@ function SessionBlock({
             mode={session.session_mode}
             quietMode={session.quiet_mode}
             partnerOpen={partnerOpen}
+            isQuickTimer={session.is_quick_timer}
             projectTitle={session.project_title}
             projectColor={session.project_color}
             size="sm"
@@ -1117,6 +1122,7 @@ function SessionDetailSheet({
             durationMinutes={session.intended_duration_minutes}
             projectTitle={session.project_title}
             projectColor={session.project_color}
+            isQuickTimer={session.is_quick_timer}
           />
         </div>
 

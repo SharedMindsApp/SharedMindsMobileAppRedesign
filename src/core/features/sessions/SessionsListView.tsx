@@ -34,6 +34,7 @@ export type ListSession = {
   project_id?: string | null;
   project_title?: string | null;
   project_color?: string | null;
+  is_quick_timer?: boolean;
 };
 
 const PROJECT_DOT_HEX: Record<string, string> = {
@@ -249,8 +250,12 @@ function SessionRow({ s, onSelect }: { s: ListSession; onSelect: () => void }) {
           {/* Main */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className={`inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${modeMeta.chipCls}`}>
-                <modeMeta.Icon size={9} /> {modeMeta.label}
+              <span className={`inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                s.is_quick_timer ? 'bg-amber-100 text-amber-700' : modeMeta.chipCls
+              }`}>
+                {s.is_quick_timer
+                  ? <><Clock size={9} /> Timer</>
+                  : <><modeMeta.Icon size={9} /> {modeMeta.label}</>}
               </span>
               {isActive ? (
                 <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">

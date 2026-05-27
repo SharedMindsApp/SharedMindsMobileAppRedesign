@@ -14,6 +14,9 @@ export interface CreateScheduledSessionInput {
    *  list view shows the activity label (e.g. "Cold calling") rather
    *  than just the title. */
   goalText?: string;
+  /** Marker for Quick Timer scheduled blocks — see
+   *  StartCommunitySessionInput.isQuickTimer. */
+  isQuickTimer?: boolean;
 }
 
 export interface ScheduledSessionWithProfile extends FocusSession {
@@ -53,6 +56,13 @@ export interface StartCommunitySessionInput {
    * mode. Disables body_double.
    */
   isOffline?: boolean;
+  /**
+   * Marker: this row was created via the Quick Timer flow rather than
+   * the full DeclareSessionModal. Both paths use session_mode='solo'
+   * for the same backend behavior, but the calendar shows TIMER vs
+   * SOLO pills based on this flag.
+   */
+  isQuickTimer?: boolean;
 }
 
 export async function startCommunitySession(
@@ -81,6 +91,7 @@ export async function startCommunitySession(
       // Offline takes precedence — if both are passed, body_double off.
       body_double: input.sessionMode === 'solo' && !input.isOffline && !!input.bodyDouble,
       is_offline:  input.sessionMode === 'solo' && !!input.isOffline,
+      is_quick_timer: !!input.isQuickTimer,
       drift_count: 0,
       distraction_count: 0,
     })
@@ -512,6 +523,7 @@ export async function createScheduledSession(
       intended_duration_minutes: input.durationMinutes,
       project_id: input.projectId ?? null,
       join_code: joinCode,
+      is_quick_timer: !!input.isQuickTimer,
       drift_count: 0,
       distraction_count: 0,
     })

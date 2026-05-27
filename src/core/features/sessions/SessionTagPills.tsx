@@ -31,6 +31,11 @@ export interface SessionTagPillsProps {
   projectColor?: string | null;
   /** "sm" = compact (home cards, calendar blocks), "md" = comfortable (detail sheet) */
   size?: 'sm' | 'md';
+  /** When true, renders a "TIMER" pill (amber) instead of the Solo
+   *  mode pill. Used to distinguish Quick Timer rows from full Solo
+   *  Session rows on the calendar — both store session_mode='solo'
+   *  but represent very different product surfaces. */
+  isQuickTimer?: boolean;
 }
 
 const MODE_META: Record<SessionMode, { emoji: string; label: string; cls: string }> = {
@@ -56,6 +61,7 @@ export function SessionTagPills({
   projectTitle,
   projectColor,
   size = 'md',
+  isQuickTimer = false,
 }: SessionTagPillsProps) {
   const isSmall = size === 'sm';
   const textCls = isSmall ? 'text-[9px]'  : 'text-[10px]';
@@ -80,11 +86,18 @@ export function SessionTagPills({
         </span>
       )}
 
-      {/* ── Mode ── */}
-      <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full ${textCls} ${padCls} ${modeMeta.cls}`}>
-        <span className={emojiCls}>{modeMeta.emoji}</span>
-        {modeMeta.label}
-      </span>
+      {/* ── Mode (or TIMER for Quick Timer rows) ── */}
+      {isQuickTimer ? (
+        <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full ${textCls} ${padCls} bg-amber-50 text-amber-700`}>
+          <span className={emojiCls}>⏱</span>
+          Timer
+        </span>
+      ) : (
+        <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full ${textCls} ${padCls} ${modeMeta.cls}`}>
+          <span className={emojiCls}>{modeMeta.emoji}</span>
+          {modeMeta.label}
+        </span>
+      )}
 
       {/* ── Quiet / mics off ── */}
       {quietMode && (

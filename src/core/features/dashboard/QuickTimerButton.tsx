@@ -268,6 +268,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         durationMinutes: asValidDuration(safe),
         sessionMode: 'solo',
         projectId: projectId ?? undefined,
+        isQuickTimer: true,
       });
       writeLast(safe);
       if (effectiveActivity) ActivityService.bumpUsage(effectiveActivity.id).catch(() => {});
@@ -296,6 +297,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         sessionMode: 'solo',
         scheduledAt: at,
         projectId: projectId ?? undefined,
+        isQuickTimer: true,
       });
       writeLast(safe);
       if (effectiveActivity) ActivityService.bumpUsage(effectiveActivity.id).catch(() => {});

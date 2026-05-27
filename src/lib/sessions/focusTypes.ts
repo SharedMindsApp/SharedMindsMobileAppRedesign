@@ -47,6 +47,11 @@ export interface FocusSession {
       "focusing offline" badge instead of attempting any video room.
       In practice only set when session_mode = 'solo'. */
   is_offline?: boolean;
+  /** True when created via the Quick Timer flow (activity-tagged,
+   *  low-friction). Distinct from the full Solo Session even though
+   *  both store session_mode='solo'. UI surfaces them differently
+   *  (TIMER vs SOLO pill on the calendar). */
+  is_quick_timer?: boolean;
   created_at: string;
   updated_at: string;
   // Community session fields
