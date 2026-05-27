@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, FileText, LogOut, Shield, Eye, X, MessageCircle, MessageSquare, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles, BellOff, Bell, Video } from 'lucide-react';
+import { Home, FileText, LogOut, Shield, Eye, EyeOff, X, MessageCircle, MessageSquare, Brain, Users, Target, User, UserRound, ChevronDown, Zap, Sun, Moon, Check, Calendar, MoreHorizontal, Settings, Activity, BookOpen, Menu, Package, Link2, TrendingUp, ExternalLink, Globe, Sparkles, BellOff, Bell, Video, Coffee, Circle } from 'lucide-react';
 import { useFocusSession } from '../contexts/FocusSessionContext';
 import { ToastContainer, useToasts } from './Toast';
 import { getUserHousehold, Household } from '../lib/household';
@@ -10,6 +10,7 @@ import { useAuth } from '../core/auth/AuthProvider';
 import { useViewAs } from '../contexts/ViewAsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { fetchTotalUnreadDms, subscribeToAnyIncomingDm, updateDmPrivacy, type DmPrivacy } from '../core/services/MessageService';
+import { updatePresencePrivacy, updateStatusMode, type PresencePrivacy, type StatusMode } from '../core/services/ProfileService';
 import { supabase } from '../lib/supabase';
 import { MessagingDock } from '../core/features/messages/MessagingDock';
 import { FloatingTimerWidget } from '../core/features/sessions/FloatingTimerWidget';
@@ -481,6 +482,22 @@ export function Layout({ children }: LayoutProps) {
                               <div className="px-2 py-2">
                                 <DmPrivacyToggle
                                   current={(profile as any)?.dm_privacy ?? 'open'}
+                                  isDark={isDark}
+                                />
+                              </div>
+
+                              {/* ── Status mode (Auto / Busy / Appear offline) ── */}
+                              <div className="px-2">
+                                <StatusModeToggle
+                                  current={(profile as any)?.status_mode ?? 'auto'}
+                                  isDark={isDark}
+                                />
+                              </div>
+
+                              {/* ── Presence privacy (who sees my dot) ── */}
+                              <div className="px-2 pb-2">
+                                <PresencePrivacyToggle
+                                  current={(profile as any)?.presence_privacy ?? 'everyone'}
                                   isDark={isDark}
                                 />
                               </div>
@@ -1001,6 +1018,166 @@ function DmPrivacyToggle({ current, isDark }: { current: DmPrivacy; isDark: bool
                     : opt.value === 'connections_only'
                     ? 'bg-amber-500 text-white shadow-sm'
                     : 'bg-cyan-500 text-white shadow-sm'
+                  : isDark
+                  ? 'text-gray-400 hover:text-gray-200'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className={`text-[10px] mt-1.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {activeOption.description}
+      </p>
+    </div>
+  );
+}
+
+// ── Status mode toggle (Auto / Busy / Appear offline) ───────────────────────
+//
+// Orthogonal to DM privacy: this controls WHAT label is shown to
+// people who CAN see you. Active-session override is applied server-
+// side, so we don't expose 'in_session' here — that's automatic.
+
+const STATUS_MODE_OPTIONS: { value: StatusMode; label: string; icon: React.ReactNode; description: string; activeClass: string }[] = [
+  {
+    value: 'auto',
+    label: 'Auto',
+    icon: <Circle size={10} className="fill-current" />,
+    description: 'Green when you\'re active, grey when idle',
+    activeClass: 'bg-emerald-500 text-white shadow-sm',
+  },
+  {
+    value: 'busy',
+    label: 'Busy',
+    icon: <Coffee size={12} />,
+    description: 'Show as busy — please don\'t interrupt',
+    activeClass: 'bg-amber-500 text-white shadow-sm',
+  },
+  {
+    value: 'offline',
+    label: 'Appear offline',
+    icon: <EyeOff size={12} />,
+    description: 'Look offline even though you\'re here',
+    activeClass: 'bg-slate-500 text-white shadow-sm',
+  },
+];
+
+function StatusModeToggle({ current, isDark }: { current: StatusMode; isDark: boolean }) {
+  const [value, setValue] = useState<StatusMode>(current);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setValue(current); }, [current]);
+
+  async function handleChange(next: StatusMode) {
+    if (next === value || saving) return;
+    setValue(next);
+    setSaving(true);
+    try { await updateStatusMode(next); }
+    catch { setValue(value); }
+    finally { setSaving(false); }
+  }
+
+  const activeOption = STATUS_MODE_OPTIONS.find((o) => o.value === value) ?? STATUS_MODE_OPTIONS[0];
+
+  return (
+    <div className="px-3 py-2.5">
+      <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        My status
+      </p>
+      <div className={`flex rounded-xl overflow-hidden border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'} p-0.5 gap-0.5`}>
+        {STATUS_MODE_OPTIONS.map((opt) => {
+          const isActive = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleChange(opt.value)}
+              disabled={saving}
+              title={opt.description}
+              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                isActive
+                  ? opt.activeClass
+                  : isDark
+                  ? 'text-gray-400 hover:text-gray-200'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className={`text-[10px] mt-1.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {activeOption.description}
+      </p>
+    </div>
+  );
+}
+
+// ── Presence privacy toggle (who sees my dot) ───────────────────────────────
+
+const PRESENCE_PRIVACY_OPTIONS: { value: PresencePrivacy; label: string; icon: React.ReactNode; description: string; activeClass: string }[] = [
+  {
+    value: 'everyone',
+    label: 'Everyone',
+    icon: <Eye size={12} />,
+    description: 'Anyone signed in sees when you\'re online',
+    activeClass: 'bg-cyan-500 text-white shadow-sm',
+  },
+  {
+    value: 'connections',
+    label: 'Connections',
+    icon: <Users size={12} />,
+    description: 'Only people you\'re connected with see your status',
+    activeClass: 'bg-amber-500 text-white shadow-sm',
+  },
+  {
+    value: 'nobody',
+    label: 'Hidden',
+    icon: <EyeOff size={12} />,
+    description: 'Never appear in online lists — invisible mode',
+    activeClass: 'bg-slate-600 text-white shadow-sm',
+  },
+];
+
+function PresencePrivacyToggle({ current, isDark }: { current: PresencePrivacy; isDark: boolean }) {
+  const [value, setValue] = useState<PresencePrivacy>(current);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setValue(current); }, [current]);
+
+  async function handleChange(next: PresencePrivacy) {
+    if (next === value || saving) return;
+    setValue(next);
+    setSaving(true);
+    try { await updatePresencePrivacy(next); }
+    catch { setValue(value); }
+    finally { setSaving(false); }
+  }
+
+  const activeOption = PRESENCE_PRIVACY_OPTIONS.find((o) => o.value === value) ?? PRESENCE_PRIVACY_OPTIONS[0];
+
+  return (
+    <div className="px-3 py-2.5">
+      <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        Show online status to
+      </p>
+      <div className={`flex rounded-xl overflow-hidden border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'} p-0.5 gap-0.5`}>
+        {PRESENCE_PRIVACY_OPTIONS.map((opt) => {
+          const isActive = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleChange(opt.value)}
+              disabled={saving}
+              title={opt.description}
+              className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                isActive
+                  ? opt.activeClass
                   : isDark
                   ? 'text-gray-400 hover:text-gray-200'
                   : 'text-gray-500 hover:text-gray-700'

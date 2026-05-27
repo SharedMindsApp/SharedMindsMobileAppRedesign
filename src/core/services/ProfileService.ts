@@ -29,6 +29,8 @@ export interface PublicProfile {
   city?: string | null;
   created_at: string;
   last_seen_at?: string | null;
+  presence_privacy?: 'everyone' | 'connections' | 'nobody';
+  status_mode?: 'auto' | 'busy' | 'offline';
 }
 
 export interface RecentShip {
@@ -383,6 +385,35 @@ export async function fetchWeekSessions(userId: string): Promise<{ start_time: s
     .gte('start_time', sevenDaysAgo.toISOString());
 
   return (data ?? []) as { start_time: string }[];
+}
+
+// ── Privacy & presence settings ────────────────────────────────────────────
+
+export type PresencePrivacy = 'everyone' | 'connections' | 'nobody';
+export type StatusMode = 'auto' | 'busy' | 'offline';
+
+/** Who is allowed to see my online dot. */
+export async function updatePresencePrivacy(value: PresencePrivacy): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ presence_privacy: value, updated_at: new Date().toISOString() })
+    .eq('id', user.id);
+  if (error) throw error;
+}
+
+/** What status label do I show to people who CAN see me. */
+export async function updateStatusMode(value: StatusMode): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ status_mode: value, updated_at: new Date().toISOString() })
+    .eq('id', user.id);
+  if (error) throw error;
 }
 
 export async function updateProfileBio(bio: string): Promise<void> {

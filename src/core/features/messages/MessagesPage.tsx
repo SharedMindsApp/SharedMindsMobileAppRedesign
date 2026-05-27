@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { fetchConversations, type DmConversation } from '../../services/MessageService';
+import { listVisibleOnlineUsers } from '../../services/PresenceService';
 import { useAuth } from '../../auth/AuthProvider';
 import { GradientButton } from '../../ui/CorePage';
 import { CommunalChatPanel } from '../chat/CommunalChatPanel';
@@ -31,6 +32,8 @@ interface OnlineMember {
   avatar_url: string | null;
   last_seen_at: string;
   work_type: string | null;
+  /** Effective presence reported by the DB RPC ('online' | 'busy' | 'in_session'). */
+  status?: 'online' | 'busy' | 'in_session';
 }
 
 interface ActiveSession {
@@ -75,14 +78,29 @@ function formatTimeAgo(iso: string): string {
 function useOnlineMembers() {
   const [members, setMembers] = useState<OnlineMember[]>([]);
   const fetch = useCallback(async () => {
-    const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    // Privacy-respecting: list_visible_online_users returns only users
+    // the caller is allowed to see (presence_privacy + connections gate
+    // applied server-side). Then we join profiles for display data.
+    const rows = await listVisibleOnlineUsers(20);
+    if (rows.length === 0) { setMembers([]); return; }
+
+    const ids = rows.map((r) => r.id);
     const { data } = await supabase
       .from('profiles')
       .select('id, display_name, avatar_url, last_seen_at, work_type')
-      .gt('last_seen_at', cutoff)
-      .order('last_seen_at', { ascending: false })
-      .limit(20);
-    if (data) setMembers(data as OnlineMember[]);
+      .in('id', ids);
+    if (!data) { setMembers([]); return; }
+
+    // Attach the server-derived status to each profile row
+    const statusById = new Map(rows.map((r) => [r.id, r.status]));
+    const merged: OnlineMember[] = (data as OnlineMember[])
+      .map((p) => ({ ...p, status: statusById.get(p.id) }))
+      // Sort: in_session first, then online, then busy
+      .sort((a, b) => {
+        const rank = (s?: string) => s === 'in_session' ? 0 : s === 'online' ? 1 : 2;
+        return rank(a.status) - rank(b.status);
+      });
+    setMembers(merged);
   }, []);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { resendSignupConfirmation, appUrl } from '../../lib/auth';
 import { Eye, EyeOff } from 'lucide-react';
+import { LEGAL_DOCUMENT_VERSION } from '../features/legal/LegalPages';
 
 export function AuthPage() {
     const [fullName, setFullName] = useState('');
@@ -12,6 +13,7 @@ export function AuthPage() {
     const [isResending, setIsResending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSignUp, setIsSignUp] = useState(false);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -26,8 +28,12 @@ export function AuthPage() {
                 if (!normalizedName) {
                     throw new Error('Please enter your name to create an account.');
                 }
+                if (!acceptedTerms) {
+                    throw new Error('Please confirm you\'ve read and agree to the Privacy Policy and Terms of Service.');
+                }
 
                 const normalizedEmail = email.trim().toLowerCase();
+                const consentAt = new Date().toISOString();
                 const { data, error: signUpError } = await supabase.auth.signUp({
                     email: normalizedEmail,
                     password,
@@ -37,11 +43,31 @@ export function AuthPage() {
                             full_name: normalizedName,
                             display_name: normalizedName,
                             name: normalizedName,
+                            // Consent receipt for GDPR / record-keeping
+                            accepted_privacy_at: consentAt,
+                            accepted_privacy_version: LEGAL_DOCUMENT_VERSION,
                         },
                     },
                 });
 
                 if (signUpError) throw signUpError;
+
+                // Write directly to the profile too — the new-user
+                // trigger may not propagate metadata, so we belt-and-
+                // braces the consent timestamp. If the profile row
+                // doesn't exist yet, the update is a no-op; the
+                // background AuthProvider profile fetch will pick up
+                // the eventual row.
+                if (data.user) {
+                    await supabase
+                        .from('profiles')
+                        .update({
+                            accepted_privacy_at: consentAt,
+                            accepted_privacy_version: LEGAL_DOCUMENT_VERSION,
+                        })
+                        .eq('id', data.user.id);
+                }
+
                 setSuccessMessage(
                     data.session
                         ? 'Account created. You are now signed in.'
@@ -185,9 +211,33 @@ export function AuthPage() {
                         </div>
                     </div>
 
+                    {isSignUp && (
+                        <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
+                            <input
+                                type="checkbox"
+                                checked={acceptedTerms}
+                                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                                disabled={isLoading}
+                                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/30 focus:ring-offset-0 cursor-pointer shrink-0"
+                                aria-required="true"
+                            />
+                            <span className="text-xs text-slate-600 leading-relaxed">
+                                I have read and agree to the{' '}
+                                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-900 underline underline-offset-2 font-medium hover:text-slate-700">
+                                    Privacy Policy
+                                </a>{' '}
+                                and{' '}
+                                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-900 underline underline-offset-2 font-medium hover:text-slate-700">
+                                    Terms of Service
+                                </a>
+                                .
+                            </span>
+                        </label>
+                    )}
+
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || (isSignUp && !acceptedTerms)}
                         className="flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:bg-slate-300"
                     >
                         {isLoading ? 'Please wait...' : isSignUp ? 'Sign up' : 'Sign in'}
@@ -214,6 +264,7 @@ export function AuthPage() {
                             setSuccessMessage(null);
                             if (isSignUp) {
                                 setFullName('');
+                                setAcceptedTerms(false);
                             }
                         }}
                         className="text-slate-600 hover:text-slate-900 hover:underline"

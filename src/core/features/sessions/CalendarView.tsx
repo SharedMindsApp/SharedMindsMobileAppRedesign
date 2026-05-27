@@ -2039,7 +2039,7 @@ function MonthView({
           crushed into 30px tall slivers — the calendar grows downward
           past the viewport when needed, with normal page scroll
           revealing the rest. Desktop keeps the auto-fit behaviour. */}
-      <div className="grid grid-cols-7 grid-rows-6 lg:flex-1 lg:min-h-0 auto-rows-[7rem] lg:auto-rows-fr">
+      <div className="grid grid-cols-7 grid-rows-6 lg:flex-1 lg:min-h-0 auto-rows-[7rem] lg:auto-rows-fr lg:grid-rows-[repeat(6,minmax(0,1fr))]">
         {cells.map((d) => {
           const inMonth = d.getMonth() === targetMonth;
           const isToday = sameDay(d, today);

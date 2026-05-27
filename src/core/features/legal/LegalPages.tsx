@@ -11,6 +11,12 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Scale, Mail } from 'lucide-react';
 
+/** Version string of the Privacy Policy + Terms of Service.
+ *  Bump this whenever you materially change either document. Stored
+ *  alongside accepted_privacy_at on profiles so we can detect when
+ *  re-consent is needed after an update. */
+export const LEGAL_DOCUMENT_VERSION = '2026-05-28';
+
 function LegalShell({
   title, icon, children,
 }: {
@@ -35,7 +41,7 @@ function LegalShell({
             <div>
               <h1 className="text-2xl font-extrabold stitch-text-primary">{title}</h1>
               <p className="text-xs stitch-text-secondary mt-1">
-                Effective {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                Last updated 28 May 2026 · Version {LEGAL_DOCUMENT_VERSION}
               </p>
             </div>
           </header>
@@ -58,79 +64,205 @@ export function TermsOfServicePage() {
   return (
     <LegalShell title="Terms of Service" icon={<Scale size={22} />}>
       <p className="text-base">
-        SharedMinds is a virtual coworking accountability platform. By creating
-        an account, you agree to these terms.
+        SharedMinds is a virtual coworking and accountability platform. These
+        Terms form a binding contract between you and SharedMinds.
       </p>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">1. Eligibility</h2>
-      <p>You must be 18 years or older to use SharedMinds.</p>
-
-      <h2 className="text-lg font-bold mt-6 mb-2">2. Your account</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">Plain English summary</h2>
       <ul className="list-disc pl-5 space-y-1">
-        <li>You're responsible for activity under your account, including content you post and sessions you join.</li>
-        <li>You must provide accurate information and a real-person profile photo (we verify this).</li>
-        <li>One person, one account. No bots or automated accounts without our written permission.</li>
+        <li>You must be 16+ to use SharedMinds.</li>
+        <li>Be respectful. Don't harass, threaten, or expose other members.</li>
+        <li>Don't record other people's sessions without their consent.</li>
+        <li>You own what you create. We just need a licence to display it inside SharedMinds.</li>
+        <li>We can suspend accounts that break these Terms.</li>
+        <li>UK law governs these Terms.</li>
       </ul>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">3. Acceptable use</h2>
-      <p>You will not:</p>
+      <h2 className="text-lg font-bold mt-6 mb-2">1. Agreement</h2>
+      <p>
+        By creating an account, ticking the consent checkbox, or otherwise
+        using the Service, you agree to these Terms and to our{' '}
+        <Link to="/privacy" className="text-primary font-bold">Privacy Policy</Link>.
+        If you don't agree, don't use the Service.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">2. Eligibility</h2>
       <ul className="list-disc pl-5 space-y-1">
-        <li>Harass, threaten, or impersonate anyone</li>
-        <li>Post hateful, sexually explicit, or violent content</li>
-        <li>Use sessions to record or stream other members without consent</li>
-        <li>Spam, scrape, or attempt to extract data from other users</li>
-        <li>Use the platform for illegal activity</li>
+        <li>You must be at least 16 years old.</li>
+        <li>You must be legally able to enter a binding contract in your jurisdiction.</li>
+        <li>You must not be barred from using the Service under applicable law.</li>
+        <li>You must not have previously had a SharedMinds account terminated for a serious breach.</li>
       </ul>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">3. Your account</h2>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>Provide accurate sign-up information and a real-person profile photo if uploaded.</li>
+        <li>One person, one account. No bots or automated accounts without written consent.</li>
+        <li>You're responsible for keeping your password secure and for all activity under your account.</li>
+        <li>Tell us at <a href="mailto:hello@sharedminds.app" className="text-primary font-bold">hello@sharedminds.app</a> if you suspect unauthorised access.</li>
+      </ul>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">4. Community standards</h2>
+      <p>You agree <strong>not</strong> to:</p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>Harass, bully, intimidate, dox, or threaten any other member</li>
+        <li>Post hateful, sexually explicit, violent, or graphic content</li>
+        <li>Impersonate another person or misrepresent your affiliation</li>
+        <li>Promote self-harm, eating disorders, or suicide</li>
+        <li>Advertise, solicit, or spam members for unrelated commercial purposes</li>
+        <li>Record, screenshot, or screen-share any other member's video, audio, or chat without their explicit consent</li>
+        <li>Scrape or extract data from SharedMinds via automated means</li>
+        <li>Reverse-engineer, decompile, or extract the source code of the Service</li>
+        <li>Bypass security, rate-limiting, or moderation features</li>
+        <li>Upload viruses, malware, or disruptive code</li>
+        <li>Use the Service to break any law</li>
+      </ul>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">5. Reporting and enforcement</h2>
       <p>
-        Violations may result in warnings, suspension, or permanent ban.
-        Severe violations may be reported to authorities.
+        Report violations to <a href="mailto:safety@sharedminds.app" className="text-primary font-bold">safety@sharedminds.app</a> or via the in-app
+        report buttons. Depending on severity we may warn, remove content,
+        restrict features, suspend, or permanently terminate accounts. We
+        will normally give notice and a chance to respond unless that would
+        risk further harm.
       </p>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">4. Sessions and video</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">6. Sessions and video</h2>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>Video sessions use Daily.co. By joining a session you accept their terms.</li>
+        <li>We do not record session contents — only metadata (start time, duration, who joined, your goal, the outcome you log).</li>
+        <li>Don't record or capture other participants without their explicit, informed consent.</li>
+        <li>Public sessions are visible to other signed-in members — your name, avatar, and goal are seen by others while the session is live or scheduled.</li>
+        <li>Solo sessions are private and never appear in shared lists.</li>
+      </ul>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">7. Content you post</h2>
       <p>
-        Live video sessions are facilitated by a third-party provider
-        (Daily.co). We don't record sessions by default. If you choose to
-        record locally, you're responsible for obtaining consent from other
-        participants and complying with applicable laws.
+        You retain ownership of your Content. You grant SharedMinds a
+        worldwide, non-exclusive, royalty-free licence to host, store,
+        display, distribute, and modify your Content <strong>solely to
+        operate, secure, and improve the Service</strong>. This licence
+        ends when you delete the Content or your account, except for
+        content already shared with others, anonymised aggregated data,
+        reasonable backups, and content we are legally required to keep.
+      </p>
+      <p>
+        You confirm you own or have the rights to post your Content. We may
+        remove Content that breaches these Terms or applicable law.
       </p>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">5. Content you post</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">8. Safety evidence</h2>
       <p>
-        You retain ownership of content you post (chat messages, posts,
-        bios). You grant SharedMinds a non-exclusive license to display
-        that content within the platform.
-      </p>
-      <p>
-        We may remove content that violates these terms. Reported content
-        may be retained for safety and legal purposes even after deletion.
-      </p>
-
-      <h2 className="text-lg font-bold mt-6 mb-2">6. Termination</h2>
-      <p>
-        You can delete your account at any time from Settings. We may
-        suspend or terminate your account for terms violations. Some data
-        (e.g. content you posted in shared spaces, moderation records) may
-        be retained after termination.
+        When you submit a report against another member <strong>from inside
+        an active video session</strong>, we capture a single frame of that
+        person's video tile and a snapshot of the session's chat from the
+        previous 5 minutes. This evidence is stored privately, viewable
+        only by SharedMinds moderation staff, and auto-deletes after 90
+        days unless tied to an unresolved safety case.
       </p>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">7. Disclaimer</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">9. Intellectual property of SharedMinds</h2>
       <p>
-        {/* TODO LAWYER: jurisdiction-appropriate disclaimer + limitation of liability */}
-        SharedMinds is provided "as is" without warranties of any kind.
-        We're not liable for indirect, incidental, or consequential damages
-        arising from your use of the platform, to the extent permitted by law.
+        The Service — including branding, design, code, copy, and curated
+        content — is owned by SharedMinds. You receive a personal, limited,
+        non-exclusive, non-transferable, revocable licence to use the
+        Service in accordance with these Terms. Nothing transfers IP rights
+        to you. Don't copy, modify, distribute, sell, or create derivative
+        works of the Service except as expressly permitted.
       </p>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">8. Changes</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">10. Fees</h2>
       <p>
-        We may update these terms. We'll notify you of material changes by
-        email or in-app notice at least 14 days before they take effect.
+        SharedMinds is currently free to use. If we introduce paid plans
+        we'll give advance notice and won't charge without your explicit
+        consent. Existing free-tier accounts keep access to at least a
+        baseline version of the Service.
       </p>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">9. Governing law</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">11. Termination</h2>
       <p>
-        {/* TODO LAWYER: choose jurisdiction */}
-        These terms are governed by the laws of the United Kingdom.
+        You can delete your account from Settings at any time. We may
+        suspend or terminate accounts that breach these Terms, where
+        legally required, or after extended inactivity (with email notice
+        first). Serious breaches involving safety, fraud, or illegal
+        activity may result in immediate termination without notice.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">12. Disclaimers</h2>
+      <p>
+        The Service is provided <strong>"as is" and "as available"</strong>.
+        To the maximum extent permitted by law we disclaim all warranties,
+        express or implied, including merchantability, fitness for purpose,
+        and non-infringement. We don't warrant the Service will be
+        uninterrupted, error-free, or that it will improve your productivity.
+      </p>
+      <p>
+        SharedMinds is not a medical, mental-health, or professional
+        advisory service. If you are in crisis, please contact local
+        emergency services or an appropriate helpline.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">13. Limitation of liability</h2>
+      <p>
+        To the maximum extent permitted by law SharedMinds is not liable
+        for any indirect, incidental, special, consequential, or punitive
+        damages, or for loss of profits, data, or goodwill. Where we are
+        held liable for direct damages, our total aggregate liability in
+        any 12-month period will not exceed the greater of (a) the fees
+        you paid us in that period or (b) GBP 100.
+      </p>
+      <p>
+        Nothing in these Terms excludes liability that cannot be excluded
+        by law, including liability for death or personal injury caused by
+        negligence, or for fraud or fraudulent misrepresentation.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">14. Indemnification</h2>
+      <p>
+        You agree to indemnify SharedMinds from any claims, damages, and
+        reasonable legal fees arising out of your breach of these Terms,
+        your misuse of the Service, your Content (where it infringes a
+        third party's rights), or your breach of applicable law. This
+        clause does not require you to indemnify us for our own fault,
+        negligence, or wilful misconduct.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">15. Changes to these Terms</h2>
+      <p>
+        We may update these Terms. The version number changes whenever the
+        document is updated. For material changes we'll give in-app or
+        email notice at least 14 days before they take effect. Continued
+        use after a change means you accept the updated Terms; if you
+        don't, stop using the Service and delete your account.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">16. Governing law</h2>
+      <p>
+        These Terms are governed by the laws of <strong>England and Wales</strong>.
+        Disputes are subject to the exclusive jurisdiction of the courts of
+        England and Wales, except that consumers resident elsewhere in the
+        UK or EU retain the right to bring proceedings in their own
+        country to the extent required by mandatory local law.
+      </p>
+      <p>
+        Before starting formal proceedings, email us at <a href="mailto:hello@sharedminds.app" className="text-primary font-bold">hello@sharedminds.app</a> so
+        we can try to resolve the issue informally.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">17. General</h2>
+      <ul className="list-disc pl-5 space-y-1">
+        <li><strong>Entire agreement</strong> — these Terms + Privacy Policy supersede any prior agreement.</li>
+        <li><strong>Severability</strong> — if any part is unenforceable, the rest remains in force.</li>
+        <li><strong>No waiver</strong> — failure to enforce a right is not a waiver of it.</li>
+        <li><strong>Assignment</strong> — you may not assign your account; we may assign to a successor entity.</li>
+        <li><strong>Force majeure</strong> — neither party is liable for failures caused by events outside reasonable control.</li>
+      </ul>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">18. Contact</h2>
+      <p>
+        General: <a href="mailto:hello@sharedminds.app" className="text-primary font-bold">hello@sharedminds.app</a><br />
+        Safety: <a href="mailto:safety@sharedminds.app" className="text-primary font-bold">safety@sharedminds.app</a><br />
+        Privacy: <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a>
       </p>
     </LegalShell>
   );
