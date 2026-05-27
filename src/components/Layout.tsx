@@ -362,8 +362,9 @@ export function Layout({ children }: LayoutProps) {
                 <div className="hidden md:flex items-center gap-2">
                   {favouriteTabs.map((tab) => renderNavTab(tab))}
 
-                  {/* Notifications bell + dropdown */}
-                  <NotificationsBell />
+                  {/* Notifications bell + dropdown — hidden on auth /
+                      onboarding / landing per shouldShowNotificationBell(). */}
+                  {shouldShowNotificationBell() && <NotificationsBell />}
 
                   {/* Avatar dropdown replaces the More button — holds everything personal */}
                   {(() => {
@@ -572,6 +573,16 @@ export function Layout({ children }: LayoutProps) {
                     );
                   })()}
                 </div>
+              </div>
+
+              {/* Mobile-only right-hand side. The hamburger lives on the
+                  left and the desktop cluster above is hidden on mobile,
+                  so without this the mobile header has nothing on the
+                  right — and the notifications bell is unreachable.
+                  Rendering it here keeps mobile users in parity with
+                  desktop. Hidden on md+ where the cluster above handles it. */}
+              <div className="flex md:hidden items-center shrink-0">
+                {shouldShowNotificationBell() && <NotificationsBell />}
               </div>
 
             </div>

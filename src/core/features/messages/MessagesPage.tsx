@@ -14,7 +14,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Loader2, MessageCircle, ArrowRight, UserPlus, Search,
-  Users, MessageSquare, Zap,
+  Users, MessageSquare, Zap, ChevronLeft, ChevronRight, Plus,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { fetchConversations, type DmConversation } from '../../services/MessageService';
@@ -126,6 +126,12 @@ export function MessagesPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('community');
+  // Mobile-only navigation: 'list' shows the unified messenger-style
+  // list (Community pinned + DMs); 'community' opens the global room
+  // as a full-screen view with a back button. The desktop two-column
+  // layout still uses `tab` instead. Separating the two states avoids
+  // weird "switching tab on mobile then resizing" interactions.
+  const [mobileView, setMobileView] = useState<'list' | 'community'>('list');
   const [conversations, setConversations] = useState<DmConversation[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [search, setSearch] = useState('');
@@ -149,22 +155,45 @@ export function MessagesPage() {
   return (
     <div className="h-[calc(100vh-72px)] flex flex-col max-w-6xl mx-auto px-0 md:px-4">
 
-      {/* ── Page header (mobile only — desktop uses sidebar) ── */}
-      <div className="md:hidden flex items-center justify-between px-4 pt-4 pb-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Chat</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {onlineMembers.length > 0 ? (
-              <span className="flex items-center gap-1">
+      {/* ── Mobile sticky header — adapts to current view ───────
+          When showing the list: "Chat" title + presence dot.
+          When in the community room: back arrow + room name + presence.
+          Mirrors iMessage/WhatsApp's compact navigation pattern. */}
+      <div className="md:hidden sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-100">
+        {mobileView === 'list' ? (
+          <div className="flex items-center justify-between px-4 pt-3 pb-3">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 leading-tight">Chat</h1>
+              {onlineMembers.length > 0 && (
+                <span className="flex items-center gap-1 text-[11px] text-gray-500 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                  {onlineMembers.length} online
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-2 pt-3 pb-3">
+            <button
+              type="button"
+              onClick={() => setMobileView('list')}
+              className="w-9 h-9 rounded-full hover:bg-gray-100 active:scale-95 transition-all grid place-items-center text-gray-700"
+              aria-label="Back to chat list"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center text-white shrink-0">
+              <Users size={15} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-gray-900 truncate leading-tight">Community Chat</p>
+              <span className="flex items-center gap-1 text-[11px] text-gray-500">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                {onlineMembers.length} online
+                {onlineMembers.length} online · global room
               </span>
-            ) : 'Community room · direct messages'}
-          </p>
-        </div>
-        <GradientButton size="sm" variant="secondary" onClick={() => navigate('/people')}>
-          <span className="flex items-center gap-1.5"><UserPlus size={13} /> Find people</span>
-        </GradientButton>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Main layout ── */}
@@ -237,36 +266,15 @@ export function MessagesPage() {
             ════════════════════════════════════ */}
         <div className="flex-1 min-w-0 flex flex-col">
 
-          {/* Mobile tab bar */}
-          <div className="md:hidden flex border-b border-gray-100 bg-white">
-            {(['community', 'direct'] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-semibold border-b-2 transition-all ${
-                  tab === t ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400'
-                }`}
-              >
-                {t === 'community' ? <Users size={14} /> : <MessageCircle size={14} />}
-                {t === 'community' ? 'Community' : 'Direct'}
-                {t === 'direct' && unreadDms > 0 && (
-                  <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-cyan-500 text-white text-[10px] font-bold flex items-center justify-center">
-                    {unreadDms}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Panel content */}
-          {tab === 'community' ? (
-            <div className="flex-1 min-h-0 flex flex-col">
-              <CommunalChatPanel />
-            </div>
-          ) : (
-            <>
-              {/* Desktop: "pick a conversation" prompt */}
-              <div className="hidden md:flex flex-1 items-center justify-center">
+          {/* ── Desktop body — unchanged. Shows community panel OR
+                "pick a conversation" prompt based on the desktop tab. */}
+          <div className="hidden md:flex flex-1 min-h-0 flex-col">
+            {tab === 'community' ? (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <CommunalChatPanel />
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
                 <div className="text-center px-8">
                   <div className="w-16 h-16 rounded-2xl bg-cyan-50 flex items-center justify-center mx-auto mb-4">
                     <MessageSquare size={28} className="text-cyan-400" />
@@ -280,24 +288,234 @@ export function MessagesPage() {
                   </GradientButton>
                 </div>
               </div>
+            )}
+          </div>
 
-              {/* Mobile: full DM list */}
-              <div className="md:hidden flex-1 overflow-y-auto">
-                <DirectSidebar
+          {/* ── Mobile body — messenger-style unified list OR
+                full-screen community room (depending on mobileView).
+                The "list" view: search + Community pinned row + DMs +
+                floating new-chat FAB. The "community" view: full
+                CommunalChatPanel with the back-button header above. */}
+          <div className="md:hidden flex-1 min-h-0 flex flex-col relative">
+            {mobileView === 'community' ? (
+              <CommunalChatPanel />
+            ) : (
+              <>
+                <MobileChatList
                   conversations={filtered}
-                  loading={loadingConvs}
+                  loadingConvs={loadingConvs}
                   search={search}
                   onSearch={setSearch}
                   currentUserId={user?.id ?? null}
-                  onPick={(id) => navigate(`/messages/${id}`)}
+                  onlineCount={onlineMembers.length}
+                  unreadDms={unreadDms}
+                  onPickCommunity={() => setMobileView('community')}
+                  onPickDm={(id) => navigate(`/messages/${id}`)}
                   onNavigatePeople={() => navigate('/people')}
                 />
-              </div>
-            </>
-          )}
+                {/* Floating new-chat FAB — sits above the bottom nav.
+                    Replaces the old "Find people" header button with a
+                    standard messenger affordance. The bottom-24 keeps it
+                    clear of the tab bar (h-16) + a comfortable gap. */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/people')}
+                  className="fixed right-4 bottom-24 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-xl shadow-cyan-500/30 grid place-items-center active:scale-95 hover:shadow-2xl transition-all"
+                  aria-label="Start a new chat"
+                  title="Start a new chat — browse people"
+                >
+                  <Plus size={22} strokeWidth={2.5} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Mobile chat list ──────────────────────────────────────────────────────────
+//
+// Replaces the old mobile tab+sidebar pattern with a single unified
+// scrollable list: search bar + Community Chat pinned row + DM rows.
+// Each row tap navigates (or, for Community, swaps the parent view to
+// the full-screen room). Modelled on iMessage/WhatsApp/Telegram's
+// conversation list.
+
+function MobileChatList({
+  conversations, loadingConvs, search, onSearch, currentUserId,
+  onlineCount, unreadDms,
+  onPickCommunity, onPickDm, onNavigatePeople,
+}: {
+  conversations: DmConversation[];
+  loadingConvs: boolean;
+  search: string;
+  onSearch: (v: string) => void;
+  currentUserId: string | null;
+  onlineCount: number;
+  unreadDms: number;
+  onPickCommunity: () => void;
+  onPickDm: (id: string) => void;
+  onNavigatePeople: () => void;
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto pb-28">
+      {/* Sticky search — sits just below the page header so users can
+          filter without leaving the list. Lighter weight than a full
+          tabs+filters bar. */}
+      <div className="sticky top-0 z-10 bg-white px-4 pt-3 pb-2 border-b border-gray-100">
+        <div className="relative">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Search messages"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-100 text-sm text-gray-800 outline-none focus:bg-white focus:ring-2 focus:ring-cyan-200 placeholder:text-gray-400 transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Community Chat — pinned at the top of the list. Treated as a
+          first-class conversation so the user has muscle-memory parity
+          with their DMs (same row pattern, same tap-to-open gesture). */}
+      <button
+        type="button"
+        onClick={onPickCommunity}
+        className="w-full flex items-center gap-3 px-4 py-3 active:bg-gray-50 transition-colors text-left border-b border-gray-100"
+      >
+        <div className="relative shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center text-white shadow-sm">
+            <Users size={20} />
+          </div>
+          {onlineCount > 0 && (
+            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-0.5">
+            <p className="text-sm font-bold text-gray-900 truncate">Community Chat</p>
+            <span className="text-[11px] text-gray-400 shrink-0">
+              📌 Pinned
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 truncate">
+            {onlineCount > 0
+              ? `${onlineCount} ${onlineCount === 1 ? 'person' : 'people'} online · say hi`
+              : 'Global room · all SharedMinds members'}
+          </p>
+        </div>
+        <ChevronRight size={16} className="text-gray-300 shrink-0" />
+      </button>
+
+      {/* DM section header — only shown when there's content below,
+          to keep the empty state clean. */}
+      {!loadingConvs && conversations.length > 0 && (
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            Direct messages
+          </p>
+          {unreadDms > 0 && (
+            <span className="text-[10px] font-bold text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full">
+              {unreadDms} unread
+            </span>
+          )}
+        </div>
+      )}
+
+      {loadingConvs ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 size={20} className="animate-spin text-gray-300" />
+        </div>
+      ) : conversations.length === 0 ? (
+        <div className="text-center px-6 py-10">
+          <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+            <MessageCircle size={22} className="text-gray-300" />
+          </div>
+          <p className="text-sm font-bold text-gray-700 mb-1.5">No direct messages yet</p>
+          <p className="text-xs text-gray-400 leading-relaxed mb-4 max-w-[240px] mx-auto">
+            Tap the + button below to find someone to chat with.
+          </p>
+          <button
+            onClick={onNavigatePeople}
+            className="text-xs font-bold text-cyan-600 hover:underline inline-flex items-center gap-1"
+          >
+            Browse people <ArrowRight size={11} />
+          </button>
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {conversations.map((c) => (
+            <MobileDmRow
+              key={c.id}
+              conv={c}
+              currentUserId={currentUserId}
+              onClick={() => onPickDm(c.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Edge-to-edge DM row for the mobile chat list. Larger avatar
+ *  (48px) + denser typography + no rounded card so it reads like a
+ *  proper messenger list. Distinct from DmRow which is desktop-sized
+ *  inside a padded sidebar. */
+function MobileDmRow({
+  conv, currentUserId, onClick,
+}: {
+  conv: DmConversation;
+  currentUserId: string | null;
+  onClick: () => void;
+}) {
+  const lastByMe = conv.last_message?.sender_id === currentUserId;
+  const preview = conv.last_message?.content ?? 'No messages yet';
+  const truncated = preview.length > 48 ? preview.slice(0, 48) + '…' : preview;
+  const isUnread = conv.unread_count > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left flex items-center gap-3 px-4 py-3 active:bg-gray-50 transition-colors"
+    >
+      {conv.other_user.avatar_url ? (
+        <img
+          src={conv.other_user.avatar_url}
+          alt=""
+          className="w-12 h-12 rounded-full object-cover shrink-0"
+        />
+      ) : (
+        <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${gradFor(conv.other_user.display_name)} flex items-center justify-center text-white font-bold text-base shrink-0`}>
+          {conv.other_user.display_name.charAt(0).toUpperCase()}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-0.5">
+          <p className={`text-sm truncate ${isUnread ? 'font-extrabold text-gray-900' : 'font-semibold text-gray-800'}`}>
+            {conv.other_user.display_name}
+          </p>
+          {conv.last_message && (
+            <span className={`text-[11px] shrink-0 tabular-nums ${isUnread ? 'text-cyan-600 font-bold' : 'text-gray-400'}`}>
+              {formatTimeAgo(conv.last_message.created_at)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className={`text-xs truncate ${isUnread ? 'text-gray-700 font-semibold' : 'text-gray-500'}`}>
+            {lastByMe && <span className="text-gray-400">You: </span>}{truncated}
+          </p>
+          {isUnread && (
+            <span className="shrink-0 min-w-[20px] h-[20px] px-1.5 rounded-full bg-cyan-500 text-white text-[10px] font-bold flex items-center justify-center">
+              {conv.unread_count}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }
 

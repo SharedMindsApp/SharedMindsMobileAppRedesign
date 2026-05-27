@@ -1,42 +1,68 @@
 import { BrowserRouter, Navigate, Route, Routes, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, lazy, Suspense } from 'react';
 import { CoreDataProvider } from './data/CoreDataContext';
-import { SessionsPage } from './features/sessions/SessionsPage';
-import { DashboardPage } from './features/dashboard/DashboardPage';
-import { ActiveSessionPage } from './features/sessions/ActiveSessionPage';
-import { JoinSessionPage } from './features/sessions/JoinSessionPage';
-import { SessionSummaryPage } from '../components/sessions/SessionSummaryPage';
-import { ConnectionsPage } from './features/connections/ConnectionsPage';
-import { MembersDirectoryPage } from './features/people/MembersDirectoryPage';
-import { MessagesPage } from './features/messages/MessagesPage';
-import { MessageThreadPage } from './features/messages/MessageThreadPage';
-import { CommunityFeedPage } from './features/community/CommunityFeedPage';
-import { ProfilePage } from './features/profile/ProfilePage';
-import { ProfileSettingsPage } from './features/profile/ProfileSettingsPage';
-import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
-import { ProgressPage } from './features/progress/ProgressPage';
-import { TasksPage } from './features/tasks/TasksPage';
-import { ProjectsPage } from './features/projects/ProjectsPage';
-import { ProjectDetailPage } from './features/projects/ProjectDetailPage';
-import { AcceptInvitePage } from './features/projects/AcceptInvitePage';
-import { SharedProjectPage } from './features/projects/SharedProjectPage';
-import { ReflectionPage } from './features/reflection/ReflectionPage';
-// CalendarPage was removed — /sessions is now the calendar surface.
-import { PantryPage } from './features/pantry/PantryPage';
-import { JournalPage } from './features/journal/JournalPage';
+
+// ── Eager: critical-path components that block initial render ──
+// AuthPage shows for logged-out users (first paint!), OnboardingWizard
+// shows for incomplete profiles. Layout is the chrome. SharedProjectPage
+// is rendered without router for /shared/:token public links.
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AuthProvider as LegacyAuthProvider } from '../contexts/AuthContext';
 import { AuthPage } from './auth/AuthPage';
 import { Layout } from '../components/Layout';
-import { AdminDashboard } from '../components/admin/AdminDashboard';
-import { AdminUsers } from '../components/admin/AdminUsers';
-import { AdminAnalytics } from '../components/admin/AdminAnalytics';
-import { AdminLogs } from '../components/admin/AdminLogs';
-import { AdminSettings } from '../components/admin/AdminSettings';
-import { AdminRecurringSessions } from '../components/admin/AdminRecurringSessions';
-import { AdminModerationQueue } from '../components/admin/AdminModerationQueue';
-import { AdminSafetyEscalation } from '../components/admin/AdminSafetyEscalation';
-import { TermsOfServicePage, PrivacyPolicyPage } from './features/legal/LegalPages';
+import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
+import { SharedProjectPage } from './features/projects/SharedProjectPage';
+
+// ── Lazy: every authenticated route becomes its own chunk ──
+// Each named-export gets the `m => ({ default: m.X })` adapter so it
+// satisfies React.lazy's default-export contract. The user only pays
+// the network cost for the route they land on. Modals + DailyMeeting
+// further lazy-load inside their owning page chunks.
+//
+// Why this matters: before this change, /sessions cold-loaded ~1.5MB
+// (~375KB gzipped) of JS containing every screen + the video stack.
+// After, /sessions ships only what CalendarView + its immediate
+// dependencies need; the rest streams in as the user navigates.
+
+const SessionsPage          = lazy(() => import('./features/sessions/SessionsPage').then(m => ({ default: m.SessionsPage })));
+const DashboardPage         = lazy(() => import('./features/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ActiveSessionPage     = lazy(() => import('./features/sessions/ActiveSessionPage').then(m => ({ default: m.ActiveSessionPage })));
+const JoinSessionPage       = lazy(() => import('./features/sessions/JoinSessionPage').then(m => ({ default: m.JoinSessionPage })));
+const SessionSummaryPage    = lazy(() => import('../components/sessions/SessionSummaryPage').then(m => ({ default: m.SessionSummaryPage })));
+const ConnectionsPage       = lazy(() => import('./features/connections/ConnectionsPage').then(m => ({ default: m.ConnectionsPage })));
+const MessagesPage          = lazy(() => import('./features/messages/MessagesPage').then(m => ({ default: m.MessagesPage })));
+const MessageThreadPage     = lazy(() => import('./features/messages/MessageThreadPage').then(m => ({ default: m.MessageThreadPage })));
+const NotificationsPage     = lazy(() => import('./features/notifications/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
+const CommunityFeedPage     = lazy(() => import('./features/community/CommunityFeedPage').then(m => ({ default: m.CommunityFeedPage })));
+const ProfilePage           = lazy(() => import('./features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
+const ProfileSettingsPage   = lazy(() => import('./features/profile/ProfileSettingsPage').then(m => ({ default: m.ProfileSettingsPage })));
+const ProgressPage          = lazy(() => import('./features/progress/ProgressPage').then(m => ({ default: m.ProgressPage })));
+const TasksPage             = lazy(() => import('./features/tasks/TasksPage').then(m => ({ default: m.TasksPage })));
+const ProjectsPage          = lazy(() => import('./features/projects/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
+const ProjectDetailPage     = lazy(() => import('./features/projects/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
+const AcceptInvitePage      = lazy(() => import('./features/projects/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })));
+const ReflectionPage        = lazy(() => import('./features/reflection/ReflectionPage').then(m => ({ default: m.ReflectionPage })));
+const PantryPage            = lazy(() => import('./features/pantry/PantryPage').then(m => ({ default: m.PantryPage })));
+const JournalPage           = lazy(() => import('./features/journal/JournalPage').then(m => ({ default: m.JournalPage })));
+
+// Admin pages — only loaded when an admin navigates to /admin/*. Most
+// users never see these so keeping them lazy is pure win.
+const AdminDashboard        = lazy(() => import('../components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const AdminUsers            = lazy(() => import('../components/admin/AdminUsers').then(m => ({ default: m.AdminUsers })));
+const AdminAnalytics        = lazy(() => import('../components/admin/AdminAnalytics').then(m => ({ default: m.AdminAnalytics })));
+const AdminLogs             = lazy(() => import('../components/admin/AdminLogs').then(m => ({ default: m.AdminLogs })));
+const AdminSettings         = lazy(() => import('../components/admin/AdminSettings').then(m => ({ default: m.AdminSettings })));
+const AdminRecurringSessions = lazy(() => import('../components/admin/AdminRecurringSessions').then(m => ({ default: m.AdminRecurringSessions })));
+const AdminModerationQueue  = lazy(() => import('../components/admin/AdminModerationQueue').then(m => ({ default: m.AdminModerationQueue })));
+const AdminSafetyEscalation = lazy(() => import('../components/admin/AdminSafetyEscalation').then(m => ({ default: m.AdminSafetyEscalation })));
+
+const TermsOfServicePage    = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.TermsOfServicePage })));
+const PrivacyPolicyPage     = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.PrivacyPolicyPage })));
+
+// MembersDirectoryPage is currently routed via ConnectionsPage (people
+// nav goes through the connections page) — keeping the import path
+// here in case it's revived as its own route later.
+// const MembersDirectoryPage = lazy(() => import('./features/people/MembersDirectoryPage').then(m => ({ default: m.MembersDirectoryPage })));
 import { UIPreferencesProvider } from '../contexts/UIPreferencesContext';
 import { ViewAsProvider } from '../contexts/ViewAsContext';
 import { ActiveDataProvider } from '../contexts/ActiveDataContext';
@@ -45,6 +71,20 @@ import { ActiveProjectProvider } from '../contexts/ActiveProjectContext';
 import { RegulationProvider } from '../contexts/RegulationContext';
 import { FocusSessionProvider } from '../contexts/FocusSessionContext';
 import { MessagingDockProvider } from './features/messages/MessagingDockContext';
+
+/** Suspense fallback for lazy-loaded routes. Renders in the page
+ *  content area while the route chunk streams in; the Layout chrome
+ *  (header, nav, bell) stays visible because it wraps this fallback.
+ *  Intentionally minimal — most chunks load in <200ms on a warm cache,
+ *  so a heavy skeleton would flash awkwardly. The soft pulse signals
+ *  "loading" without committing to a specific layout shape. */
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center py-20" role="status" aria-label="Loading">
+      <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+    </div>
+  );
+}
 
 const LAST_ROUTE_STORAGE_KEY = 'sharedminds:last-core-route';
 const ROUTE_RESTORE_WINDOW_MS = 3000; // Allow restoration within 3s of mount
@@ -143,7 +183,11 @@ function AppContent() {
       <BrowserRouter>
         <RoutePersistence />
         <Routes>
-          <Route path="/" element={<Layout><Outlet /></Layout>}>
+          {/* Layout wraps an Outlet → Suspense → child route element.
+              Putting Suspense INSIDE the Layout keeps the nav bar +
+              bottom tab bar visible while a route chunk streams in;
+              only the page content area shows the fallback. */}
+          <Route path="/" element={<Layout><Suspense fallback={<RouteFallback />}><Outlet /></Suspense></Layout>}>
             <Route index element={<Navigate to="/home" replace />} />
             <Route path="dashboard" element={<Navigate to="/home" replace />} />
             <Route path="home" element={<DashboardPage />} />
@@ -155,6 +199,7 @@ function AppContent() {
             <Route path="people" element={<ConnectionsPage />} />
             <Route path="messages" element={<MessagesPage />} />
             <Route path="messages/:conversationId" element={<MessageThreadPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="community" element={<CommunityFeedPage />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
             <Route path="profile/:userId" element={<ProfilePage />} />
@@ -198,16 +243,18 @@ function AppContent() {
           <Route path="admin/*" element={
             !profileReady ? null : isAdmin ? (
               <LegacyAuthProvider>
-                <Routes>
-                  <Route index element={<AdminDashboard />} />
-                  <Route path="users" element={<AdminUsers />} />
-                  <Route path="moderation" element={<AdminModerationQueue />} />
-                  <Route path="safety" element={<AdminSafetyEscalation />} />
-                  <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
-                  <Route path="analytics" element={<AdminAnalytics />} />
-                  <Route path="logs" element={<AdminLogs />} />
-                  <Route path="settings" element={<AdminSettings />} />
-                </Routes>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="users" element={<AdminUsers />} />
+                    <Route path="moderation" element={<AdminModerationQueue />} />
+                    <Route path="safety" element={<AdminSafetyEscalation />} />
+                    <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
+                    <Route path="analytics" element={<AdminAnalytics />} />
+                    <Route path="logs" element={<AdminLogs />} />
+                    <Route path="settings" element={<AdminSettings />} />
+                  </Routes>
+                </Suspense>
               </LegacyAuthProvider>
             ) : <Navigate to="/sessions" replace />
           } />

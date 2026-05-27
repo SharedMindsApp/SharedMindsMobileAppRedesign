@@ -29,13 +29,18 @@ const MessagingDockContext = createContext<MessagingDockContextValue | null>(nul
 export function MessagingDockProvider({ children }: { children: ReactNode }) {
   const [dockOpen, setDockOpen] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  // Hide the floating dock whenever the mobile bottom-tab nav is
+  // visible — otherwise the two overlap in the bottom-right corner.
+  // Tab nav uses Tailwind's `lg:hidden` (< 1024px), so this threshold
+  // matches. The bottom-nav already includes a Chat tab, so users at
+  // these widths still have a one-tap path to messages.
   const [isMobile, setIsMobile] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
   );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const handler = () => setIsMobile(window.innerWidth < 640);
+    const handler = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);

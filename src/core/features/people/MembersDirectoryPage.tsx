@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Users, Sparkles, MessageCircle, UserPlus, Loader2,
-  Globe, Briefcase, Check, Activity,
+  Globe, Briefcase, Check, Activity, ChevronDown, X,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { listMembers, type PublicProfile } from '../../services/ProfileService';
@@ -73,7 +73,27 @@ export function MembersDirectoryPage({ embedded = false }: { embedded?: boolean 
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
   const [skillFilter, setSkillFilter] = useState<string | null>(null);
   const [onlineOnly, setOnlineOnly] = useState(false);
-  const [showAllSkills, setShowAllSkills] = useState(false);
+  /** Which filter picker is currently expanded below the bar.
+   *  Only one open at a time — tapping the same pill toggles it,
+   *  tapping a different pill swaps, tapping outside (or Escape)
+   *  closes. Replaces the old 3-rows-of-scrolling-chips layout. */
+  const [openPicker, setOpenPicker] = useState<'role' | 'skill' | 'where' | null>(null);
+  /** Search-within for the skill + country pickers — useful once
+   *  the directory has more than a screen of options. */
+  const [pickerQuery, setPickerQuery] = useState('');
+  // Reset the picker search whenever a different picker opens so
+  // a stale query doesn't pre-filter the new list.
+  useEffect(() => { setPickerQuery(''); }, [openPicker]);
+  // Escape closes the active picker — keyboard parity with the rest
+  // of the modal-y sheets in the app.
+  useEffect(() => {
+    if (!openPicker) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenPicker(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openPicker]);
 
   // ── Fetch members + statuses + active sessions ──────────────────
   useEffect(() => {
@@ -294,8 +314,16 @@ export function MembersDirectoryPage({ embedded = false }: { embedded?: boolean 
           />
         </div>
 
-        {/* Online filter + Work type chips */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+        {/* ── Compact filter bar ─────────────────────────────────
+            Replaces the previous three-rows-of-chips layout. Four
+            pills wrap onto two short rows on mobile + sit in one on
+            desktop. Active filters show their value inline ("Role:
+            Designer ✕") so the bar doubles as a status summary —
+            no separate active-filter strip needed.
+
+            Tapping a select pill expands the picker below; tapping
+            it again (or the X) collapses. Escape closes too. */}
+        <div className="flex flex-wrap gap-1.5">
           <FilterChip
             icon={<span className={`w-2 h-2 rounded-full ${onlineCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-gray-300'}`} />}
             label={onlineCount > 0 ? `Online now · ${onlineCount}` : 'Online now'}
@@ -303,74 +331,123 @@ export function MembersDirectoryPage({ embedded = false }: { embedded?: boolean 
             onClick={() => setOnlineOnly((v) => !v)}
           />
           {workTypeOptions.length > 0 && (
-            <>
-              <FilterChip
-                icon={<Briefcase size={11} />}
-                label="All work"
-                active={workTypeFilter === null}
-                onClick={() => setWorkTypeFilter(null)}
-              />
-              {workTypeOptions.map((wt) => (
-                <FilterChip
-                  key={wt}
-                  label={WORK_TYPE_LABELS[wt] ?? wt}
-                  active={workTypeFilter === wt}
-                  onClick={() => setWorkTypeFilter(wt === workTypeFilter ? null : wt)}
-                />
-              ))}
-            </>
+            <SelectPill
+              icon={<Briefcase size={11} />}
+              placeholder="Role"
+              value={workTypeFilter ? (WORK_TYPE_LABELS[workTypeFilter] ?? workTypeFilter) : null}
+              open={openPicker === 'role'}
+              onToggle={() => setOpenPicker((p) => (p === 'role' ? null : 'role'))}
+              onClear={() => setWorkTypeFilter(null)}
+            />
+          )}
+          {skillOptions.length > 0 && (
+            <SelectPill
+              icon={<Sparkles size={11} />}
+              placeholder="Skill"
+              value={skillFilter}
+              open={openPicker === 'skill'}
+              onToggle={() => setOpenPicker((p) => (p === 'skill' ? null : 'skill'))}
+              onClear={() => setSkillFilter(null)}
+            />
+          )}
+          {countryOptions.length > 1 && (
+            <SelectPill
+              icon={<Globe size={11} />}
+              placeholder="Where"
+              value={(() => {
+                if (!countryFilter) return null;
+                const c = findCountry(countryFilter);
+                return c ? `${c.flag} ${c.name}` : countryFilter;
+              })()}
+              open={openPicker === 'where'}
+              onToggle={() => setOpenPicker((p) => (p === 'where' ? null : 'where'))}
+              onClear={() => setCountryFilter(null)}
+            />
+          )}
+          {/* Clear-all — only shown when ≥2 filters are active. Single
+              active filters can be removed via the inline pill ×. */}
+          {[onlineOnly, workTypeFilter, skillFilter, countryFilter].filter(Boolean).length >= 2 && (
+            <button
+              type="button"
+              onClick={() => {
+                setOnlineOnly(false);
+                setWorkTypeFilter(null);
+                setSkillFilter(null);
+                setCountryFilter(null);
+              }}
+              className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-bold stitch-text-secondary hover:stitch-text-primary underline-offset-2 hover:underline transition-colors"
+            >
+              Clear all
+            </button>
           )}
         </div>
 
-        {/* Skill chips — ranked by how many members have each skill */}
-        {skillOptions.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 items-center">
-            <FilterChip
-              icon={<Sparkles size={11} />}
-              label="Any skill"
-              active={skillFilter === null}
-              onClick={() => setSkillFilter(null)}
-            />
-            {(showAllSkills ? skillOptions : skillOptions.slice(0, 10)).map(({ skill, count }) => (
-              <FilterChip
-                key={skill}
-                label={count > 1 ? `${skill} · ${count}` : skill}
-                active={skillFilter === skill}
-                onClick={() => setSkillFilter(skill === skillFilter ? null : skill)}
+        {/* ── Expandable picker panel ───────────────────────────
+            Single panel that swaps content based on which pill is
+            open. Max-height + scroll so a long skill/country list
+            doesn't shove the results below the fold. Click-outside
+            + Escape handled by the page-level effect below. */}
+        {openPicker && (
+          <div className="rounded-2xl bg-surface-container-low ring-1 ring-surface-container/60 p-3 animate-in fade-in slide-in-from-top-1 duration-150">
+            {openPicker === 'role' && (
+              <PickerOptionGrid
+                ariaLabel="Filter by role"
+                options={[
+                  { id: '__any', label: 'Any role', selected: workTypeFilter === null },
+                  ...workTypeOptions.map((wt) => ({
+                    id: wt,
+                    label: WORK_TYPE_LABELS[wt] ?? wt,
+                    selected: workTypeFilter === wt,
+                  })),
+                ]}
+                onPick={(id) => {
+                  setWorkTypeFilter(id === '__any' ? null : id);
+                  setOpenPicker(null);
+                }}
               />
-            ))}
-            {skillOptions.length > 10 && !showAllSkills && (
-              <button
-                type="button"
-                onClick={() => setShowAllSkills(true)}
-                className="shrink-0 inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
-              >
-                +{skillOptions.length - 10} more
-              </button>
             )}
-          </div>
-        )}
-
-        {/* Country chips with flags */}
-        {countryOptions.length > 1 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-            <FilterChip
-              icon={<Globe size={11} />}
-              label="Anywhere"
-              active={countryFilter === null}
-              onClick={() => setCountryFilter(null)}
-            />
-            {countryOptions.map((cc) => {
-              const country = findCountry(cc);
-              return (
-                <FilterChip
-                  key={cc}
-                  label={country ? `${country.flag} ${country.name}` : cc}
-                  active={countryFilter === cc}
-                  onClick={() => setCountryFilter(cc === countryFilter ? null : cc)}
-                />
-              );
-            })}
+            {openPicker === 'skill' && (
+              <PickerWithSearch
+                placeholder="Search skills…"
+                query={pickerQuery}
+                onQueryChange={setPickerQuery}
+                anyLabel="Any skill"
+                anySelected={skillFilter === null}
+                onPickAny={() => { setSkillFilter(null); setOpenPicker(null); }}
+                options={skillOptions
+                  .filter(({ skill }) => skill.toLowerCase().includes(pickerQuery.toLowerCase()))
+                  .map(({ skill, count }) => ({
+                    id: skill,
+                    label: skill,
+                    badge: count > 1 ? String(count) : undefined,
+                    selected: skillFilter === skill,
+                  }))}
+                onPick={(id) => { setSkillFilter(id); setOpenPicker(null); }}
+              />
+            )}
+            {openPicker === 'where' && (
+              <PickerWithSearch
+                placeholder="Search countries…"
+                query={pickerQuery}
+                onQueryChange={setPickerQuery}
+                anyLabel="Anywhere"
+                anySelected={countryFilter === null}
+                onPickAny={() => { setCountryFilter(null); setOpenPicker(null); }}
+                options={countryOptions
+                  .map((cc) => ({ cc, country: findCountry(cc) }))
+                  .filter(({ country, cc }) => {
+                    const q = pickerQuery.toLowerCase();
+                    if (!q) return true;
+                    return (country?.name.toLowerCase().includes(q) ?? false) || cc.toLowerCase().includes(q);
+                  })
+                  .map(({ cc, country }) => ({
+                    id: cc,
+                    label: country ? `${country.flag} ${country.name}` : cc,
+                    selected: countryFilter === cc,
+                  }))}
+                onPick={(id) => { setCountryFilter(id); setOpenPicker(null); }}
+              />
+            )}
           </div>
         )}
       </div>
@@ -479,6 +556,172 @@ function FilterChip({
       {icon}
       {label}
     </button>
+  );
+}
+
+/** Select-style filter pill — shows "Role" placeholder when no filter
+ *  is active, or "Designer ✕" when one is. The chevron flips when the
+ *  picker is open. The X is a separate hit target so it doesn't fight
+ *  the main toggle area. Used for Role, Skill, Where. */
+function SelectPill({
+  icon, placeholder, value, open, onToggle, onClear,
+}: {
+  icon: React.ReactNode;
+  placeholder: string;
+  value: string | null;
+  open: boolean;
+  onToggle: () => void;
+  onClear: () => void;
+}) {
+  const isActive = !!value;
+  return (
+    <div
+      className={`shrink-0 inline-flex items-center gap-1 rounded-full text-xs font-bold transition-all overflow-hidden ${
+        isActive
+          ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-1 ring-primary/30'
+          : open
+            ? 'bg-surface-container ring-1 ring-primary/30 stitch-text-primary'
+            : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container ring-1 ring-transparent'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 active:scale-95 transition-transform"
+      >
+        <span className={isActive ? 'text-white/90' : ''}>{icon}</span>
+        <span className="max-w-[160px] truncate">{value ?? placeholder}</span>
+        <ChevronDown
+          size={11}
+          className={`transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-white/70' : 'opacity-60'}`}
+        />
+      </button>
+      {/* Inline clear — only when a filter is active. Separate from the
+          toggle so the user can dismiss without opening the picker. */}
+      {isActive && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClear(); }}
+          title={`Clear ${placeholder.toLowerCase()} filter`}
+          className="pr-2 pl-0.5 py-1.5 hover:bg-white/15 transition-colors"
+        >
+          <X size={11} className="text-white/80" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Compact picker for the Role filter — 9 options fit in a 2-column
+ *  grid without scroll. No search needed (small list, all stable). */
+function PickerOptionGrid({
+  options, onPick, ariaLabel,
+}: {
+  options: { id: string; label: string; selected: boolean }[];
+  onPick: (id: string) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div role="listbox" aria-label={ariaLabel} className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="option"
+          aria-selected={o.selected}
+          onClick={() => onPick(o.id)}
+          className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 text-left ${
+            o.selected
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-white stitch-text-primary hover:bg-surface-container ring-1 ring-surface-container/60'
+          }`}
+        >
+          <span className="truncate">{o.label}</span>
+          {o.selected && <Check size={12} className="shrink-0 text-white" />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Picker with a search-within input + a sticky "Any/All" row at the
+ *  top + a scrollable option list capped at ~12 rows visible. Used
+ *  for Skill (potentially long list) and Where (lots of countries). */
+function PickerWithSearch({
+  placeholder, query, onQueryChange,
+  anyLabel, anySelected, onPickAny,
+  options, onPick,
+}: {
+  placeholder: string;
+  query: string;
+  onQueryChange: (q: string) => void;
+  anyLabel: string;
+  anySelected: boolean;
+  onPickAny: () => void;
+  options: { id: string; label: string; selected: boolean; badge?: string }[];
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 stitch-text-secondary pointer-events-none" />
+        <input
+          type="text"
+          autoFocus
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full pl-8 pr-3 py-2 rounded-xl bg-white ring-1 ring-surface-container/60 stitch-text-primary text-xs outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
+        />
+      </div>
+      <div className="max-h-60 overflow-y-auto -mx-1 px-1 space-y-1" role="listbox">
+        <button
+          type="button"
+          role="option"
+          aria-selected={anySelected}
+          onClick={onPickAny}
+          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-colors text-left ${
+            anySelected
+              ? 'bg-primary text-white'
+              : 'stitch-text-secondary hover:bg-surface-container'
+          }`}
+        >
+          <span>{anyLabel}</span>
+          {anySelected && <Check size={12} className="shrink-0" />}
+        </button>
+        {options.length === 0 && query && (
+          <p className="text-center text-[11px] stitch-text-secondary py-4">
+            No matches for "{query}"
+          </p>
+        )}
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="option"
+            aria-selected={o.selected}
+            onClick={() => onPick(o.id)}
+            className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-colors text-left ${
+              o.selected
+                ? 'bg-primary text-white'
+                : 'stitch-text-primary hover:bg-surface-container'
+            }`}
+          >
+            <span className="truncate">{o.label}</span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              {o.badge && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  o.selected ? 'bg-white/20 text-white' : 'bg-surface-container stitch-text-secondary'
+                }`}>
+                  {o.badge}
+                </span>
+              )}
+              {o.selected && <Check size={12} />}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
