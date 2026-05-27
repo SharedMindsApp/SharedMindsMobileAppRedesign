@@ -111,6 +111,27 @@ export const SessionMusicService = {
   },
 
   /**
+   * Same as pickRandomTrack but with a fallback chain: if the preferred
+   * category has no active tracks, try every OTHER category in the
+   * declared order and return the first non-empty pick. Useful for
+   * onboarding when the admin has only populated some categories — we
+   * want music to "just play" rather than the user opening the player
+   * and discovering "No tracks in this mood yet."
+   *
+   * Returns null only when literally every category is empty.
+   */
+  async pickRandomTrackWithFallback(preferred: MusicCategory): Promise<SessionTrack | null> {
+    const first = await SessionMusicService.pickRandomTrack(preferred);
+    if (first) return first;
+    for (const meta of MUSIC_CATEGORIES) {
+      if (meta.id === preferred) continue;
+      const t = await SessionMusicService.pickRandomTrack(meta.id);
+      if (t) return t;
+    }
+    return null;
+  },
+
+  /**
    * Fetch a single track by id — used by participants who receive a
    * broadcast from the host with just the track id.
    */

@@ -267,7 +267,7 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
     }
     let cancelled = false;
     setLoading(true);
-    SessionMusicService.pickRandomTrack(effectiveCategory)
+    SessionMusicService.pickRandomTrackWithFallback(effectiveCategory)
       .then((t) => {
         if (cancelled) return;
         setTrack(t);
@@ -317,7 +317,8 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
   async function handleSkip() {
     if (!enabled || isParticipant) return; // Participants can't skip
     setLoading(true);
-    const next = await SessionMusicService.pickRandomTrack(effectiveCategory);
+    const next = await SessionMusicService.pickRandomTrackWithFallback(effectiveCategory);
+    /* (skip uses the same fallback as initial pick) */
     setTrack(next);
     setNoTracks(next == null);
     setLoading(false);
