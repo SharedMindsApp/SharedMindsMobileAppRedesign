@@ -53,6 +53,7 @@ import { TodayPlannerCard } from './TodayPlannerCard';
 import { UpcomingSessionCountdown } from './UpcomingSessionCountdown';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
 import { LiveNowDropInStrip } from './LiveNowDropInStrip';
+import { OnboardingNudges } from './OnboardingNudges';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
 import { ShippedFeedStrip } from './ShippedFeedStrip';
 import { DashboardTabs } from './DashboardTabs';
@@ -605,6 +606,19 @@ export function DashboardPage() {
       <LiveNowDropInStrip
         excludeSessionId={activeSession?.id}
         hidden={!!activeSession}
+      />
+
+      {/* Post-first-session nudges: "Plan a project" + "Complete your
+          profile". Gated on sessionsCompleted >= 1 inside the component
+          so they only appear after the user has felt what a session is
+          — earned context, not pre-emptive friction. Each card is
+          dismissable + auto-hides when its underlying condition is
+          met (project created, profile filled). */}
+      <OnboardingNudges
+        hasProjects={projects.length > 0}
+        profileCountry={profile?.country_code}
+        profileBio={profile?.bio}
+        sessionsCompleted={stats?.totalSessions ?? 0}
       />
 
       {/* Progressive render — sections paint as their data arrives. The
