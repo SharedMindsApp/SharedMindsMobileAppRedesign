@@ -678,9 +678,19 @@ type Step =
 
 // Steps that are always visible (used for progress bar denominator).
 // set_intentions is conditional, so we omit it from the fixed count.
+//
+// Onboarding is intentionally short: every step needs to either unlock
+// something the product genuinely needs (display name, work type) OR
+// materially personalise the experience right now (skills for matching).
+// The project / project_shape / goals / tasks steps were cut in favour
+// of an in-app "Plan a project" surface that fires once the user has
+// completed their first session — by then they actually know what a
+// project means in our product, and they'll fill it in with real
+// intent rather than placeholder text. The step bodies stay in the
+// file (`step === 'project'` etc.) so they can be revived later as a
+// standalone wizard reachable from `/projects`.
 const COUNTED_STEPS: Step[] = [
-  'welcome', 'profile', 'industries', 'skills', 'intentions',
-  'project', 'project_shape', 'goals', 'tasks', 'done',
+  'welcome', 'profile', 'industries', 'skills', 'intentions', 'done',
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -2098,8 +2108,12 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         <PrimaryBtn
           label="Next"
           onClick={() => {
+            // After picking the intentions day, branch only on whether
+            // today IS that day (→ set_intentions to fill them in now)
+            // or not (→ jump straight to done). Project setup has been
+            // moved out of onboarding — see COUNTED_STEPS comment.
             const nextStep: Step =
-              todayDayOfWeek() === intentionsDay ? 'set_intentions' : 'project';
+              todayDayOfWeek() === intentionsDay ? 'set_intentions' : 'done';
             advance(nextStep, saveIntentionsDay);
           }}
         />
@@ -2156,7 +2170,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
         <PrimaryBtn
           label={filledCount > 0 ? `Set ${filledCount} intention${filledCount !== 1 ? 's' : ''}` : 'Skip for now'}
-          onClick={() => advance('project')}
+          onClick={() => advance('done')}
         />
       </StepShell>
     );
