@@ -132,6 +132,48 @@ export const SessionMusicService = {
   },
 
   /**
+   * "Shuffle-all-then-loop" queue. Plays every track in the category
+   * once in a random order, then reshuffles and starts the cycle
+   * again — Spotify-style shuffle, not random-with-replacement. Falls
+   * back to other categories if the preferred one is empty.
+   *
+   * The queue is module-scoped state (see _queues / _queueCategoryKey
+   * below). It resets automatically when:
+   *   • the category changes (different mood → new queue)
+   *   • the queue drains (all tracks played → reshuffle)
+   *   • the user calls resetShuffleQueue() explicitly
+   *
+   * Returns null only when literally every category is empty.
+   */
+  async nextInShuffle(preferred: MusicCategory): Promise<SessionTrack | null> {
+    // Decide which category to actually pull from (may fall back).
+    const sourceCategory = await pickFirstNonEmptyCategory(preferred);
+    if (!sourceCategory) return null;
+
+    // If we've switched categories OR drained the queue, rebuild it.
+    const cached = _queues.get(sourceCategory);
+    if (!cached || cached.length === 0) {
+      const tracks = await SessionMusicService.listActiveTracks(sourceCategory);
+      if (tracks.length === 0) return null;
+      _queues.set(sourceCategory, shuffleByWeight(tracks));
+    }
+
+    const queue = _queues.get(sourceCategory)!;
+    const next = queue.shift() ?? null;
+    return next;
+  },
+
+  /**
+   * Forces the next nextInShuffle() call to rebuild the queue.
+   * Useful when the admin adds/removes tracks mid-session — though in
+   * practice that's rare enough that we don't bother to subscribe.
+   */
+  resetShuffleQueue(category?: MusicCategory): void {
+    if (category) _queues.delete(category);
+    else _queues.clear();
+  },
+
+  /**
    * Fetch a single track by id — used by participants who receive a
    * broadcast from the host with just the track id.
    */
@@ -166,3 +208,55 @@ export const SessionMusicService = {
     })) as SessionTrack[];
   },
 };
+
+// ── Shuffle-queue internals ────────────────────────────────────────
+// Module-scoped state so the queue survives across React re-renders.
+// There's only ever one music session active per page, so a global
+// map keyed by category is fine.
+
+const _queues = new Map<MusicCategory, SessionTrack[]>();
+
+/** Weighted Fisher-Yates: tracks with higher sort_weight are more
+ *  likely to land near the FRONT of the shuffle (so they play first
+ *  / more often within a cycle), but every track is guaranteed to
+ *  appear exactly once before the queue drains. This is the cleanest
+ *  way to honour weights without violating the "play all then loop"
+ *  contract. */
+function shuffleByWeight(tracks: SessionTrack[]): SessionTrack[] {
+  // Assign each track a "shuffle key" of -log(rand) / weight. Sorting
+  // ascending by this key is mathematically equivalent to weighted
+  // sampling without replacement (Efraimidis-Spirakis algorithm).
+  const keyed = tracks.map((t) => {
+    const w = Math.max(1, t.sort_weight ?? 1);
+    const u = Math.max(1e-12, Math.random());
+    return { track: t, key: -Math.log(u) / w };
+  });
+  keyed.sort((a, b) => a.key - b.key);
+  return keyed.map((k) => k.track);
+}
+
+/** Walk the requested category first, then every other category in
+ *  declared order, returning the FIRST one that has at least one
+ *  active track. Returns null when literally everything is empty. */
+async function pickFirstNonEmptyCategory(
+  preferred: MusicCategory
+): Promise<MusicCategory | null> {
+  const order: MusicCategory[] = [
+    preferred,
+    ...MUSIC_CATEGORIES.map((m) => m.id).filter((id) => id !== preferred),
+  ];
+  for (const cat of order) {
+    // Cheap existence check — count is faster than a full select.
+    const { count, error } = await supabase
+      .from('session_tracks')
+      .select('id', { count: 'exact', head: true })
+      .eq('category', cat)
+      .eq('is_active', true);
+    if (error) {
+      console.warn('[SessionMusicService] count failed for', cat, error);
+      continue;
+    }
+    if ((count ?? 0) > 0) return cat;
+  }
+  return null;
+}
