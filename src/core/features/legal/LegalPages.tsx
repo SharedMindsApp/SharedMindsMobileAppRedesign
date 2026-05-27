@@ -15,7 +15,7 @@ import { ArrowLeft, ShieldCheck, Scale, Mail } from 'lucide-react';
  *  Bump this whenever you materially change either document. Stored
  *  alongside accepted_privacy_at on profiles so we can detect when
  *  re-consent is needed after an update. */
-export const LEGAL_DOCUMENT_VERSION = '2026-05-28';
+export const LEGAL_DOCUMENT_VERSION = '2026-05-28b';
 
 function LegalShell({
   title, icon, children,
@@ -216,6 +216,12 @@ export function TermsOfServicePage() {
         by law, including liability for death or personal injury caused by
         negligence, or for fraud or fraudulent misrepresentation.
       </p>
+      <p>
+        <strong>If you are a consumer</strong> resident in the UK or EU,
+        you have statutory rights that cannot be excluded by these Terms
+        — including, in the UK, rights under the Consumer Rights Act
+        2015. Nothing in these Terms affects those rights.
+      </p>
 
       <h2 className="text-lg font-bold mt-6 mb-2">14. Indemnification</h2>
       <p>
@@ -278,76 +284,165 @@ export function PrivacyPolicyPage() {
         we don't sell your data to anyone. Ever.
       </p>
 
+      <h2 className="text-lg font-bold mt-6 mb-2">Plain English summary</h2>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>You own your data — export or delete it any time.</li>
+        <li>We don't sell your data and we don't run ad-tracking.</li>
+        <li>Video sessions are peer-to-peer via Daily.co — we don't record them.</li>
+        <li>Your projects and tasks are private by default.</li>
+        <li>You control who can DM you and who sees your online status.</li>
+      </ul>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Who we are</h2>
+      <p>
+        SharedMinds is the data controller for purposes of UK GDPR and EU
+        GDPR, established in the United Kingdom. Contact us at <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a>.
+      </p>
+      <p>
+        <strong>DPO:</strong> not required — our core activities don't involve
+        large-scale special-category processing or systematic monitoring.
+      </p>
+      <p>
+        <strong>EU representative (Art. 27 EU GDPR):</strong> if you are an EU
+        resident, contact us at the address above. We will appoint an
+        EU-based representative before formally targeting the EU market.
+      </p>
+
       <h2 className="text-lg font-bold mt-6 mb-2">What we collect</h2>
       <ul className="list-disc pl-5 space-y-1">
-        <li><strong>Account data:</strong> email, display name, profile photo, bio, location (optional), skills, work types</li>
-        <li><strong>Session data:</strong> sessions you've joined, your goal and debrief outcomes, who you sat with</li>
-        <li><strong>Connections:</strong> who you've connected with, sent requests to, blocked, or reported</li>
-        <li><strong>Messages:</strong> DMs and community chat (retained for safety per our terms)</li>
-        <li><strong>Device/usage:</strong> standard logs (IP, browser, page views) for diagnostics and abuse prevention</li>
+        <li><strong>Account data:</strong> email, display name, password hash, browser timezone</li>
+        <li><strong>Profile data (optional):</strong> avatar, bio, work types, skills, location</li>
+        <li><strong>Usage data:</strong> sessions you've started, your goals and outcomes, tasks, projects, intentions, reflections, DMs, community posts, connection requests, notification preferences, last-seen heartbeat</li>
+        <li><strong>Technical data:</strong> browser/device type, approximate region from IP, error logs (no message contents)</li>
       </ul>
+      <p>
+        All data is collected <strong>directly from you</strong>. We do not buy
+        data or receive it from third parties. The minimum data needed to
+        provide the Service is your email, password, and display name —
+        these are required by the contract.
+      </p>
 
       <h2 className="text-lg font-bold mt-6 mb-2">Safety evidence</h2>
       <p>
-        When you submit a report against another member <strong>from inside an
-        active video session</strong>, we capture a single frame of that
-        person's video tile and a snapshot of the session's chat from the
-        previous 5 minutes. This evidence is stored privately and is only
-        viewable by SharedMinds moderation staff.
+        When you report another member <strong>from inside an active video
+        session</strong>, we capture a single frame of that person's video
+        tile and a snapshot of session chat from the previous 5 minutes.
+        Stored privately, viewable only by moderation staff, auto-deletes
+        after 90 days unless tied to an unresolved case. You can request
+        deletion of any evidence concerning you by emailing <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a>.
       </p>
-      <ul className="list-disc pl-5 space-y-1">
-        <li>Capture only happens at the moment of report — never preemptively or continuously.</li>
-        <li>We never record sessions in full.</li>
-        <li>Evidence auto-deletes after 90 days unless it's tied to an unresolved safety case.</li>
-        <li>You can request deletion of any evidence concerning you by emailing privacy@sharedminds.app.</li>
-      </ul>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">What we don't collect</h2>
+      <h2 className="text-lg font-bold mt-6 mb-2">Legal basis</h2>
       <ul className="list-disc pl-5 space-y-1">
-        <li>We don't track you across other websites</li>
-        <li>We don't record video sessions by default</li>
-        <li>We don't sell or share your data with advertisers</li>
+        <li><strong>Contract</strong> — running the Service you signed up for</li>
+        <li><strong>Legitimate interest</strong> — security, abuse prevention, bug diagnosis</li>
+        <li><strong>Consent</strong> — non-essential notifications, opt-in features (withdrawable any time)</li>
+        <li><strong>Legal obligation</strong> — responding to lawful requests</li>
       </ul>
 
       <h2 className="text-lg font-bold mt-6 mb-2">Sub-processors</h2>
-      <p>We use these third parties to run the service:</p>
       <ul className="list-disc pl-5 space-y-1">
-        <li><strong>Supabase</strong> — database + auth (data hosted in the EU)</li>
-        <li><strong>Daily.co</strong> — live video for sessions</li>
-        <li><strong>OpenAI</strong> — automated content moderation (text + avatar verification)</li>
-        <li><strong>Vercel</strong> — frontend hosting</li>
+        <li><strong>Supabase</strong> — database + auth, hosted in EU by default</li>
+        <li><strong>Daily.co</strong> — peer-to-peer video for sessions (no recording)</li>
+        <li><strong>Resend</strong> — transactional email delivery</li>
+        <li><strong>Vercel</strong> — web hosting</li>
+        <li><strong>OpenAI</strong> — avatar moderation (image sent for a safety + face check; not used for training)</li>
       </ul>
 
-      <h2 className="text-lg font-bold mt-6 mb-2">Your rights (GDPR / CCPA)</h2>
-      <p>You have the right to:</p>
+      <h2 className="text-lg font-bold mt-6 mb-2">International transfers</h2>
+      <p>
+        Some sub-processors are based in or operate infrastructure in the
+        United States. We rely on appropriate Article 46 safeguards:
+        <strong> Standard Contractual Clauses</strong> with the UK Addendum,
+        and the <strong>EU–US Data Privacy Framework</strong> where the
+        sub-processor is DPF-certified. Request the safeguards for a
+        specific transfer at <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a>.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Automated decision-making</h2>
+      <p>
+        <strong>Avatar moderation</strong> is the only fully-automated decision
+        we make. When you upload a profile photo, OpenAI's moderation
+        service checks for a real human face and unsafe content. A
+        rejection means the photo isn't stored and you're asked to upload
+        a different one — nothing else about your account is affected.
+      </p>
+      <p>
+        Under Article 22 you have the right to request human review,
+        express your view, and contest the decision. Email <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a> within
+        30 days of a rejection and a team member will manually review.
+      </p>
+      <p>
+        Suggested connections, open-to-match pairing, and notification
+        timing all use simple deterministic logic, not profiling, and you
+        can override them.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Your rights (UK & EU GDPR)</h2>
       <ul className="list-disc pl-5 space-y-1">
-        <li><strong>Access</strong> a copy of your data — request via Settings</li>
-        <li><strong>Correct</strong> inaccurate data — edit on your Profile</li>
-        <li><strong>Delete</strong> your account — Settings → Delete account</li>
-        <li><strong>Object</strong> to processing — email us</li>
-        <li><strong>Withdraw consent</strong> — unsubscribe links on every email</li>
+        <li><strong>Access (Art. 15)</strong> — request a copy of your data</li>
+        <li><strong>Rectification (Art. 16)</strong> — correct inaccurate data; most fields are editable on the Profile page</li>
+        <li><strong>Erasure (Art. 17)</strong> — request account deletion; we complete within 30 days</li>
+        <li><strong>Restriction (Art. 18)</strong> — pause processing while a complaint is resolved</li>
+        <li><strong>Portability (Art. 20)</strong> — receive your data in JSON / CSV format</li>
+        <li><strong>Object (Art. 21)</strong> — object to legitimate-interest processing</li>
+        <li><strong>Withdraw consent (Art. 7(3))</strong> — for any consent-based processing</li>
+        <li><strong>Automated decision-making (Art. 22)</strong> — request human review (see above)</li>
       </ul>
+      <p>
+        Exercise any right by emailing <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a>. We respond within 30 days
+        (extendable by two months for complex requests, with notice). We
+        may verify your identity before fulfilling certain requests. No
+        fee unless a request is manifestly unfounded or excessive.
+      </p>
+      <p>
+        <strong>Right to complain.</strong> UK residents may complain to the <a href="https://ico.org.uk" target="_blank" rel="noopener noreferrer" className="text-primary font-bold">ICO</a>; EU residents may complain to their national data protection
+        authority. We'd always prefer the chance to put things right first.
+      </p>
 
       <h2 className="text-lg font-bold mt-6 mb-2">Retention</h2>
       <p>
         Active account data is kept while your account is open. After
-        deletion: profile data is removed within 30 days; chat messages
-        are anonymised; safety/moderation records are kept for 2 years
-        for legal and abuse-prevention purposes.
+        deletion: profile + content removed within 30 days; chat messages
+        are anonymised; safety/moderation records may be kept for up to 2
+        years for legal and abuse-prevention purposes.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Security & breach notification</h2>
+      <p>
+        TLS in transit, encryption at rest, row-level security on the
+        database, bcrypt-hashed passwords, least-privilege staff access.
+        In the unlikely event of a breach likely to risk your rights, we
+        will notify the ICO within 72 hours and affected users without
+        undue delay where the risk is high.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Children</h2>
+      <p>
+        SharedMinds is not directed at children under 16. If you believe a
+        child has created an account, tell us and we'll remove it.
       </p>
 
       <h2 className="text-lg font-bold mt-6 mb-2">Cookies</h2>
       <p>
-        We use a single cookie for session authentication. No advertising
-        or analytics cookies. No cookie banner needed.
+        We use a small number of strictly necessary cookies and browser
+        localStorage entries to keep you signed in, remember preferences,
+        and detect your timezone on signup. No third-party advertising or
+        analytics cookies. No cookie banner needed for strictly necessary
+        storage under PECR.
+      </p>
+
+      <h2 className="text-lg font-bold mt-6 mb-2">Changes to this policy</h2>
+      <p>
+        We may update this Privacy Policy. The version number at the top
+        of this page changes when we update it. For material changes
+        we'll notify you in-app or by email at least 14 days before they
+        take effect.
       </p>
 
       <h2 className="text-lg font-bold mt-6 mb-2">Contact</h2>
       <p>
         Data Protection: <a href="mailto:privacy@sharedminds.app" className="text-primary font-bold">privacy@sharedminds.app</a>
-      </p>
-      <p>
-        {/* TODO LAWYER: appoint DPO + EU representative if required */}
       </p>
     </LegalShell>
   );
