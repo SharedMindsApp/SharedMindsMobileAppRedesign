@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2, Search, Library } from 'lucide-react';
+import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2, Search, Library, Pin } from 'lucide-react';
 import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useAuth } from '../../auth/AuthProvider';
@@ -44,6 +44,22 @@ function readLast(): number {
 }
 function writeLast(n: number): void {
   try { window.localStorage.setItem(LS_LAST, String(n)); } catch { /* private */ }
+}
+
+// One pinned "go-to" activity per user. Survives refresh and is
+// auto-selected when the dropdown opens so the primary button reads
+// "Quick timer · ☎️ Cold calling · 25m" without the user having to
+// re-pick every time. Stored as the user_activity id; null = no pin.
+const LS_PINNED = 'sm.quickTimer.pinnedActivityId';
+function readPinned(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(LS_PINNED);
+}
+function writePinned(id: string | null): void {
+  try {
+    if (id) window.localStorage.setItem(LS_PINNED, id);
+    else window.localStorage.removeItem(LS_PINNED);
+  } catch { /* private */ }
 }
 
 /** Backend constraint: durationMinutes is typed as 25 | 50 | 90 but the
@@ -134,6 +150,15 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   // ── Activity state ─────────────────────────────────────────
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [selectedActivity, setSelectedActivity] = useState<UserActivity | null>(null);
+  /** Pinned activity id from localStorage — survives refresh. The
+   *  pinned activity is auto-selected when activities load and
+   *  rendered first in the chip row with a filled pin marker. */
+  const [pinnedId, setPinnedId] = useState<string | null>(() => readPinned());
+  function togglePin(id: string) {
+    const next = pinnedId === id ? null : id;
+    setPinnedId(next);
+    writePinned(next);
+  }
   const [customGoal, setCustomGoal] = useState<string>('');
   // The duration that actually goes to the backend — derived from
   // (in priority order) the selected activity's default, the inline
@@ -194,6 +219,18 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
       if (cancelled) return;
       setActivities(mine);
       setActivitiesLoaded(true);
+      // Auto-select the pinned activity if it still exists in the
+      // user's list. If the pin points at an archived activity,
+      // clear it so we don't show a stale label.
+      if (pinnedId) {
+        const pinned = mine.find((a) => a.id === pinnedId);
+        if (pinned && !selectedActivity) {
+          setSelectedActivity(pinned);
+        } else if (!pinned) {
+          setPinnedId(null);
+          writePinned(null);
+        }
+      }
       // Day-zero — kick the user into the picker so they curate
       // their own shortcuts instead of inheriting whatever the seed
       // guessed. Only auto-opens once per dropdown lifecycle.
@@ -383,30 +420,62 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                     </div>
                   );
                 }
+                // Pinned activity floats to the front so it's always
+                // the first chip. Rest keep their server-side order
+                // (most-recently-used first).
+                const ordered = pinnedId
+                  ? [
+                      ...activities.filter((a) => a.id === pinnedId),
+                      ...activities.filter((a) => a.id !== pinnedId),
+                    ]
+                  : activities;
                 return (
                   <div className="flex flex-wrap gap-1.5">
                     {/* Cap at 10 — the rest live behind Manage. */}
-                    {activities.slice(0, 10).map((a) => {
+                    {ordered.slice(0, 10).map((a) => {
                       const active = selectedActivity?.id === a.id;
+                      const pinned = pinnedId === a.id;
                       return (
-                        <button
+                        <div
                           key={a.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedActivity(active ? null : a);
-                            setOverrideMinutes(null);
-                            setCustomGoal('');
-                          }}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                          className={`group/chip inline-flex items-stretch rounded-full overflow-hidden transition-colors ${
                             active
                               ? 'bg-primary text-white'
+                              : pinned
+                              ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
                               : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
                           }`}
-                          title={`${a.label} · ${a.default_minutes}min`}
                         >
-                          <span>{a.emoji}</span>
-                          <span className="truncate max-w-[110px]">{a.label}</span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedActivity(active ? null : a);
+                              setOverrideMinutes(null);
+                              setCustomGoal('');
+                            }}
+                            className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 text-[11px] font-bold"
+                            title={`${a.label} · ${a.default_minutes}min${pinned ? ' · pinned' : ''}`}
+                          >
+                            <span>{a.emoji}</span>
+                            <span className="truncate max-w-[110px]">{a.label}</span>
+                          </button>
+                          {/* Pin toggle — always visible for the
+                              pinned chip, hover-revealed for others
+                              so the row stays compact. */}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); togglePin(a.id); }}
+                            className={`pr-1.5 pl-0.5 grid place-items-center transition-opacity ${
+                              pinned ? 'opacity-100' : 'opacity-0 group-hover/chip:opacity-60 hover:!opacity-100'
+                            }`}
+                            title={pinned ? 'Unpin this activity' : 'Pin as your go-to'}
+                            aria-label={pinned ? 'Unpin' : 'Pin'}
+                          >
+                            {pinned
+                              ? <Pin size={10} fill="currentColor" strokeWidth={2.5} />
+                              : <Pin size={10} strokeWidth={2.5} />}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
