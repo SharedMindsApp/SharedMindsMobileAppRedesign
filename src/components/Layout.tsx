@@ -868,26 +868,9 @@ export function Layout({ children }: LayoutProps) {
         }}
       />
 
-      {/* ── Return-to-session chip ─────────────────────────────────────────
-          Shown when there's an active session but the user has navigated
-          away from it. Floats above the mobile tab bar (bottom-20 on small
-          screens) so it never collides with the dock. */}
-      {activeSession && !location.pathname.startsWith(`/session/${activeSession.id}`) && (
-        <button
-          type="button"
-          onClick={() => navigate(`/session/${activeSession.id}`)}
-          className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-full shadow-lg text-sm font-bold active:scale-95 transition-all hover:bg-primary/90 pointer-events-auto"
-          style={{ boxShadow: '0 4px 20px rgba(99,102,241,0.5)' }}
-        >
-          <Video size={14} />
-          Back to session
-          {sessionGoal ? (
-            <span className="hidden sm:inline opacity-70 font-normal truncate max-w-[140px]">
-              · {sessionGoal}
-            </span>
-          ) : null}
-        </button>
-      )}
+      {/* Return-to-session chip removed — superseded by FloatingTimerWidget
+          which shows the same return affordance plus a live mm:ss
+          countdown, progress ring, project tag, and mute button. */}
 
       {/* Persistent floating chat dock — portals to body so it sits above
           all page content. Hidden during active video sessions so users
