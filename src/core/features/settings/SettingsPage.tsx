@@ -12,15 +12,20 @@ import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService
 import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
 
 const WORK_TYPES = [
-  { id: 'designer', label: 'Designer', emoji: '🎨' },
-  { id: 'developer', label: 'Developer', emoji: '💻' },
-  { id: 'writer', label: 'Writer / Creator', emoji: '✍️' },
-  { id: 'founder', label: 'Founder', emoji: '🚀' },
-  { id: 'filmmaker', label: 'Filmmaker / Producer', emoji: '🎬' },
-  { id: 'marketer', label: 'Marketer', emoji: '📣' },
-  { id: 'consultant', label: 'Consultant', emoji: '🎯' },
-  { id: 'researcher', label: 'Researcher', emoji: '🔬' },
-  { id: 'other', label: 'Something else', emoji: '✨' },
+  { id: 'designer',     label: 'Designer',             emoji: '🎨' },
+  { id: 'developer',    label: 'Developer',            emoji: '💻' },
+  { id: 'writer',       label: 'Writer / Creator',     emoji: '✍️' },
+  { id: 'founder',      label: 'Founder',              emoji: '🚀' },
+  { id: 'filmmaker',    label: 'Filmmaker / Producer', emoji: '🎬' },
+  { id: 'marketer',     label: 'Marketer',             emoji: '📣' },
+  { id: 'consultant',   label: 'Consultant',           emoji: '🎯' },
+  { id: 'researcher',   label: 'Researcher',           emoji: '🔬' },
+  { id: 'sales',        label: 'Sales',                emoji: '💼' },
+  { id: 'coach',        label: 'Coach / Therapist',    emoji: '🧭' },
+  { id: 'educator',     label: 'Educator / Teacher',   emoji: '📚' },
+  { id: 'accountant',   label: 'Accountant / Finance', emoji: '🧾' },
+  { id: 'photographer', label: 'Photographer',         emoji: '📸' },
+  { id: 'other',        label: 'Something else',       emoji: '✨' },
 ];
 
 const MAX_WORK_TYPES = 3;

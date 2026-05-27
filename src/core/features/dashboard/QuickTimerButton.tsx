@@ -328,7 +328,9 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {activities.slice(0, 12).map((a) => {
+                {/* Cap at 10 — the rest live behind Manage so the
+                    dropdown stays scannable. */}
+                {activities.slice(0, 10).map((a) => {
                   const active = selectedActivity?.id === a.id;
                   return (
                     <button
