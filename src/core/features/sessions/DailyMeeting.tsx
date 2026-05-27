@@ -103,6 +103,13 @@ export interface DailyMeetingProps {
    * navigate the user out, not write to the DB.
    */
   onLeave?: () => void;
+  /** Imperative "mute now" trigger. Each unique value mutes the local
+   *  audio once via callObject.setLocalAudio(false). Used by
+   *  ActiveSessionPage on the intro→work phase transition for matched
+   *  sessions whose vibe is silent or brief_hi. It's a *one-shot*
+   *  signal, not a sticky setting — the user can immediately unmute
+   *  again if they want. Subsequent value changes mute again. */
+  muteAudioSignal?: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -120,6 +127,7 @@ export function DailyMeeting({
   onParticipantCountChanged,
   onParticipantJoined,
   onLeave,
+  muteAudioSignal,
 }: DailyMeetingProps) {
   const callRef = useRef<DailyCall | null>(null);
   const [call, setCall] = useState<DailyCall | null>(null);
@@ -132,6 +140,21 @@ export function DailyMeeting({
   const cbCountRef  = useRef(onParticipantCountChanged);
   const cbJoinedRef = useRef(onParticipantJoined);
   const cbLeaveRef = useRef(onLeave);
+
+  // Auto-mute trigger — fires whenever the muteAudioSignal value changes
+  // (and is non-zero, so the initial 0 → undefined mount doesn't mute).
+  // One-shot: we just call setLocalAudio(false). User can manually
+  // unmute again — we don't fight them on subsequent renders.
+  useEffect(() => {
+    if (muteAudioSignal === undefined || muteAudioSignal === 0) return;
+    const c = callRef.current;
+    if (!c) return;
+    try {
+      c.setLocalAudio(false);
+    } catch (e) {
+      console.warn('[DailyMeeting] auto-mute via signal failed:', e);
+    }
+  }, [muteAudioSignal]);
   useEffect(() => {
     cbCountRef.current  = onParticipantCountChanged;
     cbJoinedRef.current = onParticipantJoined;

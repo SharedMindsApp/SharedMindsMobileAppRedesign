@@ -13,9 +13,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Video, Calendar as CalendarIcon, Users, User as UserIcon, Loader2, Sparkles } from 'lucide-react';
-import { fetchScheduledSessionsInRange } from '../../services/SessionService';
+import { X, Video, Calendar as CalendarIcon, Users, User as UserIcon, Loader2, Sparkles, DoorOpen, MessageCircle, Volume2 } from 'lucide-react';
+import {
+  fetchScheduledSessionsInRange,
+  fetchOpenSessions,
+  claimOpenSession,
+} from '../../services/SessionService';
 import type { ScheduledSessionWithProfile } from '../../services/SessionService';
+import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -141,12 +146,25 @@ export function FindSessionsSheet({
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
   const [sessions, setSessions] = useState<ScheduledSessionWithProfile[]>([]);
+  /** Open-to-match: active solo sessions that anyone can drop into. The
+   *  redesigned Match-me-now flow — a session is already running, you're
+   *  joining live work. See migration 20260527000015. Replaces the old
+   *  "Live now · looking for a partner" lane which fetched
+   *  waiting_for_match rows; that flow was retired in task #175. */
+  const [openSessions, setOpenSessions] = useState<CommunitySession[]>([]);
+  const [joining, setJoining] = useState<string | null>(null);
 
   useEffect(() => {
     const fromIso = startOfWeek(new Date()).toISOString();
     const toIso   = endOfFourWeeks(new Date()).toISOString();
-    fetchScheduledSessionsInRange(fromIso, toIso)
-      .then(setSessions)
+    Promise.all([
+      fetchScheduledSessionsInRange(fromIso, toIso),
+      fetchOpenSessions().catch(() => []),       // best-effort
+    ])
+      .then(([sched, opens]) => {
+        setSessions(sched);
+        setOpenSessions(opens);
+      })
       .catch((err) => {
         console.error('[FindSessionsSheet] fetch failed:', err);
         const msg =
@@ -157,6 +175,31 @@ export function FindSessionsSheet({
       })
       .finally(() => setLoading(false));
   }, []);
+
+  /** Drop into an open-to-match session. RPC returns null if the slot
+   *  was already taken / door was closed since we last fetched — we
+   *  surface a soft error and refresh the lane so the stale card goes
+   *  away. Successful claim navigates straight to the active session. */
+  async function handleClaimOpen(sessionId: string) {
+    if (joining) return;
+    setJoining(sessionId);
+    try {
+      const claimed = await claimOpenSession(sessionId);
+      if (!claimed) {
+        // Slot gone — refresh the lane so the stale card disappears.
+        setError('That session just filled up. Try another, or open your own.');
+        fetchOpenSessions().then(setOpenSessions).catch(() => {});
+        return;
+      }
+      onClose();
+      navigate(`/session/${claimed.id}`);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not drop in.');
+      fetchOpenSessions().then(setOpenSessions).catch(() => {});
+    } finally {
+      setJoining(null);
+    }
+  }
 
   // ESC to close
   useEffect(() => {
@@ -244,7 +287,106 @@ export function FindSessionsSheet({
             </div>
           )}
 
-          {!loading && !error && grouped.length === 0 && (
+          {/* Drop in — sessions in progress with the door open. This is
+              the redesigned Match-me-now flow: hosts are already working
+              (no waiting room), you drop straight into their active
+              session. The vibe pill tells you what kind of social
+              moment to expect. See migration 20260527000015. */}
+          {!loading && !error && openSessions.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />
+                  <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+                </span>
+                <p className="text-[10px] font-extrabold tracking-widest uppercase text-emerald-700">
+                  Drop in · live now
+                </p>
+                <span className="text-[10px] stitch-text-secondary">
+                  {openSessions.length} {openSessions.length === 1 ? 'door is' : 'doors are'} open
+                </span>
+              </div>
+              <div className="space-y-2">
+                {openSessions.map((o) => {
+                  const initial   = (o.display_name ?? '?').charAt(0).toUpperCase();
+                  // Elapsed minutes since the host started. Used to pace
+                  // the joiner's expectation ("Maya's 12 min in").
+                  const startedMs = new Date(o.start_time).getTime();
+                  const elapsedMin = Math.max(0, Math.round((Date.now() - startedMs) / 60000));
+                  const totalMin   = o.intended_duration_minutes ?? 50;
+                  const remainMin  = Math.max(0, totalMin - elapsedMin);
+                  // Vibe label + icon — drives the joiner's expectations
+                  // about the intro moment. NULL vibe (legacy) → brief_hi.
+                  const vibe = o.vibe ?? 'brief_hi';
+                  const vibeMeta = (
+                    vibe === 'silent'
+                      ? { Icon: Volume2,       label: 'Silent',   bg: 'bg-slate-100',   text: 'text-slate-700' }
+                      : vibe === 'chatty'
+                        ? { Icon: Users,         label: 'Chatty',   bg: 'bg-amber-100',   text: 'text-amber-700' }
+                        : { Icon: MessageCircle, label: 'Brief hi', bg: 'bg-emerald-100', text: 'text-emerald-700' }
+                  );
+                  return (
+                    <div
+                      key={o.id}
+                      className="relative rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 ring-1 ring-emerald-200/60 overflow-hidden"
+                    >
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-emerald-500 to-teal-500" />
+                      <div className="flex items-center gap-3 pl-4 pr-3 py-3">
+                        {o.avatar_url ? (
+                          <img
+                            src={o.avatar_url}
+                            alt={o.display_name ?? 'host'}
+                            className="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-emerald-200"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold shrink-0">
+                            {initial}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold stitch-text-primary leading-tight truncate">
+                            {o.display_name ?? 'Someone'} · {elapsedMin} min in
+                          </p>
+                          {/* Goal — only shown if the host attached one;
+                              gives the joiner gravity (am I joining
+                              writing? designing? planning?). */}
+                          {o.session_goal && (
+                            <p className="text-[11px] stitch-text-secondary truncate italic">
+                              "{o.session_goal}"
+                            </p>
+                          )}
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${vibeMeta.bg} ${vibeMeta.text}`}>
+                              <vibeMeta.Icon size={9} />
+                              {vibeMeta.label}
+                            </span>
+                            <span className="text-[10px] stitch-text-secondary tabular-nums">
+                              {remainMin} min left
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleClaimOpen(o.id)}
+                          disabled={joining === o.id}
+                          className="inline-flex items-center gap-1 text-[11px] font-extrabold text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-90 px-3 py-1.5 rounded-lg shadow-sm transition-opacity disabled:opacity-60"
+                        >
+                          {joining === o.id ? <Loader2 size={11} className="animate-spin" /> : <DoorOpen size={11} />}
+                          Drop in
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Old "Live now · looking for a partner" lane removed —
+              waiting-room flow retired in task #175. The new Drop-in
+              lane above renders open-to-match sessions instead. */}
+
+          {!loading && !error && grouped.length === 0 && openSessions.length === 0 && (
             <div className="text-center py-12">
               <div className="w-12 h-12 rounded-full bg-violet-100 mx-auto flex items-center justify-center mb-3">
                 <Sparkles size={20} className="text-violet-600" />

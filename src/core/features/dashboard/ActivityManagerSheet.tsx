@@ -14,6 +14,7 @@
 //      the template into user_activities.
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, Library, ChevronDown, ChevronUp, Loader2, Sparkles } from 'lucide-react';
 import { ActivityService, type UserActivity, type ActivityTemplate } from '../../services/ActivityService';
 import { useAuth } from '../../auth/AuthProvider';
@@ -71,6 +72,16 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.work_types?.join(',')]);
+
+  // Lock page scroll while the sheet is open so the body and the
+  // sheet's own inner scroll container don't fight each other.
+  // Restored on unmount/close.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   async function handleArchive(a: UserActivity) {
     setBusyId(a.id);
@@ -153,14 +164,14 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
       return a.sort_order - b.sort_order;
     });
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-end sm:items-start justify-center p-0 sm:pt-8 sm:p-4 bg-black/20 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-start justify-center p-0 sm:pt-8 sm:p-4 bg-black/20 backdrop-blur-md"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-4rem)] overflow-hidden my-auto sm:my-0"
+        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-4rem)] overflow-hidden"
       >
         {/* Header */}
         <div className="shrink-0 flex items-start justify-between gap-3 px-5 pt-5 pb-3">
@@ -381,6 +392,7 @@ export function ActivityManagerSheet({ onClose, onChanged }: Props) {
           onDone={() => { setPickerOpen(false); refresh(); onChanged?.(); }}
         />
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -14,6 +14,7 @@
 // "Reset & pick again" button so users can recurate any time.
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Loader2, X, Sparkles } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
@@ -64,6 +65,15 @@ export function ActivityPickerSheet({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.work_types?.join(',')]);
+
+  // Lock page scroll while the sheet is open so the body and the
+  // sheet's own inner scroll container don't fight each other.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   // Group by primary work_type for visual scannability. An activity
   // that touches multiple roles is shown under the user's PRIMARY
@@ -149,14 +159,14 @@ export function ActivityPickerSheet({
     picked.size === RECOMMENDED ? 'text-emerald-600' :
     'text-primary';
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-end sm:items-start justify-center p-0 sm:pt-8 sm:p-4 bg-black/30 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-start justify-center p-0 sm:pt-8 sm:p-4 bg-black/30 backdrop-blur-md"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-lg bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[calc(100vh-4rem)] overflow-hidden"
+        className="w-full sm:max-w-lg bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[calc(100vh-4rem)] overflow-hidden"
       >
         {/* Header */}
         <div className="shrink-0 px-5 pt-5 pb-3 border-b border-surface-container/60">
@@ -269,7 +279,8 @@ export function ActivityPickerSheet({
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

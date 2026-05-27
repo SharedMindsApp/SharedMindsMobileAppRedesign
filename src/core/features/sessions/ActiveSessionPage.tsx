@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check, DoorOpen, DoorClosed } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -9,7 +9,9 @@ import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase } from '../../services/SessionService';
+import { playJoinChime, playPhaseTransition } from './sessionSounds';
+import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
@@ -221,9 +223,24 @@ export function ActiveSessionPage() {
     }
   }, [timerSecondsRemaining, session, ending]);
 
-  // 1-on-1: subscribe to session row so we know when the partner claims the slot
+  // Realtime: watch the session row for partner claims + intro-phase
+  // transitions. Gate widened from the original 1-on-1-only check so
+  // open-to-match solo sessions also subscribe (they only become 1-on-1
+  // after a joiner claims; we need the subscription up before that
+  // moment to actually catch it).
+  //
+  // Side-effects on the host's client when a partner claims:
+  //   • play join chime
+  //   • duck music if the RPC set an intro_phase_ends_at (talk time)
+  //   • dismiss the no-show banner
+  // For both parties when intro_phase_ends_at nulls (or the timestamp
+  // passes): restore music + play phase-transition chime — wired in the
+  // separate intro-phase effect below.
   useEffect(() => {
-    if (!session || session.session_mode !== 'one_on_one') return;
+    if (!session) return;
+    const isParticipant = session.session_mode === 'one_on_one'
+      || (session.open_to_match === true && session.status === 'active');
+    if (!isParticipant) return;
 
     // Initialise from loaded session data
     setPartnerJoined((session.partner_user_id ?? null) !== null);
@@ -240,16 +257,86 @@ export function ActiveSessionPage() {
         },
         (payload) => {
           const updated = payload.new as FocusSession;
-          if (updated.partner_user_id) {
+          const wasUnpartnered = !session.partner_user_id;
+          const nowPartnered   = !!updated.partner_user_id;
+          // Propagate the full row so dependent UI (host pill, matched
+          // pill, intro overlay) reactively flips on the same render.
+          setSession(updated);
+          if (nowPartnered) {
             setPartnerJoined(true);
-            setShowNoShowBanner(false); // partner is here — dismiss any warning
+            setShowNoShowBanner(false);
+          }
+          // Fresh claim — chime + duck. The duck is paired with a
+          // restore in the intro-phase-end effect below. If the RPC
+          // decided "no intro" (silent vibe / late arrival), we skip
+          // ducking since there's nothing to talk over.
+          if (wasUnpartnered && nowPartnered) {
+            playJoinChime();
+            if (updated.intro_phase_ends_at) {
+              musicAudioBus.duck();
+            }
           }
         },
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [session?.id, session?.session_mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.session_mode, session?.open_to_match, session?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Intro-phase transition watcher. While intro_phase_ends_at is set
+  // and in the future, music stays ducked and the overlay is visible.
+  // When the timestamp passes (timer tick) OR is nulled (someone tapped
+  // "Start working now"), we restore music + play the transition chime
+  // exactly once — guard via a ref so a re-render doesn't replay it.
+  const introTransitionedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session) return;
+    const endsAt = session.intro_phase_ends_at;
+    if (!endsAt) {
+      // No intro active — but if we had one and it just got nulled,
+      // we still need to handle the transition. introTransitionedRef
+      // tracks per-session-id so closing one session and opening another
+      // with no intro doesn't fire phantom transitions.
+      if (introTransitionedRef.current && introTransitionedRef.current !== session.id) {
+        introTransitionedRef.current = null;
+      }
+      return;
+    }
+
+    // Schedule a transition fire when the timestamp passes.
+    const endsAtMs = new Date(endsAt).getTime();
+    const msUntil  = Math.max(0, endsAtMs - Date.now());
+
+    function fireTransition() {
+      // Idempotency: only fire once per session id.
+      if (introTransitionedRef.current === session!.id) return;
+      introTransitionedRef.current = session!.id;
+      playPhaseTransition();
+      musicAudioBus.restore();
+      // Auto-mute mics on the work-block boundary — but only when the
+      // host's vibe isn't 'chatty' (chatty hosts explicitly invited
+      // ongoing conversation). Silent vibe already started muted via
+      // startAudioMuted below, but we mute again here as a safety
+      // net in case the user manually unmuted during the silent
+      // intro for some reason.
+      if (session!.vibe !== 'chatty') {
+        setMuteAudioSignal((n) => n + 1);
+      }
+    }
+
+    if (msUntil === 0) {
+      // Already past (rare — covers reload mid-intro after the timestamp).
+      fireTransition();
+      return;
+    }
+    const id = window.setTimeout(fireTransition, msUntil);
+    return () => window.clearTimeout(id);
+  }, [session?.id, session?.intro_phase_ends_at]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Belt-and-braces: if the user navigates away from a session that had
+  // music ducked, restore on unmount so other surfaces don't inherit
+  // a whisper-quiet volume.
+  useEffect(() => () => { musicAudioBus.restore(); }, []);
 
   // 1-on-1: show "partner hasn't joined" banner after 5 minutes if still no partner
   useEffect(() => {
@@ -279,11 +366,18 @@ export function ActiveSessionPage() {
   // Watch for debrief broadcasts from any participant (host's End click,
   // timer-zero trigger, or another user reaching 0 first). The session
   // row updates via Realtime → context updates → this effect fires.
+  //
+  // Sanity guard: only open if there's <30s left on the clock. Without
+  // this, a stale `debrief_started_at` (from a previous run, or from a
+  // session that was extended after the flag was set) pops the debrief
+  // on refresh even when minutes remain. The host's explicit "End" path
+  // doesn't go through this effect — it calls setShowDebrief directly
+  // — so we're not gating against legitimate manual ends.
   useEffect(() => {
-    if (session?.debrief_started_at && !showDebrief && !ending) {
-      setShowDebrief(true);
-    }
-  }, [session?.debrief_started_at, showDebrief, ending]);
+    if (!session?.debrief_started_at || showDebrief || ending) return;
+    if (timerSecondsRemaining > 30) return;
+    setShowDebrief(true);
+  }, [session?.debrief_started_at, showDebrief, ending, timerSecondsRemaining]);
 
   // Auto-open the debrief when the session timer hits zero. We can't
   // gate purely on `timerSecondsRemaining === 0` — that value is 0 on
@@ -329,6 +423,14 @@ export function ActiveSessionPage() {
   const isSolo = session?.session_mode === 'solo';
   const isOneOnOne = session?.session_mode === 'one_on_one';
   const isQuiet = session?.quiet_mode === true;
+  /** Silent vibe = host wants no talking at all. Treat exactly like
+   *  quiet_mode for the purpose of starting the meeting muted. */
+  const isSilentVibe = session?.vibe === 'silent';
+
+  /** Counter-style imperative trigger threaded into DailyMeeting. Each
+   *  increment fires a single setLocalAudio(false). Bumped on the
+   *  intro→work transition (see effect below) when vibe ≠ chatty. */
+  const [muteAudioSignal, setMuteAudioSignal] = useState(0);
 
   // ── Waiting-room state ─────────────────────────────────────────────────────
   // A session is in "waiting room" mode if it's still scheduled (not promoted
@@ -432,6 +534,27 @@ export function ActiveSessionPage() {
               </span>
             </div>
           )}
+          {/* Open-to-match host pill — only the host of an unclaimed
+              open session sees this. Tap the × to close the door
+              (flip open_to_match=false) without ending the session.
+              Disappears the moment a joiner claims (partner_user_id set). */}
+          {isPrimaryHost
+            && session?.status === 'active'
+            && session?.open_to_match === true
+            && !session?.partner_user_id
+            && (
+              <OpenToMatchHostPill sessionId={session.id} />
+            )}
+          {/* Matched-session pill — once a joiner arrives, both parties
+              see a "Matched · their name" pill. Tiny social ack. */}
+          {session?.partner_user_id && session?.session_mode === 'one_on_one' && session?.match_joined_at && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <Users size={11} className="text-emerald-300 shrink-0" />
+              <span className="text-[11px] font-semibold text-emerald-200/90 truncate">
+                Matched · co-working live
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Timer */}
@@ -529,6 +652,18 @@ export function ActiveSessionPage() {
           style={{ width: `${progress * 100}%` }}
         />
       </div>
+
+      {/* ── Intro phase overlay — visible to both parties when a fresh
+            matched pair are in their "say hi" window. Disappears when
+            the timestamp passes OR either party taps "Start working".
+            See migration 20260527000015 for intro-length rules. */}
+      {session?.intro_phase_ends_at && new Date(session.intro_phase_ends_at).getTime() > Date.now() && (
+        <IntroPhaseOverlay
+          sessionId={session.id}
+          endsAtIso={session.intro_phase_ends_at}
+          vibe={session.vibe ?? 'brief_hi'}
+        />
+      )}
 
       {/* ── Partner no-show banner (1-on-1 only) ────────────── */}
       {showNoShowBanner && (
@@ -631,10 +766,11 @@ export function ActiveSessionPage() {
             roomName={roomName}
             displayName={profile?.display_name ?? 'Member'}
             isModerator={isModerator}
-            startAudioMuted={isQuiet}
+            startAudioMuted={isQuiet || isSilentVibe}
             startVideoMuted={false}
             avatarVerified={profile?.avatar_status === 'approved'}
             focusSessionId={session.id}
+            muteAudioSignal={muteAudioSignal}
             onParticipantJoined={() => {
               setPartnerJoined(true);
               setShowNoShowBanner(false);
@@ -965,6 +1101,150 @@ function readSoloTheme(): SoloTheme {
   if (typeof window === 'undefined') return SOLO_THEMES[0];
   const id = window.localStorage.getItem(LS_SOLO_THEME);
   return SOLO_THEMES.find((t) => t.id === id) ?? SOLO_THEMES[0];
+}
+
+// ── OpenToMatchHostPill ────────────────────────────────────────────
+//
+// Tiny status pill rendered in the session header for hosts of an
+// open-to-match session that no one's joined yet. Shows "Door open"
+// with an animated pulse + a one-tap close button. Calling
+// closeTheDoor() flips open_to_match=false server-side; the realtime
+// subscription on session changes makes the pill disappear after the
+// next tick.
+//
+// Lives in this file rather than a separate component because it's
+// scoped to one render slot and shares the dark-on-light theming
+// conventions used elsewhere in the header.
+
+function OpenToMatchHostPill({ sessionId }: { sessionId: string }) {
+  const [closing, setClosing] = useState(false);
+
+  async function handleClose(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (closing) return;
+    setClosing(true);
+    try {
+      await closeTheDoor(sessionId);
+      // No local state to clear — the realtime subscription in
+      // ActiveSessionPage will pick up the open_to_match=false flip
+      // and re-render without the pill.
+    } catch (err) {
+      console.warn('[OpenToMatchHostPill] closeTheDoor failed:', err);
+      setClosing(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1">
+      <span className="relative flex w-2 h-2 shrink-0">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60 animate-ping" />
+        <span className="relative inline-flex w-2 h-2 rounded-full bg-amber-400" />
+      </span>
+      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300/90 truncate">
+        <DoorOpen size={11} />
+        Door open · waiting for a drop-in
+      </span>
+      <button
+        type="button"
+        onClick={handleClose}
+        disabled={closing}
+        title="Close the door — finish solo without drop-ins"
+        className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold text-white/60 hover:text-white px-1.5 py-0.5 rounded-full bg-white/5 hover:bg-white/15 transition-colors shrink-0 disabled:opacity-50"
+      >
+        {closing ? <Loader2 size={10} className="animate-spin" /> : <DoorClosed size={10} />}
+        Close
+      </button>
+    </div>
+  );
+}
+
+// ── IntroPhaseOverlay ──────────────────────────────────────────────
+//
+// Renders a soft "Say hi — N:NN" countdown banner across the top of the
+// session view when a fresh matched pair is in their intro window
+// (session.intro_phase_ends_at > now). Both parties see it. Either can
+// tap "Start working" to end the intro immediately via finish_intro_phase()
+// — useful when the chat finished early or one party is already heads-down.
+//
+// Visual style: amber gradient strip with a soft glow + a tabular-nums
+// countdown. Stacks below the session header (so the goal stays visible).
+
+function IntroPhaseOverlay({
+  sessionId,
+  endsAtIso,
+  vibe,
+}: {
+  sessionId: string;
+  endsAtIso: string;
+  vibe: 'silent' | 'brief_hi' | 'chatty' | null | undefined;
+}) {
+  const [remaining, setRemaining] = useState(() => {
+    return Math.max(0, Math.round((new Date(endsAtIso).getTime() - Date.now()) / 1000));
+  });
+  const [skipping, setSkipping] = useState(false);
+
+  // 1s tick down to zero. We stop the interval at zero — the parent
+  // effect handles the phase-transition chime/music restore once
+  // intro_phase_ends_at passes.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const next = Math.max(0, Math.round((new Date(endsAtIso).getTime() - Date.now()) / 1000));
+      setRemaining(next);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [endsAtIso]);
+
+  async function handleSkip() {
+    if (skipping) return;
+    setSkipping(true);
+    try {
+      await finishIntroPhase(sessionId);
+      // Realtime sub fires on parent → overlay unmounts after the
+      // null propagates. No local state to clear here.
+    } catch (err) {
+      console.warn('[IntroPhaseOverlay] finishIntroPhase failed:', err);
+      setSkipping(false);
+    }
+  }
+
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
+  const vibeCopy = vibe === 'chatty'
+    ? 'Take a few minutes to chat — focus block starts when this hits zero.'
+    : 'Say hi + share your goal, then heads-down when the timer ends.';
+
+  return (
+    <div className="shrink-0 px-4 pt-2 pb-1">
+      <div className="rounded-2xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 ring-1 ring-amber-300/30 backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-400/20 ring-1 ring-amber-300/40 grid place-items-center shrink-0">
+          <span className="text-base">👋</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-extrabold uppercase tracking-widest text-amber-200 leading-none">
+            Say hi · intro phase
+          </p>
+          <p className="text-[11px] text-amber-100/80 leading-tight mt-0.5 truncate">
+            {vibeCopy}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-lg font-extrabold tabular-nums text-white">
+            {minutes}:{String(seconds).padStart(2, '0')}
+          </span>
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={skipping}
+            title="Skip the intro and start focusing now"
+            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-100 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-full transition-colors disabled:opacity-50"
+          >
+            {skipping ? <Loader2 size={10} className="animate-spin" /> : null}
+            Start working
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Distraction-free presentation for solo sessions: ambient gradient,

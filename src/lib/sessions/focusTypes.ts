@@ -1,4 +1,10 @@
-export type FocusSessionStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+export type FocusSessionStatus =
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+  | 'scheduled'
+  | 'waiting_for_match';
 
 export type FocusEventType =
   | 'start'
@@ -88,6 +94,32 @@ export interface FocusSession {
   // Admin-curated cadence (weekly review / community / workshop)
   session_purpose?: 'weekly_review' | 'community' | 'workshop' | null;
   recurring_template_id?: string | null;
+  /** "Match me now" lobby — when status='waiting_for_match', this row
+   *  auto-cancels at this timestamp if no partner has joined. */
+  match_expires_at?: string | null;
+  /** Open-to-match: session starts as solo but is flagged for drop-in.
+   *  Visible in the "Live now — drop in" lane. When a joiner claims via
+   *  claim_open_session(), session_mode flips to 'one_on_one' and
+   *  partner_user_id is set. */
+  open_to_match?: boolean;
+  /** Host's social preference for matched sessions. Drives the intro-
+   *  phase length + auto-mute behaviour:
+   *  • silent   → no intro, mics muted from the start
+   *  • brief_hi → 2-min hi, then heads-down (default)
+   *  • chatty   → 5-min hi, mics stay unmuted during breaks */
+  vibe?: 'silent' | 'brief_hi' | 'chatty' | null;
+  /** Timestamp the intro phase ends. Non-null only while an intro is
+   *  active — both clients tick a countdown against this. RPC nulls it
+   *  on transition OR when either party calls finish_intro_phase(). */
+  intro_phase_ends_at?: string | null;
+  /** When the joiner claimed the session — drives "X joined N min in"
+   *  pills + retroactive intro-length decisions. */
+  match_joined_at?: string | null;
+  /** Three-level visibility — see migration 20260527000009.
+   *  • private  → invisible everywhere except the host
+   *  • presence → connections see "focusing now" (status only, no goal)
+   *  • public   → fully discoverable + goal text shared */
+  visibility?: 'private' | 'presence' | 'public';
 }
 
 export interface CommunitySession extends FocusSession {

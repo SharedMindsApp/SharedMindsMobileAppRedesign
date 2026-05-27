@@ -14,6 +14,8 @@ export interface CreateScheduledSessionInput {
    *  list view shows the activity label (e.g. "Cold calling") rather
    *  than just the title. */
   goalText?: string;
+  /** Three-level visibility — see migration 20260527000009. */
+  visibility?: 'private' | 'presence' | 'public';
   /** Marker for Quick Timer scheduled blocks — see
    *  StartCommunitySessionInput.isQuickTimer. */
   isQuickTimer?: boolean;
@@ -72,6 +74,28 @@ export interface StartCommunitySessionInput {
    * SOLO pills based on this flag.
    */
   isQuickTimer?: boolean;
+  /** Three-level visibility — see migration 20260527000009.
+   *  If omitted, defaults are derived: solo → private (or presence if
+   *  isQuickTimer), one_on_one/group → public. */
+  visibility?: 'private' | 'presence' | 'public';
+  /** Open-to-match: start as solo but appear in the "Live now — drop in"
+   *  lane. If anyone joins via claim_open_session(), the session upgrades
+   *  to one_on_one. Only meaningful for solo sessions. */
+  openToMatch?: boolean;
+  /** Host's social vibe — drives intro-phase length + auto-mute behaviour
+   *  if/when a joiner arrives. See FocusSession.vibe for semantics.
+   *  Defaults server-side to brief_hi (the "balanced" option). */
+  vibe?: 'silent' | 'brief_hi' | 'chatty';
+}
+
+/** Pick a sensible default visibility given the mode + quick-timer flag.
+ *  Centralised so all session-creation paths agree. */
+export function defaultVisibilityFor(
+  mode: 'group' | 'one_on_one' | 'solo' | undefined,
+  isQuickTimer = false,
+): 'private' | 'presence' | 'public' {
+  if (mode === 'solo') return isQuickTimer ? 'presence' : 'private';
+  return 'public';
 }
 
 export async function startCommunitySession(
@@ -101,6 +125,14 @@ export async function startCommunitySession(
       body_double: input.sessionMode === 'solo' && !input.isOffline && !!input.bodyDouble,
       is_offline:  input.sessionMode === 'solo' && !!input.isOffline,
       is_quick_timer: !!input.isQuickTimer,
+      visibility: input.visibility ?? defaultVisibilityFor(input.sessionMode, !!input.isQuickTimer),
+      // Open-to-match is only meaningful when the host is starting solo —
+      // if they're already in group/1-on-1, partnership is already decided.
+      // The vibe column is also only relevant in that case (drives intro
+      // behaviour for a future joiner), but we still persist what the user
+      // picked even on non-solo sessions so reports can read it back.
+      open_to_match: input.sessionMode === 'solo' && !!input.openToMatch,
+      vibe: input.vibe ?? null,
       drift_count: 0,
       distraction_count: 0,
     })
@@ -118,6 +150,71 @@ export async function startCommunitySession(
  * If two users race for the same slot, the loser gets a "session full" error
  * because their update affects zero rows.
  */
+// ── Legacy "Match me now" waiting-room flow — RETIRED ───────────────
+//
+// matchMeNow(), fetchLiveWaitingMatches(), joinPendingMatch() and
+// cancelPendingMatch() were removed in task #185 cleanup. They
+// implemented the original waiting_for_match lobby pattern, replaced
+// by the open-to-match flow (see fetchOpenSessions() + claimOpenSession()
+// below, plus migration 20260527000015 for the schema). The match_me_now
+// RPC + cancel_pending_match RPC still exist server-side as a safety net
+// for any in-flight rows but no client code calls them.
+
+/**
+ * Find scheduled or active sessions that overlap a proposed time window
+ * for the current user. Used by DeclareSessionModal to warn before
+ * creating a session that would double-book the host.
+ *
+ * Overlap = (existing.start < proposed.end) AND (existing.end > proposed.start)
+ * — standard interval-intersection check.
+ *
+ * Optional `excludeSessionId` skips a specific row, used when editing
+ * an existing scheduled session so it doesn't conflict with itself.
+ */
+export async function fetchConflictingSessions(input: {
+  start: Date;
+  durationMinutes: number;
+  excludeSessionId?: string;
+}): Promise<FocusSession[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const endIso = new Date(input.start.getTime() + input.durationMinutes * 60_000).toISOString();
+  // Look back 4h before the proposed start — enough to catch any
+  // currently-active or long session that's still running into the
+  // window. Reading hosted + booked rows; partner sessions count
+  // because the user can't be in two video rooms at once.
+  const lookBack = new Date(input.start.getTime() - 4 * 60 * 60_000).toISOString();
+
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .select('id, user_id, partner_user_id, session_title, session_goal, session_mode, status, scheduled_at, start_time, target_end_time, intended_duration_minutes')
+    .or(`user_id.eq.${user.id},partner_user_id.eq.${user.id}`)
+    .in('status', ['scheduled', 'active'])
+    .gte('start_time', lookBack)
+    .lt('start_time', endIso);
+
+  if (error) {
+    console.warn('[fetchConflictingSessions] query failed:', error);
+    return [];
+  }
+
+  const proposedStartMs = input.start.getTime();
+  const proposedEndMs = proposedStartMs + input.durationMinutes * 60_000;
+
+  return (data ?? []).filter((row: any) => {
+    if (input.excludeSessionId && row.id === input.excludeSessionId) return false;
+    const startMs = new Date(row.scheduled_at ?? row.start_time).getTime();
+    const dur = row.intended_duration_minutes ?? 25;
+    const endMs = row.target_end_time
+      ? new Date(row.target_end_time).getTime()
+      : startMs + dur * 60_000;
+    // Open interval overlap — back-to-back sessions (one ends exactly
+    // when the next starts) are NOT conflicts.
+    return startMs < proposedEndMs && endMs > proposedStartMs;
+  }) as FocusSession[];
+}
+
 export async function joinOneOnOneSession(sessionId: string): Promise<FocusSession> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -534,6 +631,7 @@ export async function createScheduledSession(
       join_code: joinCode,
       is_quick_timer: !!input.isQuickTimer,
       segments: input.segments ?? null,
+      visibility: input.visibility ?? defaultVisibilityFor(input.sessionMode, !!input.isQuickTimer),
       drift_count: 0,
       distraction_count: 0,
     })
@@ -555,11 +653,26 @@ export async function updateScheduledSession(
     title?: string | null;
     scheduledAt?: Date;
     durationMinutes?: number;
+    /** Re-classify a scheduled session as solo / 1-on-1 / group. */
+    sessionMode?: 'group' | 'one_on_one' | 'solo';
+    /** Three-level visibility — private / presence / public. */
+    visibility?: 'private' | 'presence' | 'public';
   }
 ): Promise<FocusSession> {
   const updates: Record<string, unknown> = {};
   if (patch.goalText !== undefined) updates.session_goal = patch.goalText;
   if (patch.title !== undefined) updates.session_title = patch.title;
+  if (patch.visibility !== undefined) updates.visibility = patch.visibility;
+  if (patch.sessionMode !== undefined) {
+    updates.session_mode = patch.sessionMode;
+    // Switching away from 1-on-1 clears any partner slot — partner_user_id
+    // only makes sense for one_on_one. The DB row stays valid either way
+    // (NULL is the open state), but explicit zeroing makes the calendar
+    // re-render correctly.
+    if (patch.sessionMode !== 'one_on_one') {
+      updates.partner_user_id = null;
+    }
+  }
   if (patch.scheduledAt) {
     updates.scheduled_at = patch.scheduledAt.toISOString();
     updates.start_time = patch.scheduledAt.toISOString();
@@ -594,16 +707,54 @@ export async function updateScheduledSession(
   return data as FocusSession;
 }
 
-/** Hard-delete a scheduled session. RLS gates to owner.
- *  Active or completed sessions should NOT be deleted — they're part of
- *  the user's history. The caller is responsible for only invoking this
- *  on status='scheduled' rows. */
+/** Cancel/remove a session. Behaviour depends on current status:
+ *
+ *   • `scheduled`           → hard-delete (no history value yet)
+ *   • `active` / `paused`   → soft-cancel to status='cancelled' so the
+ *                             user's history stays intact and we can
+ *                             report on "things they bailed on"
+ *   • `completed`           → refuse (the past is the past)
+ *
+ *  RLS gates ownership at the DB. The previous version only handled
+ *  scheduled rows and silently no-op'd on active ones, which is the
+ *  root cause of the "Remove doesn't update the UI" bug.
+ */
 export async function deleteScheduledSession(sessionId: string): Promise<void> {
+  // Fetch current status first so we route to the right path.
+  const { data: existing, error: fetchErr } = await supabase
+    .from('focus_sessions')
+    .select('status')
+    .eq('id', sessionId)
+    .maybeSingle();
+  if (fetchErr) throw fetchErr;
+  if (!existing) throw new Error('Session not found.');
+
+  if (existing.status === 'completed') {
+    throw new Error('Completed sessions are part of your history and can\'t be removed.');
+  }
+
+  if (existing.status === 'scheduled') {
+    // Hard delete — nothing of value yet.
+    const { error } = await supabase
+      .from('focus_sessions')
+      .delete()
+      .eq('id', sessionId)
+      .eq('status', 'scheduled');
+    if (error) throw error;
+    return;
+  }
+
+  // Active / paused / waiting_for_match → mark cancelled so the row
+  // is preserved for history but the calendar + community feeds stop
+  // showing it as live.
   const { error } = await supabase
     .from('focus_sessions')
-    .delete()
-    .eq('id', sessionId)
-    .eq('status', 'scheduled'); // belt + braces: refuse to delete active/completed
+    .update({
+      status: 'cancelled',
+      ended_at: new Date().toISOString(),
+      end_time: new Date().toISOString(),
+    })
+    .eq('id', sessionId);
   if (error) throw error;
 }
 
@@ -653,34 +804,55 @@ export async function startScheduledSession(sessionId: string): Promise<FocusSes
 export async function fetchUpcomingScheduledSessions(myUserId?: string): Promise<ScheduledSessionWithProfile[]> {
   // profiles!user_id disambiguates the FK — focus_sessions has both user_id
   // and partner_user_id pointing at profiles; PostgREST otherwise throws PGRST201.
-  // Fetch up to 4 weeks ahead so organised users can see their full horizon.
+  //
+  // Window: from yesterday 00:00 (so a session that just started today
+  // still appears) up to 4 weeks ahead.
+  //
+  // Important perf rule: the calendar is mine-only, so we filter on
+  // the SERVER (user_id = me OR partner_user_id = me OR session_purpose
+  // present for admin-curated community sessions). Previously we
+  // pulled every public scheduled session in the window and filtered
+  // client-side — that meant ~200 rows + ~200 profile joins coming
+  // back, only to discard 99% of them. The OR-filter cuts the payload
+  // by ~10x for typical users and skips the post-filter JS work.
+  // Window expanded: 4 weeks BACKWARD (for historical reference — past
+  // completed sessions stay visible on the calendar so the user can
+  // scroll back and see what they did) and 4 weeks FORWARD (upcoming
+  // scheduled). Active sessions come from a separate realtime feed.
+  const fourWeeksAgo   = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString();
   const fourWeeksAhead = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('focus_sessions')
     .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
-    .eq('status', 'scheduled')
-    .eq('session_type', 'scheduled')
-    .lte('scheduled_at', fourWeeksAhead)
-    .order('scheduled_at', { ascending: true })
+    // Include both upcoming (`scheduled`) AND historical (`completed`)
+    // sessions. Cancelled sessions are intentionally excluded — the
+    // user explicitly removed them, so they shouldn't clutter the
+    // calendar with deleted intent.
+    .in('status', ['scheduled', 'completed'])
+    .gte('start_time', fourWeeksAgo)
+    .lte('start_time', fourWeeksAhead)
+    .order('start_time', { ascending: true })
     .limit(200);
+
+  if (myUserId) {
+    // PostgREST `.or()` clauses are comma-separated. Each clause is a
+    // standalone predicate; the engine ORs them together. `session_purpose.not.is.null`
+    // pulls admin-curated weekly review / community / workshop sessions
+    // that should still surface on every user's calendar.
+    query = query.or(
+      `user_id.eq.${myUserId},partner_user_id.eq.${myUserId},session_purpose.not.is.null`
+    );
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('[fetchUpcomingScheduledSessions] query failed:', error);
     throw error;
   }
 
-  let rows = data ?? [];
-
-  if (myUserId) {
-    rows = rows.filter((row: any) =>
-      row.user_id === myUserId ||
-      row.partner_user_id === myUserId ||
-      row.session_purpose != null
-    );
-  }
-
-  return rows.map((row: any) => ({
+  return (data ?? []).map((row: any) => ({
     ...row,
     display_name: row.profiles?.display_name ?? 'Someone',
     avatar_url: row.profiles?.avatar_url ?? null,
@@ -764,6 +936,75 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
     display_name: row.profiles?.display_name ?? 'Someone',
     avatar_url: row.profiles?.avatar_url ?? null,
   })) as ShippedSession[];
+}
+
+// ── Open-to-match: the redesigned "Match me now" lane ────────────────
+//
+// Replaces the waiting-room model. The host's session is already active
+// (they're working). Other users discover it via fetchOpenSessions() and
+// drop in via claimOpenSession(). See migration 20260527000015.
+
+/** Live sessions flagged open_to_match — what fills the "Live now —
+ *  drop in" lane. Returns at most `limit` rows, sorted newest-arrival
+ *  first (gives the still-fresh sessions priority; very old ones get
+ *  deprioritised because the host is probably deep in flow). */
+export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]> {
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
+    .eq('status', 'active')
+    .eq('open_to_match', true)
+    .is('partner_user_id', null)
+    .order('start_time', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('[fetchOpenSessions] query failed:', error);
+    throw error;
+  }
+
+  return (data ?? []).map((row: any) => ({
+    ...row,
+    display_name: row.profiles?.display_name ?? 'Someone',
+    avatar_url: row.profiles?.avatar_url ?? null,
+    country_code: row.profiles?.country_code ?? null,
+    work_type: row.profiles?.work_type ?? null,
+  })) as CommunitySession[];
+}
+
+/** Race-safe drop-in: claim a partner slot in an open session. Returns
+ *  the joined session (mode now 'one_on_one', intro_phase_ends_at set
+ *  according to arrival timing + host vibe). Returns null if the slot
+ *  was already taken / the door was closed / id was invalid — caller
+ *  should refresh the lane and show "that one's full" feedback. */
+export async function claimOpenSession(sessionId: string): Promise<FocusSession | null> {
+  const { data, error } = await supabase.rpc('claim_open_session', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
+  // RPC returns the row (jsonb-like object) or null when the slot was gone.
+  if (!data) return null;
+  return data as FocusSession;
+}
+
+/** Host's mid-session escape hatch — flips open_to_match=false so the
+ *  session disappears from the Live-now lane. Idempotent: no-op if the
+ *  caller isn't the host or if someone's already joined. */
+export async function closeTheDoor(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('close_the_door', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
+}
+
+/** Either party can skip the intro phase early (e.g. "ok we're ready,
+ *  let's focus"). Nulls intro_phase_ends_at so both clients transition
+ *  to work mode on the next realtime tick. */
+export async function finishIntroPhase(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc('finish_intro_phase', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
 }
 
 export async function fetchActiveCommunitySessionsWithProfiles(): Promise<CommunitySession[]> {

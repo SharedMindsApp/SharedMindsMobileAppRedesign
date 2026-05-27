@@ -41,6 +41,12 @@ export interface JitsiMeetingProps {
   onParticipantJoined?: () => void;
   /** Called when the user clicks Leave / hangs up */
   onHangup?: () => void;
+  /** Imperative "mute now" trigger. Each unique value mutes the local
+   *  audio once. Used by ActiveSessionPage when the intro phase ends
+   *  to auto-mute for the work block — but it's a *one-shot* signal,
+   *  not a sticky setting, so the user can immediately unmute again
+   *  if they want. Subsequent value changes mute again. */
+  muteAudioSignal?: number;
 }
 
 // ── Token fetcher ─────────────────────────────────────────────────────────────
@@ -92,9 +98,25 @@ export function JitsiMeeting({
   onParticipantCountChanged,
   onParticipantJoined,
   onHangup,
+  muteAudioSignal,
 }: JitsiMeetingProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const callRef      = useRef<DailyCall | null>(null);
+
+  // Auto-mute trigger — fire whenever the signal value changes. Skip
+  // the initial mount (we don't want to mute on first render if the
+  // counter starts at 0). One-shot: we just call setLocalAudio(false)
+  // and let the user manually unmute if they want.
+  useEffect(() => {
+    if (muteAudioSignal === undefined || muteAudioSignal === 0) return;
+    const call = callRef.current;
+    if (!call) return;
+    try {
+      call.setLocalAudio(false);
+    } catch (e) {
+      console.warn('[JitsiMeeting] auto-mute via signal failed:', e);
+    }
+  }, [muteAudioSignal]);
 
   const [connectionState, setConnectionState] = useState<ConnectionState>('loading');
   const [participantCount, setParticipantCount] = useState(1);

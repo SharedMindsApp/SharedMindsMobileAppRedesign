@@ -18,9 +18,11 @@
  *    liveSessions from the realtime hook — both are ready immediately.
  */
 
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Calendar } from 'lucide-react';
+import { Calendar, Search, Zap, Loader2, Clock, Users, UserPlus, User, ArrowRight } from 'lucide-react';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
+import type { ScheduledSessionWithProfile } from '../../services/SessionService';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -57,15 +59,48 @@ function gradFor(name: string): string {
 export function HomeHero({
   firstName,
   liveSessions,
-  onStart,
+  onSchedule,
+  onMatch,
   onFind,
+  onViewAllLive,
+  matchBusy = false,
+  quickTimerSlot,
+  nextUpcoming,
+  joinableSession,
+  onJoin,
 }: {
   firstName: string;
   liveSessions: CommunitySession[];
-  /** Spin up a new session (opens DeclareSessionModal). */
-  onStart: () => void;
-  /** Browse the public session calendar (navigates to /sessions). */
+  /** Opens DeclareSessionModal — picks mode + time for a future session. */
+  onSchedule: () => void;
+  /** "Match me now" — instant 1-on-1 matchmaking. Caller handles the
+   *  waiting room + navigation; the hero just owns the trigger. */
+  onMatch: () => void;
+  /** Browse the marketplace of joinable sessions. */
   onFind: () => void;
+  /** Optional: view all live sessions. Defaults to onFind if omitted. */
+  onViewAllLive?: () => void;
+  /** Showing the match spinner state — disables the button + shows loader. */
+  matchBusy?: boolean;
+  /** Optional Quick Timer slot. Passed in by the parent so the hero
+   *  doesn't have to know about activity state. Rendered as a footer
+   *  strip inside the hero — replaces the previously-floating timer
+   *  pill that lived awkwardly between the hero and the page body. */
+  quickTimerSlot?: ReactNode;
+  /** Next upcoming scheduled session — shown as a compact "Up next"
+   *  pill in the hero header so the user knows what's coming without
+   *  scrolling. The full countdown card below the hero still renders
+   *  for richer detail / actions. */
+  nextUpcoming?: ScheduledSessionWithProfile | null;
+  /** Scheduled session whose start window is NOW (or within 5 min).
+   *  When set, the hero replaces all the start-a-new-session CTAs +
+   *  Quick Timer with a single focused "Join your session" button —
+   *  the user shouldn't be encouraged to start something new when
+   *  they're meant to be in something already. */
+  joinableSession?: ScheduledSessionWithProfile | null;
+  /** Called when the user clicks the "Join your session" CTA. Caller
+   *  navigates / activates the session. */
+  onJoin?: (session: ScheduledSessionWithProfile) => void;
 }) {
   const navigate = useNavigate();
 
@@ -95,28 +130,49 @@ export function HomeHero({
 
         <div className="relative z-10 max-w-6xl mx-auto">
 
-          {/* ── Greeting ──────────────────────────────────────── */}
-          <p className="text-indigo-300/60 text-[11px] font-semibold tracking-wide mb-1 uppercase">
-            {dateStr}
-          </p>
-          <h1 className="text-white text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight mb-4">
-            {greeting()}, {firstName} 👋
-          </h1>
+          {/* ── Greeting + Up Next pill ────────────────────────
+              The pill sits to the right of the greeting on desktop
+              (sm+) so "what's coming up?" is visible without scrolling.
+              On mobile it stacks below the H1 — the H1 is the visual
+              anchor and we don't want to squeeze it. */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between sm:gap-4 mb-4">
+            <div>
+              <p className="text-indigo-300/60 text-[11px] font-semibold tracking-wide mb-1 uppercase">
+                {dateStr}
+              </p>
+              <h1 className="text-white text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
+                {greeting()}, {firstName} 👋
+              </h1>
+            </div>
+            {nextUpcoming && (
+              <UpNextPill session={nextUpcoming} onClick={() => navigate('/sessions')} />
+            )}
+          </div>
 
           {/* ── Live panel + CTA ───────────────────────────────── */}
           <div className="flex flex-col sm:flex-row gap-3">
 
-            {/* Live now glass card */}
+            {/* Live now glass card — the header is click-through to the
+                full sessions surface, and so is the "View all" footer
+                when there's overflow. Individual peer rows stay
+                independently clickable (Join button). */}
             <div className="flex-1 bg-white/[0.07] backdrop-blur-sm rounded-2xl border border-white/[0.12] px-4 py-3">
 
-              {/* Header row */}
-              <div className="flex items-center gap-2 mb-3">
+              {/* Header row — clickable when populated */}
+              <button
+                type="button"
+                onClick={() => (onViewAllLive ?? onFind)()}
+                className={`w-full flex items-center gap-2 mb-3 rounded-md transition-colors text-left ${
+                  liveSessions.length > 0 ? 'hover:opacity-80' : ''
+                }`}
+              >
                 {liveSessions.length > 0 ? (
                   <>
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                     <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">
                       {liveSessions.length} focusing right now
                     </span>
+                    <ArrowRight size={11} className="text-emerald-300/70 ml-auto" />
                   </>
                 ) : (
                   <>
@@ -126,9 +182,10 @@ export function HomeHero({
                     </span>
                   </>
                 )}
-              </div>
+              </button>
 
-              {/* Sessions list */}
+              {/* Sessions list — capped at 3 (visible); rest live behind
+                  the "View all" footer below. */}
               {visible.length > 0 ? (
                 <div className="space-y-2.5">
                   {visible.map((s) => (
@@ -170,12 +227,6 @@ export function HomeHero({
                       )}
                     </div>
                   ))}
-
-                  {overflow > 0 && (
-                    <p className="text-white/40 text-[10px] font-medium pl-9">
-                      +{overflow} more focusing
-                    </p>
-                  )}
                 </div>
               ) : (
                 <p className="text-white/45 text-xs leading-snug">
@@ -183,37 +234,217 @@ export function HomeHero({
                   Open the room and others will follow.
                 </p>
               )}
+
+              {/* Footer link — appears whenever there's at least one
+                  live session. Shows "+X more focusing — view all" when
+                  overflowed, or "View all sessions today" when 1-3 fit.
+                  Replaces the old plain-text "+X more" line. */}
+              {liveSessions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => (onViewAllLive ?? onFind)()}
+                  className="mt-3 -mx-2 px-3 py-1.5 w-[calc(100%+1rem)] flex items-center justify-between gap-2 rounded-lg text-[11px] font-bold text-white/70 hover:text-white hover:bg-white/[0.06] transition-colors"
+                >
+                  <span>
+                    {overflow > 0
+                      ? <>+{overflow} more focusing — view all</>
+                      : <>View all sessions today</>}
+                  </span>
+                  <ArrowRight size={11} className="opacity-70" />
+                </button>
+              )}
             </div>
 
-            {/* Two CTAs — Start vs Find. They map to the two ways into
-                coworking: commit a new block, or join one already on the
-                public calendar. Equal visual weight on sm+, stacked
-                horizontally on mobile to keep the hero compact. */}
-            <div className="sm:w-[160px] flex sm:flex-col gap-2 shrink-0">
+            {/* CTA column — branches based on whether the user is
+                "meant to be in a session right now". If a scheduled
+                session is in (or within 5 min of) its window, hide the
+                normal start-a-new-session options and show a single
+                focused Join CTA. Otherwise: the three normal start
+                lanes (Match / Schedule / Find). */}
+            {joinableSession ? (
+              <div className="sm:w-[170px] flex flex-col gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onJoin?.(joinableSession)}
+                  className="w-full flex sm:flex-col items-center justify-start sm:justify-center gap-2.5 sm:gap-2 bg-gradient-to-br from-emerald-400 to-teal-500 text-white font-bold text-sm sm:text-[13px] py-3 sm:py-4 px-3 rounded-2xl hover:opacity-95 active:scale-[0.98] transition-all shadow-lg shadow-emerald-500/25 animate-pulse-slow"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                    <Zap size={14} className="text-white" />
+                  </div>
+                  <span className="sm:text-center sm:leading-snug">Join your session</span>
+                </button>
+                <p className="text-[10px] text-white/60 leading-snug px-1 hidden sm:block">
+                  {joinableSession.session_title ?? joinableSession.session_goal ?? 'Your scheduled session'}
+                </p>
+              </div>
+            ) : (
+            <div className="sm:w-[170px] flex flex-col gap-2 shrink-0">
               <button
                 type="button"
-                onClick={onStart}
-                className="flex-1 sm:flex-initial flex sm:flex-col items-center justify-center gap-2 bg-white text-indigo-950 font-bold text-[13px] py-3 px-3 rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg"
+                onClick={onMatch}
+                disabled={matchBusy}
+                className="w-full flex sm:flex-col items-center justify-start sm:justify-center gap-2.5 sm:gap-2 bg-gradient-to-br from-amber-400 to-rose-500 text-white font-bold text-sm sm:text-[13px] py-2.5 sm:py-3 px-3 rounded-2xl hover:opacity-95 active:scale-[0.98] transition-all shadow-lg shadow-amber-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  {matchBusy ? <Loader2 size={14} className="text-white animate-spin" /> : <Zap size={14} className="text-white" />}
+                </div>
+                <span className="sm:text-center sm:leading-snug">Match me now</span>
+              </button>
+              <button
+                type="button"
+                onClick={onSchedule}
+                className="w-full flex sm:flex-col items-center justify-start sm:justify-center gap-2.5 sm:gap-2 bg-white text-indigo-950 font-bold text-sm sm:text-[13px] py-2.5 sm:py-3 px-3 rounded-2xl hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg"
               >
                 <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
-                  <Play size={14} fill="currentColor" className="text-indigo-700 ml-0.5" />
+                  <Calendar size={14} className="text-indigo-700" />
                 </div>
-                <span className="sm:text-center sm:leading-snug">Start a session</span>
+                <span className="sm:text-center sm:leading-snug">Schedule a session</span>
               </button>
               <button
                 type="button"
                 onClick={onFind}
-                className="flex-1 sm:flex-initial flex sm:flex-col items-center justify-center gap-2 bg-white/10 text-white font-bold text-[13px] py-3 px-3 rounded-2xl hover:bg-white/15 active:scale-[0.98] transition-all ring-1 ring-white/15 backdrop-blur-sm"
+                className="w-full flex sm:flex-col items-center justify-start sm:justify-center gap-2.5 sm:gap-2 bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-bold text-sm sm:text-[13px] py-2.5 sm:py-3 px-3 rounded-2xl hover:opacity-95 active:scale-[0.98] transition-all shadow-lg shadow-cyan-500/20"
               >
-                <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-                  <Calendar size={14} className="text-white" />
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Search size={14} className="text-white" />
                 </div>
                 <span className="sm:text-center sm:leading-snug">Find a session</span>
               </button>
             </div>
+            )}
           </div>
+
+          {/* ── Quick Timer strip ───────────────────────────────
+              Hidden when there's a joinable session — the user
+              shouldn't be offered "one-tap timer" when they're meant
+              to be in a scheduled session that's already started. */}
+          {quickTimerSlot && !joinableSession && (
+            <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 px-3 py-3 rounded-xl bg-white/[0.14] ring-1 ring-white/25 backdrop-blur-md shadow-inner shadow-black/10">
+              <p className="text-[11px] text-white/80 leading-snug">
+                Already know what you want? <span className="text-white font-semibold">One-tap timer →</span>
+              </p>
+              <div className="shrink-0 self-start sm:self-auto">
+                {quickTimerSlot}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Up Next pill ──────────────────────────────────────────────────
+//
+// Compact glass pill showing the soonest upcoming scheduled session.
+// Ticks every 30s — we only display "in 3h 40m" / "in 12m" / "starts
+// at 19:00" granularity, so a second-by-second tick would burn CPU
+// for no visible benefit. The full `UpcomingSessionCountdown` card
+// below the hero still ticks every second when it's < 1h away.
+
+const MODE_ICON_PILL = { solo: User, one_on_one: UserPlus, group: Users } as const;
+
+function UpNextPill({
+  session,
+  onClick,
+}: {
+  session: ScheduledSessionWithProfile;
+  onClick: () => void;
+}) {
+  const startMs = new Date(session.scheduled_at ?? session.start_time).getTime();
+  const [now, setNow] = useState(() => Date.now());
+
+  // Always tick at 1s — the pill displays seconds in both M:SS and
+  // H:MM:SS modes, so a coarser interval would make the seconds digit
+  // jump in chunks (which looks broken, not lazy). One setInterval per
+  // second on the home page is cheap; React's batching collapses any
+  // simultaneous updates anyway.
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const diffMs = startMs - now;
+
+  // Big-number countdown — H:MM:SS when far out, M:SS when under an
+  // hour, with a separate qualitative label ("Starting now" / "soon")
+  // for edge states. The big number is the visual hero of the pill so
+  // the user actually feels time advancing.
+  let bigTime: string;        // the headline countdown
+  let smallLabel: string;     // contextual label above the number
+  let tone: 'idle' | 'soon' | 'live';
+
+  if (diffMs <= 0 && diffMs > -10 * 60_000) {
+    bigTime = 'now';
+    smallLabel = 'Starting';
+    tone = 'live';
+  } else if (diffMs <= 0) {
+    return null;
+  } else if (diffMs < 60 * 60_000) {
+    // < 1h: full M:SS ticking down every second.
+    const totalSecs = Math.floor(diffMs / 1000);
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
+    bigTime = `${m}:${String(s).padStart(2, '0')}`;
+    smallLabel = 'Up next in';
+    tone = diffMs < 15 * 60_000 ? 'soon' : 'idle';
+  } else if (diffMs < 24 * 60 * 60_000) {
+    // ≥ 1h: H:MM:SS so the seconds are still visibly counting.
+    const totalSecs = Math.floor(diffMs / 1000);
+    const h = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const s = totalSecs % 60;
+    bigTime = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    smallLabel = 'Up next in';
+    tone = 'idle';
+  } else {
+    bigTime = new Date(startMs).toLocaleDateString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    smallLabel = 'Up next';
+    tone = 'idle';
+  }
+
+  const mode = (session.session_mode ?? 'solo') as keyof typeof MODE_ICON_PILL;
+  const ModeIcon = MODE_ICON_PILL[mode] ?? User;
+  const title = session.session_title ?? session.session_goal ?? 'Session';
+
+  const toneClasses =
+    tone === 'live'
+      ? 'bg-emerald-500/25 ring-emerald-400/40 text-emerald-100'
+      : tone === 'soon'
+      ? 'bg-amber-500/20 ring-amber-400/40 text-amber-100'
+      : 'bg-white/10 ring-white/15 text-white/85';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Next: ${title}`}
+      className={`inline-flex items-center gap-3 max-w-full sm:max-w-[300px] mt-2 sm:mt-0 px-3.5 py-2.5 rounded-xl backdrop-blur-sm ring-1 hover:bg-white/15 active:scale-[0.98] transition-all text-left ${toneClasses}`}
+    >
+      {/* Countdown — the visual hero. tabular-nums so the digits don't
+          shift width as the seconds tick (otherwise the whole pill
+          would jitter once a second). Size scales up on mobile where
+          the pill is full-width and has the room to breathe. */}
+      <div className="flex flex-col items-start leading-none shrink-0">
+        <span className="text-[9px] font-extrabold uppercase tracking-widest opacity-65 whitespace-nowrap">
+          {smallLabel}
+        </span>
+        <span className="text-3xl sm:text-2xl font-extrabold tabular-nums mt-1 tracking-tight">
+          {bigTime}
+        </span>
+      </div>
+      {/* Vertical divider */}
+      <span className="h-10 w-px bg-current opacity-20 shrink-0" />
+      {/* Session details */}
+      <div className="flex flex-col leading-tight min-w-0">
+        <span className="text-[9px] font-extrabold uppercase tracking-widest opacity-60 flex items-center gap-1">
+          <ModeIcon size={9} className="opacity-80" />
+          {mode === 'one_on_one' ? '1-on-1' : mode === 'group' ? 'Group' : 'Solo'}
+        </span>
+        <span className="text-sm sm:text-sm font-bold truncate mt-0.5">
+          {title}
+        </span>
+      </div>
+    </button>
   );
 }

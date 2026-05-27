@@ -32,6 +32,13 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { useCommunitySessionsSubscription } from '../sessions/useCommunitySessionsSubscription';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
+// MatchWaitingSheet removed — Match-me-now now opens DeclareSessionModal
+// with startOpenToMatch=true (no more waiting-room lobby). See task #175.
+import { FindSessionsSheet } from './FindSessionsSheet';
+// matchMeNow() service unwired from this page — see comment above. The
+// service function remains in SessionService.ts as deprecated for the
+// next cleanup pass.
+import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { fetchHomeDashboard } from '../../services/HomeDashboardService';
 // fetchRecentShippedSessions + fetchUpcomingScheduledSessions are no
 // longer called from this file — both are now bundled into the
@@ -45,6 +52,7 @@ import { DayZeroWelcome } from './DayZeroWelcome';
 import { TodayPlannerCard } from './TodayPlannerCard';
 import { UpcomingSessionCountdown } from './UpcomingSessionCountdown';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
+import { LiveNowDropInStrip } from './LiveNowDropInStrip';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
 import { ShippedFeedStrip } from './ShippedFeedStrip';
 import { DashboardTabs } from './DashboardTabs';
@@ -60,6 +68,7 @@ import { FirstWeekIntentionsCard, useFirstWeekIntentionsEligible } from './First
 import { deriveMomentum, momentumChipClasses } from './momentum';
 import { QuickRestartCard } from './QuickRestartCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
+import { supabase } from '../../../lib/supabase';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
 
@@ -366,7 +375,24 @@ function ShipRow({ ship }: { ship: ShippedSession }) {
 
 export function DashboardPage() {
   const { user, profile } = useAuth();
-  const { activeSession } = useFocusSession();
+  const { activeSession, setActiveSession } = useFocusSession();
+
+  // ── Match me now state ───────────────────────────────────────
+  // Redesigned: instead of creating a waiting_for_match lobby row, the
+  // button now opens DeclareSessionModal with startOpenToMatch=true.
+  // The user picks goal + duration → a normal solo session starts
+  // immediately with open_to_match=true → it appears in the "Drop in ·
+  // live now" lane for other users. No more waiting-room dead-end.
+  // See migration 20260527000015 + task #174.
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+
+  function handleMatchMeNow() {
+    if (activeSession) return;
+    setMatchError(null);
+    setDeclareOpenToMatch(true);
+    setShowDeclare(true);
+  }
   const {
     state: { tasks, projects, activeProjectId },
     setActiveProject,
@@ -376,6 +402,10 @@ export function DashboardPage() {
 
   const [showDeclare, setShowDeclare] = useState(false);
   const [declareGoal, setDeclareGoal] = useState<string | undefined>(undefined);
+  /** Pre-flips the modal's "Open the door" toggle on. Set true when
+   *  opening from the Match-me-now CTA so the user lands on a solo
+   *  session that's discoverable for drop-ins. */
+  const [declareOpenToMatch, setDeclareOpenToMatch] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
@@ -390,6 +420,32 @@ export function DashboardPage() {
   // aggregation happens server-side.
   const [hasAnySession, setHasAnySession] = useState<boolean | null>(null);
   const [lastActiveAt, setLastActiveAt] = useState<string | null>(null);
+
+  // Current streak (consecutive UTC days of completed sessions, ≥2).
+  // Fetched independently of the bundled dashboard RPC because (a) the
+  // computation is in its own RPC `current_streak()` shipped in
+  // 20260527000022, and (b) it needs to refresh whenever a session
+  // completes — which the bundled RPC doesn't reactively know about.
+  const [streakDays, setStreakDays] = useState<number>(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc('current_streak');
+      if (cancelled) return;
+      if (error) {
+        console.warn('[DashboardPage] current_streak failed:', error);
+        return;
+      }
+      // RPC returns a single row {days, last_session_date}; supabase-js
+      // sometimes hands back an array, sometimes the row directly.
+      const row = Array.isArray(data) ? data[0] : data;
+      setStreakDays((row?.days as number) ?? 0);
+    })();
+    return () => { cancelled = true; };
+    // Re-run when the active session ends — most likely streak-change
+    // moment. activeSession transitions to null when the user finishes.
+  }, [user?.id, activeSession?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -484,17 +540,72 @@ export function DashboardPage() {
       <HomeHero
         firstName={firstName}
         liveSessions={liveSessions}
-        onStart={() => openDeclare()}
-        onFind={() => navigate('/sessions')}
+        onSchedule={() => openDeclare()}
+        onMatch={handleMatchMeNow}
+        onFind={() => setFindOpen(true)}
+        onViewAllLive={() => navigate('/sessions')}
+        matchBusy={false}
+        quickTimerSlot={
+          /* forcePortal — the home hero wraps its content in
+             `overflow-hidden` (clips the ambient colour orbs), which
+             also clips the QT's default absolute dropdown. Portal mode
+             escapes the clip + renders as a proper centered popup. */
+          <QuickTimerButton align="right" forcePortal />
+        }
+        nextUpcoming={(() => {
+          // The soonest upcoming scheduled session within the next 24 h
+          // (or just-started within the last 10 min). Sorted server-side
+          // ascending already, so we just pick the first that's still
+          // in-window.
+          const nowMs = Date.now();
+          const ahead = 24 * 60 * 60 * 1000;
+          const grace = 10 * 60 * 1000;
+          return (
+            upcomingScheduled.find((s) => {
+              const t = new Date(s.scheduled_at ?? s.start_time).getTime();
+              return t > nowMs - grace && t < nowMs + ahead;
+            }) ?? null
+          );
+        })()}
+        joinableSession={(() => {
+          // A scheduled session is "joinable now" when its window is
+          // active OR it starts within 5 minutes. We hide the
+          // start-a-new-session CTAs in this case — the user is meant
+          // to be in this session, not starting a new one.
+          //
+          // Skipped entirely when an activeSession already exists
+          // (they're IN the session — the "Rejoin" path handles that).
+          if (activeSession) return null;
+          const nowMs = Date.now();
+          const lead = 5 * 60_000; // 5 min pre-start lead
+          return (
+            upcomingScheduled.find((s) => {
+              const start = new Date(s.scheduled_at ?? s.start_time).getTime();
+              const dur = (s.intended_duration_minutes ?? 25) * 60_000;
+              const end = start + dur;
+              return nowMs >= start - lead && nowMs < end;
+            }) ?? null
+          );
+        })()}
+        onJoin={(s) => navigate(`/session/${s.id}`)}
       />
+      {matchError && (
+        <p className="text-[11px] font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-100 rounded-lg px-2.5 py-1.5 -mt-2">
+          {matchError}
+        </p>
+      )}
 
-      {/* Quick Timer — single-tap entry for "I just want to focus
-          right now, no ceremony." Sits below the hero so it's the
-          first thing in reach without competing with the primary
-          Start/Find CTAs above. */}
-      <div className="flex justify-end -mt-2">
-        <QuickTimerButton />
-      </div>
+      {/* Live-now drop-in strip — surfaces open-to-match sessions on
+          the most-visited page so users passively notice when someone's
+          working with the door open. Hides itself entirely when:
+            • the user is already in a session (activeSession set), or
+            • when there are no open sessions to show.
+          Renders for both day-zero + returning users — discovery is
+          equally valuable across both states. */}
+      <LiveNowDropInStrip
+        excludeSessionId={activeSession?.id}
+        hidden={!!activeSession}
+      />
 
       {/* Progressive render — sections paint as their data arrives. The
           hero above is always-on, and the day-zero branch waits only for
@@ -531,6 +642,19 @@ export function DashboardPage() {
                 </span>
               );
             })()}
+            {/* Streak chip — precise counter that complements the
+                qualitative momentum band. Only shown when ≥ 2 (the
+                RPC returns 0 below that threshold so "1 day streak"
+                never appears). Warm orange tones match the
+                streak_at_risk notification icon. */}
+            {streakDays >= 2 && (
+              <span
+                className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700"
+                title={`${streakDays} consecutive days with a completed session`}
+              >
+                <Flame size={11} /> {streakDays}-day streak
+              </span>
+            )}
             {stats && stats.totalSessions > 0 && (
               <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
                 {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
@@ -652,13 +776,24 @@ export function DashboardPage() {
       {/* Modals */}
       {showDeclare && (
         <DeclareSessionModal
-          onClose={() => { setShowDeclare(false); setDeclareGoal(undefined); setTemplateDuration(undefined); setDeclareSmallerHint(false); }}
+          onClose={() => {
+            setShowDeclare(false);
+            setDeclareGoal(undefined);
+            setTemplateDuration(undefined);
+            setDeclareSmallerHint(false);
+            setDeclareOpenToMatch(false);
+          }}
           initialGoal={declareGoal}
           initialDuration={templateDuration}
           startWithSmallerHint={declareSmallerHint}
+          startOpenToMatch={declareOpenToMatch}
         />
       )}
       {showSchedule && <ScheduleSessionModal onClose={() => setShowSchedule(false)} />}
+
+      {findOpen && (
+        <FindSessionsSheet onClose={() => setFindOpen(false)} />
+      )}
     </div>
   );
 }

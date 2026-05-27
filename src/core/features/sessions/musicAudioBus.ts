@@ -41,6 +41,19 @@ let currentMuted = (() => {
   catch { return false; }
 })();
 
+// Ducking — temporarily lower music volume so the user can hear/talk
+// over it (e.g. during the intro phase when a joiner drops in). Unlike
+// mute, ducking is non-destructive: the player keeps playing at a low
+// volume so the user is reminded music is on, and the original volume
+// snaps back when restore() is called.
+//
+// The actual volume multiplier is applied by SessionMusicPlayer via its
+// subscription to duck changes — same dance as the muted state. We only
+// own the boolean here.
+type DuckedListener = (ducked: boolean) => void;
+const duckedListeners = new Set<DuckedListener>();
+let currentDucked = false;
+
 function ensureContext(): void {
   if (ctx) return;
   const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -127,5 +140,34 @@ export const musicAudioBus = {
     mutedListeners.add(fn);
     fn(currentMuted);
     return () => { mutedListeners.delete(fn); };
+  },
+
+  // ── Ducking ───────────────────────────────────────────────
+  // Lowers music volume to ~20% for talking-over moments (intro
+  // phase, knock arriving). Player applies the multiplier; this
+  // module just owns the flag.
+
+  isDucked(): boolean { return currentDucked; },
+
+  /** Smoothly drop music to a quiet background level. Caller is
+   *  expected to pair every duck() with a restore() — otherwise the
+   *  user's music stays whisper-quiet for the rest of the session. */
+  duck(): void {
+    if (currentDucked) return;
+    currentDucked = true;
+    duckedListeners.forEach((fn) => fn(true));
+  },
+
+  /** Restore the user's original volume (whatever they had it set to). */
+  restore(): void {
+    if (!currentDucked) return;
+    currentDucked = false;
+    duckedListeners.forEach((fn) => fn(false));
+  },
+
+  subscribeDucked(fn: DuckedListener): () => void {
+    duckedListeners.add(fn);
+    fn(currentDucked);
+    return () => { duckedListeners.delete(fn); };
   },
 };

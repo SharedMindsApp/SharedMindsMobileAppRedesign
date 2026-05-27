@@ -6,15 +6,21 @@
 
 import { supabase } from '../../lib/supabase';
 
-// 6 categories organised around USER STATE, not cognitive load.
-// 7 incoming states map to these — Restless + Scattered share Anchor.
+// 9 categories organised around USER STATE, not cognitive load.
+// zen + dusk both target Theta–alpha 8 Hz but offer different sonic
+// identities (East Asian instrumental vs Middle Eastern modal) so users
+// can match their creative mood to a cultural/aesthetic vibe rather
+// than just a brainwave target.
 export type MusicCategory =
-  | 'calm'    // 🌊 stressed / overwhelmed   → Alpha 9 Hz
-  | 'anchor'  // ⚓ scattered or restless    → Low beta 13 Hz
-  | 'lift'    // ☀️ low energy / foggy       → Alpha-beta 10 Hz
-  | 'flow'    // 🌀 neutral / ready          → Low beta 14 Hz
-  | 'deep'    // 🌑 already hyperfocused     → Gamma 40 Hz
-  | 'open';   // 🌿 creative / brainstorming → Theta-alpha 8 Hz
+  | 'calm'    // 🌊 stressed / overwhelmed     → Alpha 9 Hz
+  | 'anchor'  // ⚓ scattered or restless      → Low beta 13 Hz
+  | 'lift'    // ☀️ low energy / foggy         → Alpha-beta 10 Hz
+  | 'flow'    // 🌀 neutral / ready            → Low beta 14 Hz
+  | 'deep'    // 🌑 already hyperfocused       → Gamma 40 Hz
+  | 'zen'     // 🎋 creative / brainstorming   → Theta-alpha 8 Hz (East Asian)
+  | 'dusk'    // 🌙 creative / contemplative   → Theta-alpha 8 Hz (Middle Eastern)
+  | 'drive'   // ⚡ tired but must push through → Mid-beta 16 Hz
+  | 'score';  // 🎬 need gravitas / purposeful  → Alpha 12 Hz
 
 export interface MusicCategoryMeta {
   id: MusicCategory;
@@ -39,7 +45,10 @@ export const MUSIC_CATEGORIES: MusicCategoryMeta[] = [
   { id: 'lift',   label: 'Lift',   glyph: '☀️', character: 'Brighter, warm. More movement than Calm.',    forState: 'Low energy / foggy',      targetHz: 10, baseL: 200, baseR: 210 },
   { id: 'flow',   label: 'Flow',   glyph: '🌀', character: 'Steady lofi or downtempo. Unobtrusive.',      forState: 'Neutral / ready',         targetHz: 14, baseL: 200, baseR: 214 },
   { id: 'deep',   label: 'Deep',   glyph: '🌑', character: 'Invisible dark ambient. No melody.',           forState: 'Already hyperfocused',    targetHz: 40, baseL: 200, baseR: 240 },
-  { id: 'open',   label: 'Open',   glyph: '🌿', character: 'Organic, spacious. Piano, guitar, nature.',   forState: 'Creative / brainstorming', targetHz: 8,  baseL: 200, baseR: 208 },
+  { id: 'zen',    label: 'Zen',    glyph: '🎋', character: 'Japanese / East Asian instrumental. Shakuhachi, koto.', forState: 'Creative / brainstorming',  targetHz: 8,  baseL: 200, baseR: 208 },
+  { id: 'dusk',   label: 'Dusk',   glyph: '🌙', character: 'Middle Eastern modal scales. Oud, ney, maqam.',         forState: 'Creative / contemplative',  targetHz: 8,  baseL: 200, baseR: 208 },
+  { id: 'drive',  label: 'Drive',  glyph: '⚡', character: 'Deep house, minimal. External rhythm as fuel.',         forState: 'Tired but pushing through',  targetHz: 16, baseL: 200, baseR: 216 },
+  { id: 'score',  label: 'Score',  glyph: '🎬', character: 'Cinematic orchestral. Quiet gravitas.',                 forState: 'Need gravitas / purposeful', targetHz: 12, baseL: 200, baseR: 212 },
 ];
 
 export function categoryMeta(id: MusicCategory): MusicCategoryMeta {

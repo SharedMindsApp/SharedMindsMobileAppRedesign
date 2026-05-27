@@ -18,9 +18,10 @@
 // bespoke goals + project pinning + body-double / real-world modes.
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2, Search, Library, Pin } from 'lucide-react';
-import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
+import { Loader2, Timer, ChevronDown, Calendar, Plus, Settings2, Search, Library, Pin, X } from 'lucide-react';
+import { startCommunitySession, createScheduledSession, fetchConflictingSessions } from '../../services/SessionService';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useAuth } from '../../auth/AuthProvider';
 import { ActivityService, type UserActivity, type ActivityTemplate } from '../../services/ActivityService';
@@ -135,10 +136,23 @@ interface Props {
    *  inside a narrow sidebar) so the dropdown extends rightward into
    *  the page rather than off-screen. */
   align?: 'left' | 'right';
+  /** Optional parent-side hook called immediately after a successful
+   *  startNow / schedule. Used when QuickTimerButton is mounted inside
+   *  another sheet (e.g. the Sessions page MobileActionSheet) so the
+   *  parent can close itself in the same gesture — otherwise the
+   *  navigation happens but the parent stays mounted behind the
+   *  active session until the user navigates again. */
+  onStarted?: () => void;
+  /** Force the dropdown to render as a portal modal (centred popup on
+   *  desktop, bottom sheet on mobile) instead of the default anchored
+   *  dropdown. Use when mounting the QuickTimerButton INSIDE another
+   *  popup/sheet — an absolute dropdown would otherwise get clipped or
+   *  cramped by the parent modal's bounds. */
+  forcePortal?: boolean;
   className?: string;
 }
 
-export function QuickTimerButton({ projectId = null, compact = false, align = 'right', className = '' }: Props) {
+export function QuickTimerButton({ projectId = null, compact = false, align = 'right', onStarted, forcePortal = false, className = '' }: Props) {
   const navigate = useNavigate();
   const { setActiveSession } = useFocusSession();
   const { profile } = useAuth();
@@ -221,6 +235,32 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
   // people didn't actually do.
   const [activitiesLoaded, setActivitiesLoaded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // ── Mobile detection ───────────────────────────────────────
+  // Below the Tailwind `sm` breakpoint (640px) we render the menu as
+  // a full-height bottom sheet — a dropdown cramped against the edge
+  // of a phone screen is awful UX, and the schedule/duration grids
+  // need real estate to breathe.
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window === 'undefined' ? false : window.matchMedia('(max-width: 639px)').matches,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 639px)');
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+
+  // Lock body scroll while the menu is open on mobile — same reason
+  // as the Manager sheet: dual scroll containers fight each other.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!menuOpen || !isMobile) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [menuOpen, isMobile]);
   useEffect(() => {
     // Load when the dropdown opens OR — if a pinned activity exists —
     // immediately on mount so the primary button can render its label
@@ -279,6 +319,8 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
       writeLast(safe);
       if (effectiveActivity) ActivityService.bumpUsage(effectiveActivity.id).catch(() => {});
       setActiveSession(session as any);
+      setMenuOpen(false);
+      onStarted?.();
       navigate(`/session/${session.id}`);
     } catch (e: any) {
       setError(e?.message ?? 'Could not start the timer.');
@@ -286,15 +328,51 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
     }
   }
 
-  async function schedule(at: Date) {
+  /** Conflict-warning state — when the user picks a slot that
+   *  overlaps an existing session, we surface the conflict + an
+   *  "Add anyway" button instead of silently creating a duplicate. */
+  const [conflictPending, setConflictPending] = useState<{
+    at: Date;
+    count: number;
+    firstTitle: string;
+  } | null>(null);
+
+  async function schedule(at: Date, options: { force?: boolean } = {}) {
     if (busy) return;
     if (at.getTime() <= Date.now()) {
       setError('Pick a future time.');
       return;
     }
     const safe = Math.min(180, Math.max(5, Math.round(minutes)));
-    setBusy(true);
     setError(null);
+
+    // Conflict check — unless the user already saw the warning and
+    // hit "Add anyway" (options.force === true).
+    if (!options.force) {
+      try {
+        const conflicts = await fetchConflictingSessions({
+          start: at,
+          durationMinutes: safe,
+        });
+        if (conflicts.length > 0) {
+          const first = conflicts[0];
+          setConflictPending({
+            at,
+            count: conflicts.length,
+            firstTitle:
+              (first as any).session_title
+              ?? (first as any).session_goal
+              ?? 'Existing session',
+          });
+          return;
+        }
+      } catch {
+        // Best-effort — proceed if the conflict query fails. Better
+        // to allow the user to schedule than block on an infra issue.
+      }
+    }
+
+    setBusy(true);
     try {
       await createScheduledSession({
         title: resolveGoalText(),
@@ -307,8 +385,10 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
       });
       writeLast(safe);
       if (effectiveActivity) ActivityService.bumpUsage(effectiveActivity.id).catch(() => {});
+      setConflictPending(null);
       setMenuOpen(false);
       setBusy(false);
+      onStarted?.();
       // Light user feedback — navigate to the sessions list so they
       // see their newly-scheduled block on the calendar.
       navigate('/sessions');
@@ -375,8 +455,34 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
         </button>
       </div>
 
-      {menuOpen && !busy && (
-        <div className={`absolute z-30 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-surface ring-1 ring-surface-container-high shadow-2xl overflow-hidden ${align === 'left' ? 'left-0' : 'right-0'}`}>
+      {menuOpen && !busy && (() => {
+        // Mobile = full-height bottom sheet (portal), desktop = anchored dropdown.
+        // Content is identical in both cases — only the chrome differs.
+        const inner = (
+        <>
+          {/* Header — shown whenever the menu is rendered as a portal
+              (mobile bottom sheet OR desktop forcePortal popup). The
+              drag handle is mobile-only; the title + close button
+              show on both so a desktop popup is dismissible without
+              clicking outside the modal. */}
+          {(isMobile || forcePortal) && (
+            <div className="shrink-0 relative px-5 pt-3 pb-3 border-b border-surface-container/60">
+              {isMobile && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-1.5 w-10 h-1 rounded-full bg-surface-container-high/70" aria-hidden />
+              )}
+              <div className="flex items-center justify-between mt-2 sm:mt-0">
+                <p className="text-base font-extrabold stitch-text-primary">Quick timer</p>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(false)}
+                  className="w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Activities row ────────────────────────────────────
               Most-recent first (sorted server-side). Tap to select —
@@ -388,15 +494,15 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
               library, so they can find anything without opening Manage.
               Library matches use a "use once" picker that sets the
               goal text without permanently adopting the template. */}
-          <div className="px-3 pt-3 pb-2 max-h-[220px] overflow-y-auto">
+          <div className="px-4 pt-4 pb-3 max-h-[220px] overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+              <p className="text-xs sm:text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
                 Quick activities
               </p>
               <button
                 type="button"
                 onClick={() => setManagerOpen(true)}
-                className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:opacity-70 transition-opacity"
+                className="inline-flex items-center gap-1 text-xs sm:text-[10px] font-bold text-primary hover:opacity-70 transition-opacity"
                 title="Manage your activities"
               >
                 <Settings2 size={10} /> Manage
@@ -411,7 +517,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search activities…"
-                className="w-full pl-7 pr-2 py-1.5 rounded-lg text-xs stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+                className="w-full pl-7 pr-2 py-2 sm:py-1.5 rounded-lg text-sm sm:text-xs stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
               />
             </div>
 
@@ -470,7 +576,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                               setOverrideMinutes(null);
                               setCustomGoal('');
                             }}
-                            className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 text-[11px] font-bold"
+                            className="inline-flex items-center gap-1 pl-2.5 pr-2 sm:pl-2 sm:pr-1.5 py-1.5 sm:py-1 text-xs sm:text-[11px] font-bold"
                             title={`${a.label} · ${a.default_minutes}min${pinned ? ' · pinned' : ''}`}
                           >
                             <span>{a.emoji}</span>
@@ -580,8 +686,8 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
           </div>
 
           {/* ── Custom goal input ──────────────────────────────── */}
-          <div className="border-t border-surface-container px-3 py-2">
-            <label className="block text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-1.5">
+          <div className="border-t border-surface-container px-4 py-3">
+            <label className="block text-xs sm:text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary mb-1.5">
               Or type a one-off goal
             </label>
             <input
@@ -592,13 +698,13 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                 if (e.target.value.trim()) setSelectedActivity(null);
               }}
               placeholder="e.g. Polish the pitch deck"
-              className="w-full px-2 py-1.5 rounded-lg text-sm stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+              className="w-full px-3 py-2.5 sm:px-2 sm:py-1.5 rounded-lg text-base sm:text-sm stitch-text-primary bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
             />
           </div>
 
           {/* ── Duration presets + custom ──────────────────────── */}
-          <div className="border-t border-surface-container px-3 py-2.5 space-y-2">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+          <div className="border-t border-surface-container px-4 py-3 space-y-2">
+            <p className="text-xs sm:text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
               Duration
             </p>
             <div className="grid grid-cols-3 gap-1">
@@ -609,7 +715,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                     key={m}
                     type="button"
                     onClick={() => setOverrideMinutes(m)}
-                    className={`px-1.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                    className={`px-2 py-2 sm:px-1.5 sm:py-1 rounded-md text-sm sm:text-[11px] font-bold transition-colors ${
                       active
                         ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
                         : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
@@ -632,14 +738,14 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                   const n = parseInt(e.target.value, 10);
                   setOverrideMinutes(Number.isFinite(n) ? n : null);
                 }}
-                className="w-20 px-2 py-1 rounded-md text-xs font-bold stitch-text-primary tabular-nums bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
+                className="w-24 sm:w-20 px-2.5 py-2 sm:px-2 sm:py-1 rounded-md text-sm sm:text-xs font-bold stitch-text-primary tabular-nums bg-surface-container-low ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 outline-none"
               />
-              <span className="text-[11px] stitch-text-secondary">min · 5–180</span>
+              <span className="text-xs sm:text-[11px] stitch-text-secondary">min · 5–180</span>
             </div>
           </div>
 
           {/* ── Schedule toggle ─────────────────────────────────── */}
-          <div className="border-t border-surface-container px-3 py-2">
+          <div className="border-t border-surface-container px-4 py-3">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -648,7 +754,7 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                 className="w-3.5 h-3.5 accent-primary"
               />
               <Calendar size={12} className="stitch-text-secondary" />
-              <span className="text-xs font-bold stitch-text-primary">
+              <span className="text-sm sm:text-xs font-bold stitch-text-primary">
                 Schedule for later
               </span>
             </label>
@@ -656,19 +762,19 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
 
           {/* ── Action row ──────────────────────────────────────── */}
           {!scheduleMode ? (
-            <div className="border-t border-surface-container px-3 py-2.5">
+            <div className="border-t border-surface-container px-4 py-3.5">
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); startNow(); }}
                 disabled={busy}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-extrabold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-60"
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 sm:py-2 rounded-lg text-base sm:text-sm font-extrabold bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-60"
               >
-                <Timer size={13} /> Start now
+                <Timer size={14} className="sm:size-3" /> Start now
               </button>
             </div>
           ) : (
-            <div className="border-t border-surface-container px-3 py-2.5 space-y-2">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+            <div className="border-t border-surface-container px-4 py-3 space-y-2">
+              <p className="text-xs sm:text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
                 When?
               </p>
               <div className="grid grid-cols-3 gap-1">
@@ -700,18 +806,81 @@ export function QuickTimerButton({ projectId = null, compact = false, align = 'r
                   <Plus size={11} /> Add
                 </button>
               </div>
+
+              {/* Conflict warning — the user picked a time that
+                  overlaps an existing session of theirs. Two
+                  outcomes: cancel (clears the pending state) or
+                  "Add anyway" which re-calls schedule() with
+                  force=true to bypass the check. */}
+              {conflictPending && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 space-y-2">
+                  <p className="text-xs font-extrabold text-amber-900 leading-tight">
+                    ⚠ You already have {conflictPending.count === 1 ? 'a session' : `${conflictPending.count} sessions`} at this time
+                  </p>
+                  <p className="text-[11px] text-amber-800 leading-snug truncate">
+                    {conflictPending.firstTitle}
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setConflictPending(null)}
+                      className="flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 transition-colors"
+                    >
+                      Pick another time
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => schedule(conflictPending.at, { force: true })}
+                      className="flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors"
+                    >
+                      Add anyway
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="border-t border-surface-container px-3 py-2 bg-surface-container-low/30">
-            <p className="text-[10px] stitch-text-secondary leading-snug">
+          <div className="border-t border-surface-container px-4 py-3 bg-surface-container-low/30">
+            <p className="text-xs sm:text-[10px] stitch-text-secondary leading-snug">
               {effectiveActivity || customGoal.trim()
                 ? <>Logs as a solo session — counts toward momentum and shows up in your calendar.</>
                 : <>No goal needed. Logs as "Quick focus" — you can rename later from the calendar.</>}
             </p>
           </div>
-        </div>
-      )}
+        </>
+        );
+
+        if (isMobile || forcePortal) {
+          // Portal renderer — bottom sheet on mobile, centred popup on
+          // desktop. The centred popup mode is used when the
+          // QuickTimerButton is mounted inside ANOTHER modal/sheet
+          // (forcePortal=true) — an absolute dropdown would otherwise
+          // get cramped/clipped by the parent's bounds.
+          return createPortal(
+            <div
+              className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-md sm:p-4"
+              onClick={() => setMenuOpen(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[100dvh] sm:h-auto sm:max-h-[85vh] overflow-hidden"
+              >
+                <div className="flex-1 overflow-y-auto">
+                  {inner}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          );
+        }
+
+        return (
+          <div className={`absolute z-30 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-surface ring-1 ring-surface-container-high shadow-2xl overflow-hidden ${align === 'left' ? 'left-0' : 'right-0'}`}>
+            {inner}
+          </div>
+        );
+      })()}
 
       {error && (
         <p className={`absolute top-full mt-2 text-[11px] font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-100 rounded-lg px-2.5 py-1.5 z-30 ${align === 'left' ? 'left-0' : 'right-0'}`}>

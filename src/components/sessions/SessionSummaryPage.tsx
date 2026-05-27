@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw, Flame } from 'lucide-react';
 import { getFocusSessionSummary, endFocusSession } from '../../lib/sessions/focus';
 import { endCommunitySession, fetchSessionOutcomes, type DebriefOutcome } from '../../core/services/SessionService';
+import { DeclareSessionModal } from '../../core/features/sessions/DeclareSessionModal';
 import { supabase } from '../../lib/supabase';
 import type { FocusSessionSummary, SessionOutcome } from '../../lib/sessions/focusTypes';
 import { ConnectButton } from '../../core/features/connections/ConnectButton';
@@ -474,12 +475,22 @@ function CommunitySummary({
           </div>
         )}
 
-        {/* Next actions */}
+        {/* Next actions — for 1-on-1 sessions we lead with "Match again"
+            since the user just got value from spontaneous pairing and
+            is most likely to want another. Solo / group fall back to
+            the generic declare flow. */}
         <div className="w-full space-y-3">
+          {summary.session.session_mode === 'one_on_one' && (
+            <MatchAgainButton />
+          )}
           <button
             type="button"
             onClick={onNewSession}
-            className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl stitch-btn--primary text-white font-bold text-sm shadow-md shadow-primary/20 active:scale-[0.98] transition-all"
+            className={`w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-bold text-sm active:scale-[0.98] transition-all ${
+              summary.session.session_mode === 'one_on_one'
+                ? 'bg-surface-container stitch-text-primary font-semibold'
+                : 'stitch-btn--primary text-white shadow-md shadow-primary/20'
+            }`}
           >
             <Zap size={15} />
             Declare another session
@@ -555,3 +566,34 @@ const OUTCOME_BADGE: Record<DebriefOutcome, { label: string; classes: string }> 
   something_came_up: { label: 'Came up',   classes: 'bg-rose-100 text-rose-700' },
   no_answer:         { label: 'No answer', classes: 'bg-gray-100 text-gray-500' },
 };
+
+/** Post-session "Match me again" CTA. Re-enters the matchmaking lobby
+ *  with the same 30-min default. If a partner is already waiting in
+ *  the queue we land straight in the next session; otherwise we open
+ *  the waiting room route — same UX as the sidebar button. */
+function MatchAgainButton() {
+  // Now opens DeclareSessionModal with startOpenToMatch=true — same
+  // pattern as the home/calendar Match-me-now CTAs. Replaces the old
+  // matchMeNow() RPC + waiting-room flow (retired in task #175).
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-500 text-white font-bold text-sm shadow-md shadow-amber-500/25 hover:shadow-lg hover:shadow-amber-500/30 active:scale-[0.98] transition-all"
+      >
+        <Zap size={15} />
+        Match me with someone else
+      </button>
+      {open && (
+        <DeclareSessionModal
+          onClose={() => setOpen(false)}
+          forceSoloMode
+          startOpenToMatch
+        />
+      )}
+    </>
+  );
+}

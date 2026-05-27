@@ -87,6 +87,11 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
     const next = typeof v === 'function' ? (v as (p: boolean) => boolean)(musicAudioBus.getMuted()) : v;
     musicAudioBus.setMuted(next);
   };
+  // Ducked state — when a join transition or intro phase needs the user
+  // to hear/talk, the bus calls duck() and we drop to 20% volume. Snaps
+  // back on restore(). Non-destructive: the player keeps playing.
+  const [ducked, setDuckedLocal] = useState<boolean>(() => musicAudioBus.isDucked());
+  useEffect(() => musicAudioBus.subscribeDucked(setDuckedLocal), []);
 
   // Per-session state.
   const [track, setTrack] = useState<SessionTrack | null>(null);
@@ -129,12 +134,17 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
 
   const effectiveCategory: MusicCategory = overrideCategory ?? category;
 
+  // Effective volume = base volume × ducking multiplier (0 if muted).
+  // Centralised so the two places that apply audio.volume stay in sync.
+  const DUCK_MULTIPLIER = 0.2;
+  const effectiveVolume = muted ? 0 : (ducked ? volume * DUCK_MULTIPLIER : volume);
+
   // Persist prefs as they change + publish audible-state events so the
   // mid-session recheck panel knows whether to show itself.
   useEffect(() => {
     try { localStorage.setItem(LS_VOLUME, String(volume)); } catch {}
-    if (audioRef.current) audioRef.current.volume = muted ? 0 : volume;
-  }, [volume, muted]);
+    if (audioRef.current) audioRef.current.volume = effectiveVolume;
+  }, [volume, muted, ducked, effectiveVolume]);
   useEffect(() => {
     try { localStorage.setItem(LS_ENABLED, String(enabled)); } catch {}
   }, [enabled]);
@@ -300,7 +310,7 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
     const audio = audioRef.current;
     if (!audio || !track) return;
     audio.src = track.url;
-    audio.volume = muted ? 0 : volume;
+    audio.volume = effectiveVolume;
     audio.loop = false; // we manually advance to the next track on ended
     if (enabled) {
       audio.play()

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock, Video, VideoOff, Lock, Target } from 'lucide-react';
+import { X, Check, List, PenLine, Loader2, Timer, Zap, Leaf, Coffee, Users, UserPlus, Mic, MicOff, User, Calendar, Bell, Plus, Trash2, Clock, Video, VideoOff, Lock, Target, DoorOpen, MessageCircle, Volume2 } from 'lucide-react';
 import { usePublicHostingEligibility } from '../../../hooks/usePublicHostingEligibility';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import { startCommunitySession, createScheduledSession } from '../../services/SessionService';
+import { startCommunitySession, createScheduledSession, fetchConflictingSessions } from '../../services/SessionService';
+import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
 import { InputWell } from '../../ui/CorePage';
 import { useAuth } from '../../auth/AuthProvider';
@@ -58,9 +59,16 @@ interface Props {
    *  the Quick Restart card so returning users land on the friction-
    *  reducing prompt rather than a blank goal field. */
   startWithSmallerHint?: boolean;
+  /** Pre-flips "Open to match" on. Used by the new Match-me-now CTA on
+   *  home/find-sessions: clicking it opens this modal with the toggle
+   *  already on so the user just picks goal + duration + start. Implies
+   *  forceSoloMode (open-to-match only makes sense when the host is
+   *  starting solo — see open_to_match column comment in migration
+   *  20260527000015). */
+  startOpenToMatch?: boolean;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint, startOpenToMatch }: Props) {
   const navigate = useNavigate();
   const { state: { tasks, projects, activeProjectId }, addTaskAsync, deleteTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
@@ -82,10 +90,15 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const isScheduling = whenMode === 'schedule';
   const resolvedScheduledAt = isScheduling ? new Date(scheduledAt) : null;
 
-  // Default to 'type' when we have an initial goal OR the caller asked
-  // for the breakdown helper (Quick Restart). Otherwise show the task
-  // picker so users can pull from existing work.
-  const [tab, setTab] = useState<GoalTab>(initialGoal || startWithSmallerHint ? 'type' : 'pick');
+  // Default to 'type' when:
+  //   • we have an initial goal (caller pre-filled it), OR
+  //   • the caller asked for the breakdown helper (Quick Restart), OR
+  //   • the user has no open tasks (an empty picker is a dead-end).
+  // Otherwise lead with the task picker so users can pull from existing work.
+  const hasAnyOpenTasks = tasks.some((t) => !t.done);
+  const [tab, setTab] = useState<GoalTab>(
+    initialGoal || startWithSmallerHint || !hasAnyOpenTasks ? 'type' : 'pick'
+  );
   const [selectedTask, setSelectedTask] = useState<CoreTask | null>(null);
   const [goalText, setGoalText] = useState(initialGoal ?? '');
 
@@ -117,7 +130,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   // the tier allows it.
   const isCustomDuration = !visiblePresets.some((p) => p.value === duration);
   const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
-    forceSoloMode ? 'solo' : 'one_on_one'
+    forceSoloMode || startOpenToMatch ? 'solo' : 'one_on_one'
   );
   // Solo-only sub-toggles. Mutually exclusive: a user picks one of
   //   • Just me (default, neither toggled)
@@ -126,14 +139,61 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [bodyDouble, setBodyDouble] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
+  /** Open-to-match: "I'm starting solo, but if someone wants to drop in
+   *  for a body-double, the door's open." See migration 20260527000015. */
+  const [openToMatch, setOpenToMatch] = useState<boolean>(!!startOpenToMatch);
+  /** Host's vibe — only meaningful when openToMatch is on. Drives intro-
+   *  phase length + mic behaviour if a joiner arrives. Default 'brief_hi'
+   *  matches the "balanced" middle option most users will want. */
+  const [vibe, setVibe] = useState<'silent' | 'brief_hi' | 'chatty'>('brief_hi');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
   );
-  /** When the user types a free-form goal, also save it as a real task so
-   *  it shows up in "From my tasks" next time. Default ON — most goals
-   *  are real tasks people want to track. Toggle off for ad-hoc one-offs. */
-  const [saveAsTask, setSaveAsTask] = useState(true);
+  /** When the user types a free-form goal, optionally also save it as a
+   *  real task so it shows up in "From my tasks" next time. Default OFF
+   *  — if the user wanted a task, they'd have picked one from the task
+   *  tab. The two tabs are intentionally distinct: tasks = tracked work,
+   *  typed goal = one-off. Toggle on for goals worth keeping. */
+  const [saveAsTask, setSaveAsTask] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // ── Conflict detection ─────────────────────────────────────────
+  // Checks the proposed time window against the user's existing
+  // scheduled/active sessions. Shown as a warning banner — the user
+  // can still proceed (some people genuinely want overlapping
+  // sessions; this is a hint, not a hard block).
+  //
+  // Debounced 300ms so typing in the datetime input doesn't fire a
+  // query on every keystroke.
+  const [conflicts, setConflicts] = useState<FocusSession[]>([]);
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
+  useEffect(() => {
+    // Only check when scheduling — "now" sessions implicitly start at
+    // the current minute and conflicts there are rare + handled by
+    // the active-session redirect anyway.
+    if (!isScheduling || !resolvedScheduledAt) {
+      setConflicts([]);
+      return;
+    }
+    if (Number.isNaN(resolvedScheduledAt.getTime())) {
+      setConflicts([]);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      setCheckingConflicts(true);
+      fetchConflictingSessions({
+        start: resolvedScheduledAt,
+        durationMinutes: duration,
+      })
+        .then(setConflicts)
+        .catch(() => setConflicts([]))
+        .finally(() => setCheckingConflicts(false));
+    }, 300);
+    return () => window.clearTimeout(handle);
+    // resolvedScheduledAt is a fresh Date each render — depend on the
+    // underlying string to dedupe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScheduling, scheduledAt, duration]);
 
   // Public-hosting gate: hosts of 'group' (community-visible) sessions must
   // have attended N qualifying sessions first. The hook returns admin bypass
@@ -295,6 +355,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         quietMode: sessionMode === 'solo' ? false : quietMode,
         bodyDouble: sessionMode === 'solo' && !isOffline ? bodyDouble : false,
         isOffline: sessionMode === 'solo' ? isOffline : false,
+        // Open-to-match is solo-only (service layer enforces too). Offline
+        // sessions don't accept joiners because there's no screen to share.
+        openToMatch: sessionMode === 'solo' && !isOffline && openToMatch,
+        vibe: openToMatch ? vibe : undefined,
       });
       // Bump the linked task to 'active' + increment sessions_count.
       // Fire-and-forget — the DB write isn't worth blocking navigation on.
@@ -642,14 +706,14 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold stitch-text-primary leading-tight">
-                      Save as a task
+                      Also save as a task
                     </p>
                     <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
                       {saveAsTask
                         ? selectedProjectId
-                          ? <>Saves to <span className="font-semibold">{projects.find((p) => p.id === selectedProjectId)?.name ?? 'project'}</span> · appears in "From my tasks" next time</>
-                          : <>Saves to <span className="font-semibold">Inbox</span> · appears in "From my tasks" next time</>
-                        : 'Goal stays on this session only'}
+                          ? <>Will save to <span className="font-semibold">{projects.find((p) => p.id === selectedProjectId)?.name ?? 'project'}</span> · appears in "From my tasks" next time</>
+                          : <>Will save to <span className="font-semibold">Inbox</span> · appears in "From my tasks" next time</>
+                        : 'One-off goal — stays on this session only'}
                     </p>
                   </div>
                 </button>
@@ -799,6 +863,43 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               min={toLocalInput(new Date())}
               className="mt-2 w-full px-4 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-sm outline-none focus:ring-2 ring-primary/25 transition-all"
             />
+          )}
+
+          {/* Conflict warning — non-blocking hint when the proposed
+              window overlaps an existing session. User can proceed
+              anyway (the create button stays enabled) but knows up-
+              front they'll be double-booked. */}
+          {whenMode === 'schedule' && conflicts.length > 0 && (
+            <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs">
+              <p className="font-extrabold text-amber-900 mb-1">
+                ⚠ You already have {conflicts.length === 1 ? 'a session' : `${conflicts.length} sessions`} at this time
+              </p>
+              <ul className="space-y-1 text-amber-800">
+                {conflicts.slice(0, 3).map((c) => {
+                  const start = new Date(c.scheduled_at ?? c.start_time);
+                  const startStr = start.toLocaleString('en-GB', {
+                    weekday: 'short', hour: '2-digit', minute: '2-digit',
+                  });
+                  const title = c.session_title ?? c.session_goal ?? 'Untitled session';
+                  return (
+                    <li key={c.id} className="leading-tight">
+                      <span className="font-semibold">{startStr}</span>
+                      <span className="opacity-70"> · {c.intended_duration_minutes}m · </span>
+                      <span className="truncate">{title}</span>
+                    </li>
+                  );
+                })}
+                {conflicts.length > 3 && (
+                  <li className="opacity-60">+{conflicts.length - 3} more…</li>
+                )}
+              </ul>
+              <p className="text-[10px] text-amber-700/80 mt-1.5 leading-snug">
+                You can still proceed — this is a heads-up, not a block.
+              </p>
+            </div>
+          )}
+          {whenMode === 'schedule' && checkingConflicts && conflicts.length === 0 && (
+            <p className="mt-2 text-[10px] stitch-text-secondary italic">Checking calendar…</p>
           )}
 
           {/* ── Scheduled-hosting gate notice ──────────────────────
@@ -1053,6 +1154,82 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                 }`} />
               </div>
             </button>
+
+            {/* ── Open to match: solo session that anyone can drop into ──
+                Mutually exclusive with offline mode (no screen = no room
+                for a joiner). Hidden when isOffline is on. When toggled,
+                expands a 3-way vibe picker so the host signals their
+                social preference upfront. See migration 20260527000015. */}
+            {!isOffline && (<>
+              <button
+                type="button"
+                onClick={() => setOpenToMatch((v) => !v)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
+                  openToMatch
+                    ? 'bg-amber-500/10 ring-2 ring-amber-400/30'
+                    : 'bg-surface-container-low hover:bg-surface-container'
+                }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  openToMatch ? 'bg-amber-500 text-white' : 'bg-white stitch-text-secondary'
+                }`}>
+                  <DoorOpen size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold stitch-text-primary leading-tight">
+                    Open the door {openToMatch && <span className="text-amber-600">· on</span>}
+                  </p>
+                  <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
+                    {openToMatch
+                      ? 'Anyone online can drop in to body-double. You start working either way.'
+                      : 'Solo by default. Open it to let someone drop in mid-session.'}
+                  </p>
+                </div>
+                <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                  openToMatch ? 'bg-amber-500' : 'bg-surface-container'
+                }`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                    openToMatch ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </div>
+              </button>
+
+              {/* Vibe picker — only relevant when the door is open.
+                  Three options drive intro-phase + auto-mute behavior
+                  if a joiner arrives. Default brief_hi covers most cases.  */}
+              {openToMatch && (
+                <div className="pl-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary px-2 pt-1 pb-1.5">
+                    Vibe when they arrive
+                  </p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([
+                      { id: 'silent',   label: 'Silent',    icon: Volume2,       sub: 'No talk' },
+                      { id: 'brief_hi', label: 'Brief hi',  icon: MessageCircle, sub: '2 min hi' },
+                      { id: 'chatty',   label: 'Chatty',    icon: Users,         sub: '5 min hi' },
+                    ] as { id: 'silent' | 'brief_hi' | 'chatty'; label: string; icon: any; sub: string }[]).map(({ id, label, icon: Icon, sub }) => {
+                      const isActive = vibe === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setVibe(id)}
+                          className={`flex flex-col items-center gap-0.5 py-2 rounded-lg transition-all text-center ${
+                            isActive
+                              ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/25'
+                              : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.97]'
+                          }`}
+                        >
+                          <Icon size={13} className={isActive ? 'text-white/90' : 'stitch-text-secondary'} />
+                          <p className="text-[11px] font-extrabold leading-none">{label}</p>
+                          <p className={`text-[9px] leading-none ${isActive ? 'text-white/70' : 'stitch-text-secondary'}`}>{sub}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>)}
           </div>
         )}
 

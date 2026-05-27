@@ -176,22 +176,25 @@ export function SessionsListView({
         })}
       </div>
 
-      {/* ── Day section ─────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-extrabold stitch-text-primary leading-tight">
-            {dayLabel(anchorDay).top}
-            <span className="ml-2 text-sm font-semibold stitch-text-secondary">
-              {anchorDay.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </span>
-          </h2>
-        </div>
+      {/* ── Day section header ──────────────────────────────
+          The date strip above already conveys which day is selected
+          (highlighted pill + "TODAY"/"TOMORROW" label), so the header
+          here doesn't need to duplicate that — just spell out the
+          full date. "Book this day" becomes a compact icon button
+          aligned to the right; on mobile it can wrap below cleanly. */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg sm:text-xl font-extrabold stitch-text-primary leading-tight truncate">
+          {anchorDay.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </h2>
         <button
           type="button"
           onClick={() => onBook(anchorDay)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors"
+          title="Schedule a session on this day"
         >
-          <Play size={11} /> Book this day
+          <Play size={11} />
+          <span className="hidden sm:inline">Schedule</span>
+          <span className="sm:hidden">+</span>
         </button>
       </div>
 
@@ -323,7 +326,15 @@ const SESSION_MODE_META: Record<ListSession['session_mode'], {
 // ── Empty state ─────────────────────────────────────────────────
 
 function EmptyDay({ anchorDay, onBook }: { anchorDay: Date; onBook: () => void }) {
+  // "Today" / "Tomorrow" capitalised; further out we use the proper
+  // weekday name ("Friday", not "fri") so the empty-state copy reads
+  // naturally regardless of which day is selected.
   const { top } = dayLabel(anchorDay);
+  const dayWord =
+    top === 'Today' || top === 'Tomorrow'
+      ? top.toLowerCase()
+      : anchorDay.toLocaleDateString('en-GB', { weekday: 'long' });
+
   return (
     <div className="rounded-2xl bg-surface-container-low/60 ring-1 ring-surface-container/50 p-6 text-center space-y-3">
       <div className="w-12 h-12 mx-auto rounded-2xl bg-primary/8 grid place-items-center">
@@ -331,7 +342,7 @@ function EmptyDay({ anchorDay, onBook }: { anchorDay: Date; onBook: () => void }
       </div>
       <div>
         <p className="text-sm font-extrabold stitch-text-primary">
-          Nothing booked for {top.toLowerCase()} yet
+          Nothing booked for {dayWord} yet
         </p>
         <p className="text-xs stitch-text-secondary mt-1 leading-snug max-w-[320px] mx-auto">
           Be the first to claim a slot — others can join your session, or you
@@ -343,7 +354,7 @@ function EmptyDay({ anchorDay, onBook }: { anchorDay: Date; onBook: () => void }
         onClick={onBook}
         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold stitch-btn--primary text-white shadow-sm hover:-translate-y-px transition-all"
       >
-        <Play size={11} /> Book a session
+        <Play size={11} /> Schedule a session
       </button>
     </div>
   );
