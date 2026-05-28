@@ -15,41 +15,41 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 /**
- * Resilient auth lock.
+ * In-memory auth lock (process-local, NOT the Web Locks API).
  *
- * supabase-js serialises access-token reads/refreshes through the Web Locks
- * API so multiple tabs don't refresh the token at once. The DEFAULT lock waits
- * indefinitely (`acquireTimeout = -1`) — so a lock left dangling by a crashed
- * tab, a backgrounded tab, or rapid dev hot-reloads will DEADLOCK every
- * authenticated query: they hang forever with no error and spinners never
- * resolve (home dashboard, "this week's sessions", templates, etc.).
+ * supabase-js's default lock coordinates token refreshes across tabs via
+ * `navigator.locks` — but it waits indefinitely to acquire. A lock left
+ * dangling by another tab, a crashed/zombie context, or rapid dev hot-reloads
+ * then DEADLOCKS every authenticated query: home dashboard, "this week's
+ * sessions", templates, etc. hang forever with no error and spinners never
+ * resolve. (Observed: every getSession/getUser stuck waiting on
+ * `lock:sharedminds.core.auth.token`.)
  *
- * This wrapper caps the wait: if the lock can't be acquired within a few
- * seconds it proceeds WITHOUT it rather than hanging the whole app. The only
- * downside is a rare concurrent token refresh across tabs, which GoTrue
- * tolerates. When the lock is free (the normal case) behaviour is unchanged.
+ * We swap in a promise-chain lock scoped to THIS tab. It still serialises auth
+ * operations within the tab (so we don't fire concurrent token refreshes that
+ * race the refresh-token rotation), but it can't be blocked by a stale
+ * cross-tab lock, and it falls through after the acquire timeout so it can
+ * never hang. Worst case is a rare concurrent refresh across tabs, which
+ * GoTrue tolerates.
  */
-async function resilientAuthLock<R>(
+const AUTH_LOCK_CHAIN: Record<string, Promise<unknown>> = {};
+async function inMemoryAuthLock<R>(
   name: string,
-  _acquireTimeout: number,
+  acquireTimeout: number,
   fn: () => Promise<R>,
 ): Promise<R> {
-  if (typeof navigator === 'undefined' || !navigator.locks?.request) {
-    return fn();
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    return await navigator.locks.request(name, { signal: controller.signal }, () => fn());
-  } catch (err) {
-    if ((err as { name?: string })?.name === 'AbortError') {
-      console.warn('[supabase] auth lock timed out — proceeding without it to avoid a deadlock');
-      return fn();
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
+  const previous = AUTH_LOCK_CHAIN[name] ?? Promise.resolve();
+  // Wait for the previous op to finish, but never longer than the acquire
+  // timeout (supabase passes a negative value for "wait forever" — cap it).
+  const timeoutMs = acquireTimeout >= 0 ? acquireTimeout : 5000;
+  const ready = Promise.race([
+    previous.catch(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+  const run = ready.then(() => fn());
+  // Keep the chain alive (swallow errors so one failure doesn't poison it).
+  AUTH_LOCK_CHAIN[name] = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 // Create a fully configured Supabase client with connection resilience
@@ -64,7 +64,7 @@ export const supabase = createClient(
       storage: localStorage,       // Use browser localStorage for session
       storageKey: 'sharedminds.core.auth.token', // Explicit storage key
       flowType: 'pkce',           // Use PKCE flow for better security
-      lock: resilientAuthLock,    // Never deadlock on a stale Web Lock
+      lock: inMemoryAuthLock,     // Process-local lock — never deadlock on a stale Web Lock
     },
     global: {
       headers: {

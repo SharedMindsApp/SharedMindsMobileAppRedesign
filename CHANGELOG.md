@@ -46,10 +46,11 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 ### Fixed
 - **App-wide data stalls / infinite spinners** — supabase-js serialises auth
   token access through the Web Locks API and the default waits forever, so a
-  stale lock (crashed/backgrounded tab, rapid reloads) could deadlock *every*
-  authenticated query: home dashboard, "this week's sessions", templates and
-  more would spin indefinitely with no error. Added a resilient lock that
-  proceeds after a short timeout instead of hanging.
+  stale lock held by another tab / a zombie context / rapid reloads could
+  deadlock *every* authenticated query: home dashboard, "this week's sessions",
+  templates and more spun indefinitely with no error. Replaced it with a
+  process-local (in-tab) lock that can't be blocked by a stale cross-tab lock
+  and times out rather than hanging.
 - **Home page hanging on the loading skeleton** — the day-zero gate now always
   resolves (resolved-null + safety timeout), and returning users render
   instantly from a cached flag.
