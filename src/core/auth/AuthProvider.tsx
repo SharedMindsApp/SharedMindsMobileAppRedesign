@@ -108,12 +108,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [profileReady, setProfileReady] = useState(false);
     const profileRef = useRef<Profile | null>(null);
     const hasInitializedRef = useRef(false);
+    // Coalesce concurrent profile fetches for the same user. On a cold load
+    // initAuth + onAuthStateChange (INITIAL_SESSION and SIGNED_IN) all call
+    // fetchProfile within the same tick — each runs a profile query AND
+    // bootstrapPersonalSpace, saturating the connection pool and serialising
+    // everything. If a fetch for this uid is already in flight, reuse it.
+    const profileFetchInFlight = useRef<{ uid: string; promise: Promise<void> } | null>(null);
 
     useEffect(() => {
         profileRef.current = profile;
     }, [profile]);
 
-    const fetchProfile = useCallback(async (userId: string) => {
+    const fetchProfileImpl = useCallback(async (userId: string) => {
         try {
             const { data, error: fetchError } = await supabase
                 .from('profiles')
@@ -274,8 +280,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [setProfileReady]);
 
+    // Deduped wrapper: collapses concurrent fetches for the same user into a
+    // single in-flight request (see profileFetchInFlight above).
+    const fetchProfile = useCallback(async (userId: string) => {
+        const inFlight = profileFetchInFlight.current;
+        if (inFlight && inFlight.uid === userId) return inFlight.promise;
+        const promise = fetchProfileImpl(userId).finally(() => {
+            if (profileFetchInFlight.current?.promise === promise) {
+                profileFetchInFlight.current = null;
+            }
+        });
+        profileFetchInFlight.current = { uid: userId, promise };
+        return promise;
+    }, [fetchProfileImpl]);
+
     const refreshProfile = useCallback(async () => {
         if (user?.id) {
+            // Force a fresh fetch even if one just ran — clear the dedup guard.
+            profileFetchInFlight.current = null;
             await fetchProfile(user.id);
         }
     }, [user?.id, fetchProfile]);

@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -370,7 +371,16 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
 
   // Refresh projects across all spaces the user can see (own + shared).
   // Exposed via context so list pages / editor modals can re-trigger after CUD.
-  const refreshProjects = async () => {
+  //
+  // Coalesce concurrent calls: on a cold load both the provider mount and
+  // the ProjectsPage mount (and any editor) can call this within the same
+  // tick. Without dedup that fires N identical fetches at once, saturating
+  // the connection pool and serialising them (the "1 row in 4s ×3" we saw).
+  // If a refresh is already in flight, return the same promise.
+  const refreshInFlight = useRef<Promise<void> | null>(null);
+  const refreshProjects = async (): Promise<void> => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const run = (async () => {
     try {
       const _t0 = performance.now();
       const rows = await ProjectService.getProjectsForUser();
@@ -427,6 +437,9 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('[CoreData] refreshProjects failed:', err);
     }
+    })();
+    refreshInFlight.current = run;
+    try { await run; } finally { refreshInFlight.current = null; }
   };
 
   // Load backend models (projects, tasks, daily OS)

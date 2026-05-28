@@ -101,18 +101,61 @@ export const ProjectService = {
      * simple space scoping.
      */
     async getProjectsForUser(): Promise<Project[]> {
-        // RLS handles the visibility filter; we just fetch everything we can see.
-        const { data, error } = await supabase
-            .from('projects')
-            .select('*')
-            .neq('status', 'archived')
-            .order('updated_at', { ascending: false });
+        // PERF: the naïve version was `select * from projects where status
+        // <> 'archived'` and let RLS filter. That forces Postgres to run the
+        // per-row can_see_project() security-definer function across EVERY
+        // project row in the table (all users' rows), which became multi-
+        // second as the table grew. Instead we prune by indexed columns
+        // FIRST so RLS only evaluates on the handful of rows we actually
+        // fetch:
+        //   • own projects   → created_by = me      (projects_created_by_idx)
+        //   • shared projects → id IN (my memberships) (PK lookups)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return [];
 
-        if (error) {
-            console.error('[ProjectService] Failed to fetch projects for user:', error);
-            throw error;
+        const [ownRes, memRes] = await Promise.all([
+            supabase
+                .from('projects')
+                .select('*')
+                .eq('created_by', user.id)
+                .neq('status', 'archived'),
+            supabase
+                .from('project_members')
+                .select('project_id')
+                .eq('user_id', user.id),
+        ]);
+
+        if (ownRes.error) {
+            console.error('[ProjectService] Failed to fetch own projects:', ownRes.error);
+            throw ownRes.error;
         }
-        return (data || []) as Project[];
+
+        const own = (ownRes.data ?? []) as Project[];
+        const ownIds = new Set(own.map((p) => p.id));
+
+        // Shared projects: memberships pointing at projects I didn't create.
+        const sharedIds = (memRes.data ?? [])
+            .map((m: { project_id: string }) => m.project_id)
+            .filter((id) => !ownIds.has(id));
+
+        let shared: Project[] = [];
+        if (sharedIds.length > 0) {
+            const { data, error } = await supabase
+                .from('projects')
+                .select('*')
+                .in('id', sharedIds)
+                .neq('status', 'archived');
+            if (error) {
+                console.error('[ProjectService] Failed to fetch shared projects:', error);
+            } else {
+                shared = (data ?? []) as Project[];
+            }
+        }
+
+        // Merge + sort newest-updated first (matches the old behaviour).
+        return [...own, ...shared].sort(
+            (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
+        );
     },
 
     async getProjectById(projectId: string): Promise<Project | null> {
