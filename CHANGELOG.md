@@ -35,6 +35,9 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   naming it. Applying reloads the planner grid in place.
 
 ### Changed
+- **Sessions are camera-on** — removed the "Real world · away from screen"
+  (no-camera, offline) option from the declare modal. Solo focus, body-double
+  (camera required), and live modes remain.
 - **"Match me now" actually matches you now** — it used to only ever open your
   own door (ignoring everyone already working), so it never paired you with
   anyone. It now opens a chooser that surfaces **live open doors to drop into**
@@ -54,6 +57,10 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   go") instead of deleting on the first tap.
 
 ### Fixed
+- **Declare-session modal: "Start" button was unreachable** — step 2's controls
+  weren't in a scroll region, so on shorter viewports the modal overflowed its
+  max height and clipped the footer, making it impossible to start the session.
+  Step 2 now scrolls with the Back/Start footer pinned.
 - **App-wide data stalls / infinite spinners** — supabase-js serialises auth
   token access through the Web Locks API and the default waits forever, so a
   stale lock held by another tab / a zombie context / rapid reloads could
