@@ -56,7 +56,7 @@ import { LiveNowDropInStrip } from './LiveNowDropInStrip';
 import { OnboardingNudges } from './OnboardingNudges';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
 import { SkillsPromptModal } from './SkillsPromptModal';
-import { isSkillsPromptArmed, consumeSkillsPromptArm, dismissSkillsPrompt } from '../../../lib/skillsPrompt';
+import { shouldShowSkillsPrompt, markSkillsPromptShown } from '../../../lib/skillsPrompt';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
 import { ShippedFeedStrip } from './ShippedFeedStrip';
 import { DashboardTabs } from './DashboardTabs';
@@ -482,20 +482,23 @@ export function DashboardPage() {
     setProfileModalOpen(false);
   }
 
-  // Skills modal trigger: armed by scheduling/booking a session, and only
-  // when the user has no skills yet. Consume the arm flag so it shows once.
+  // Skills modal trigger: armed by scheduling/booking, OR a weekly periodic
+  // reminder once the user has done a session — whichever, capped to at most
+  // once every 7 days (enforced inside shouldShowSkillsPrompt). Marking it
+  // shown starts the cooldown + clears the armed flag.
   useEffect(() => {
     if (!profile) return;
     const hasSkills = (profile.skills?.length ?? 0) > 0;
-    if (hasSkills) return;
-    if (isSkillsPromptArmed()) {
-      consumeSkillsPromptArm();
+    const sessionsDone = stats?.totalSessions ?? 0;
+    if (shouldShowSkillsPrompt(hasSkills, sessionsDone)) {
+      markSkillsPromptShown();
       setSkillsModalOpen(true);
     }
-  }, [profile]);
+  }, [profile, stats?.totalSessions]);
 
   function closeSkillsModal() {
-    dismissSkillsPrompt();
+    // Cooldown already started when the modal opened; nothing more to do —
+    // it simply won't reappear for another week (or at all once skills set).
     setSkillsModalOpen(false);
   }
 

@@ -425,3 +425,14 @@ for (const cat of SKILL_CATEGORIES) {
 export function findSkillCategory(skill: string): SkillCategory | null {
   return CATEGORY_BY_SKILL.get(skill.toLowerCase()) ?? null;
 }
+
+/** Fallback emoji for skills that aren't in a curated category (custom-typed
+ *  skills, or catalogued skills without a category hit). Guarantees every
+ *  skill chip carries an icon rather than rendering bare text. */
+export const DEFAULT_SKILL_EMOJI = '🏷️';
+
+/** The emoji to show for a skill — its category's emoji, or a neutral
+ *  fallback so nothing ever renders without an icon. */
+export function skillEmoji(skill: string): string {
+  return findSkillCategory(skill)?.emoji ?? DEFAULT_SKILL_EMOJI;
+}

@@ -26,7 +26,7 @@ import { X, Search, Sparkles, Plus, Star } from 'lucide-react';
 import {
   SKILL_CATEGORIES,
   MAX_SKILLS_PER_PROFILE,
-  findSkillCategory,
+  skillEmoji,
   SKILL_LEVELS,
   type SkillLevel,
   type SkillLevelMap,
@@ -167,13 +167,12 @@ export function SkillsEditor({
       {value.length > 0 && !showLevels && (
         <div className="flex flex-wrap gap-1.5">
           {value.map((skill) => {
-            const cat = findSkillCategory(skill);
             return (
               <span
                 key={skill}
                 className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold"
               >
-                {cat && <span className="text-sm leading-none">{cat.emoji}</span>}
+                <span className="text-sm leading-none">{skillEmoji(skill)}</span>
                 {skill}
                 <button
                   type="button"
@@ -193,14 +192,13 @@ export function SkillsEditor({
       {value.length > 0 && showLevels && (
         <div className="space-y-1.5">
           {value.map((skill) => {
-            const cat = findSkillCategory(skill);
             const current = levels![skill];
             return (
               <div
                 key={skill}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/8 ring-1 ring-primary/15"
               >
-                {cat && <span className="text-sm leading-none shrink-0">{cat.emoji}</span>}
+                <span className="text-sm leading-none shrink-0">{skillEmoji(skill)}</span>
                 <span className="text-xs font-bold text-primary flex-1 min-w-0 truncate">
                   {skill}
                 </span>
