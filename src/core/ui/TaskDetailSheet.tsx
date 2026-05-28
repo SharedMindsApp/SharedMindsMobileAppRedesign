@@ -69,6 +69,9 @@ export function TaskDetailSheet({
   const [busy, setBusy] = useState<null | 'done' | 'today' | 'tomorrow' | 'backlog' | 'drop' | 'delete'>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.title);
+  // "Let it go" is destructive + easy to mis-tap, so the first tap arms an
+  // inline confirm rather than acting immediately.
+  const [confirmingDrop, setConfirmingDrop] = useState(false);
 
   // Esc closes the sheet.
   useEffect(() => {
@@ -235,31 +238,58 @@ export function TaskDetailSheet({
         </div>
 
         {/* Footer actions — let go / delete */}
-        {(onDrop || onDelete) && (
-          <div className="px-5 py-4 border-t border-surface-container/70 flex items-center gap-2">
-            {onDrop && (
-              <button
-                type="button"
-                onClick={() => run('drop', onDrop, true)}
-                disabled={busy !== null}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-rose-600 text-xs font-bold hover:bg-rose-50 active:scale-[0.98] transition-all"
-              >
-                {busy === 'drop' ? <Loader2 size={13} className="animate-spin" /> : <ArrowRight size={13} />}
-                Let it go
-              </button>
-            )}
-            {onDelete && (
-              <button
-                type="button"
-                onClick={() => run('delete', onDelete, true)}
-                disabled={busy !== null}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl stitch-text-secondary text-xs font-bold hover:bg-surface-container-low active:scale-[0.98] transition-all"
-              >
-                {busy === 'delete' ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                Delete
-              </button>
-            )}
-          </div>
+        {(onDrop || onDelete) && !done && (
+          confirmingDrop ? (
+            <div className="px-5 py-4 border-t border-surface-container/70">
+              <p className="text-xs font-semibold stitch-text-primary mb-2.5">
+                Let this task go? It'll drop off your lists.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => run('drop', onDrop, true)}
+                  disabled={busy !== null}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold active:scale-[0.98] transition-transform"
+                >
+                  {busy === 'drop' ? <Loader2 size={13} className="animate-spin" /> : <ArrowRight size={13} />}
+                  Yes, let it go
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDrop(false)}
+                  disabled={busy !== null}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
+                >
+                  Keep it
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="px-5 py-4 border-t border-surface-container/70 flex items-center gap-2">
+              {onDrop && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDrop(true)}
+                  disabled={busy !== null}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-rose-600 text-xs font-bold hover:bg-rose-50 active:scale-[0.98] transition-all"
+                >
+                  <ArrowRight size={13} />
+                  Let it go
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={() => run('delete', onDelete, true)}
+                  disabled={busy !== null}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl stitch-text-secondary text-xs font-bold hover:bg-surface-container-low active:scale-[0.98] transition-all"
+                >
+                  {busy === 'delete' ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                  Delete
+                </button>
+              )}
+            </div>
+          )
         )}
 
         {/* When done, a gentle confirmation footer instead of the actions. */}
