@@ -39,6 +39,7 @@ import { ProjectService } from '../../services/ProjectService';
 import { SpaceService } from '../../services/SpaceService';
 import { TaskService } from '../../services/TaskService';
 import { ReflectionService, mondayOf } from '../../services/ReflectionService';
+import { buildRoadmapValidationPrompt, parseRoadmapReply } from '../../../lib/roadmapPrompt';
 import { AvatarCropper } from './AvatarCropper';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -928,6 +929,11 @@ export function OnboardingWizard({
   // blank-page barrier dramatically.
   const [showAiPromptHelper, setShowAiPromptHelper] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  // Roadmap "validate with your own AI" helper (goals step).
+  const [showRoadmapHelper, setShowRoadmapHelper] = useState(false);
+  const [roadmapPromptCopied, setRoadmapPromptCopied] = useState(false);
+  const [roadmapReply, setRoadmapReply] = useState('');
+  const [roadmapApplyMsg, setRoadmapApplyMsg] = useState<string | null>(null);
 
   // ── Roadmap: milestones with nested phases ─────────────────────
   // Two-tier structure:
@@ -992,6 +998,43 @@ export function OnboardingWizard({
       // visible so the user can manually select+copy.
       setPromptCopied(false);
     }
+  }
+
+  async function copyRoadmapPrompt() {
+    try {
+      await navigator.clipboard.writeText(
+        buildRoadmapValidationPrompt({
+          projectName: projectTitle,
+          brainDump: projectBrainDump,
+          milestones: milestoneInputs,
+        }),
+      );
+      setRoadmapPromptCopied(true);
+      setTimeout(() => setRoadmapPromptCopied(false), 2000);
+    } catch {
+      setRoadmapPromptCopied(false);
+    }
+  }
+
+  /** Parse the AI's reply (M:/P: format) and replace the roadmap with it. */
+  function applyRoadmapReply() {
+    const parsed = parseRoadmapReply(roadmapReply);
+    if (parsed.length === 0) {
+      setRoadmapApplyMsg("Couldn't read that — make sure you pasted the AI's reply in the M:/P: format.");
+      return;
+    }
+    setMilestoneInputs(parsed.map((m) => ({
+      title: m.title,
+      weight_pct: m.weight_pct,
+      already_done: false,
+      phases: m.phases.length > 0
+        ? m.phases.map((p) => ({ title: p.title, weight_pct: p.weight_pct, already_done: false }))
+        : [{ title: '', weight_pct: 100, already_done: false }],
+    })));
+    const phaseCount = parsed.reduce((n, m) => n + m.phases.length, 0);
+    setRoadmapApplyMsg(`Applied ${parsed.length} milestone${parsed.length === 1 ? '' : 's'} · ${phaseCount} phase${phaseCount === 1 ? '' : 's'}.`);
+    setRoadmapReply('');
+    setShowRoadmapHelper(false);
   }
 
   function handleCropConfirm(croppedFile: File, previewUrl: string) {
@@ -2655,6 +2698,88 @@ export function OnboardingWizard({
             : <><Wand2 size={14} /> Suggest milestones + phases</>
           }
         </button>
+
+        {/* ── Validate with your own AI ──────────────────────────
+            Once there's a draft roadmap, hand it to an assistant that
+            already knows the project deeply for a second opinion — then
+            paste the corrected version straight back. */}
+        {milestoneInputs.some((m) => m.title.trim()) && (
+          <div className="mb-4">
+            {!showRoadmapHelper ? (
+              <button
+                type="button"
+                onClick={() => { setShowRoadmapHelper(true); setRoadmapApplyMsg(null); }}
+                className="text-xs font-semibold text-violet-700 hover:opacity-70 transition-opacity inline-flex items-center gap-1.5"
+              >
+                <Sparkles size={12} />
+                Want a second opinion? Get your own AI to sanity-check this roadmap
+              </button>
+            ) : (
+              <div
+                className="rounded-xl bg-violet-50 ring-1 ring-violet-200 p-3"
+                style={{ animation: 'wizFadeUp 300ms cubic-bezier(0.16, 1, 0.3, 1) both' }}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-violet-600 shrink-0" />
+                    <p className="text-xs font-bold text-violet-900">Validate with your AI</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRoadmapHelper(false)}
+                    className="shrink-0 w-5 h-5 rounded-full hover:bg-violet-100 flex items-center justify-center transition-colors"
+                    aria-label="Close"
+                  >
+                    <X size={11} className="text-violet-700" />
+                  </button>
+                </div>
+                <ol className="text-[11px] text-violet-900 leading-relaxed list-decimal pl-4 space-y-0.5 mb-2.5">
+                  <li>Copy the prompt — it bundles your project + this draft roadmap</li>
+                  <li>Paste it into your AI chat (the one that knows this project)</li>
+                  <li>Paste its corrected roadmap back below and Apply</li>
+                </ol>
+                <div className="rounded-lg bg-white border border-violet-200 p-2.5 max-h-32 overflow-y-auto mb-2">
+                  <pre className="text-[10.5px] leading-snug text-slate-700 whitespace-pre-wrap font-mono">
+                    {buildRoadmapValidationPrompt({ projectName: projectTitle, brainDump: projectBrainDump, milestones: milestoneInputs })}
+                  </pre>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyRoadmapPrompt}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-[0.97] mb-2.5 ${
+                    roadmapPromptCopied
+                      ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                      : 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-500/30'
+                  }`}
+                >
+                  {roadmapPromptCopied
+                    ? <><Check size={12} strokeWidth={3} /> Copied — paste into your AI</>
+                    : <><Sparkles size={12} /> Copy prompt</>
+                  }
+                </button>
+
+                <textarea
+                  value={roadmapReply}
+                  onChange={(e) => { setRoadmapReply(e.target.value); setRoadmapApplyMsg(null); }}
+                  placeholder={"Paste your AI's reply here (the M: / P: lines)…"}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-violet-200 text-[12px] leading-relaxed text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-violet-400/30 resize-y mb-2"
+                />
+                <button
+                  type="button"
+                  onClick={applyRoadmapReply}
+                  disabled={!roadmapReply.trim()}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-violet-100 text-violet-800 hover:bg-violet-200 transition-colors disabled:opacity-40"
+                >
+                  <Wand2 size={12} /> Apply to roadmap
+                </button>
+              </div>
+            )}
+            {roadmapApplyMsg && (
+              <p className="text-[11px] font-semibold text-violet-700 mt-1.5">{roadmapApplyMsg}</p>
+            )}
+          </div>
+        )}
 
         {aiError && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
