@@ -1496,20 +1496,23 @@ function BacklogRow({
     return { iso: isoDate(d), label, dayNum: d.getDate() };
   });
   return (
-    <div className="group bg-white rounded-lg ring-1 ring-surface-container px-3 py-2 flex items-center gap-2">
+    <div className="bg-white rounded-lg ring-1 ring-surface-container px-3 py-2 space-y-2">
+      {/* Row 1 — title (tap to open) */}
       <button
         type="button"
         onClick={onOpen}
-        className="flex-1 min-w-0 text-left text-xs font-semibold stitch-text-primary truncate hover:text-primary transition-colors"
+        className="block w-full text-left text-xs font-semibold stitch-text-primary leading-snug break-words hover:text-primary transition-colors"
       >
         {task.title}
       </button>
-      <TaskLoadBadge load={energyToLoad(task.energy_level)} className="shrink-0" />
-      <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+
+      {/* Row 2 — energy level + scheduling + delete */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <TaskLoadBadge load={energyToLoad(task.energy_level)} className="shrink-0" />
         <button
           type="button"
           onClick={onScheduleToday}
-          className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:bg-surface-container-low hover:stitch-text-primary"
+          className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider stitch-text-secondary bg-surface-container-low hover:bg-surface-container hover:stitch-text-primary transition-colors"
         >
           Today
         </button>
@@ -1517,12 +1520,12 @@ function BacklogRow({
           <button
             type="button"
             onClick={() => setShowDays((v) => !v)}
-            className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider stitch-text-secondary hover:bg-surface-container-low hover:stitch-text-primary"
+            className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider stitch-text-secondary bg-surface-container-low hover:bg-surface-container hover:stitch-text-primary transition-colors"
           >
             Pick day
           </button>
           {showDays && (
-            <div className="absolute right-0 top-full mt-1 z-10 bg-surface ring-1 ring-surface-container rounded-lg shadow-lg p-1 w-44">
+            <div className="absolute left-0 top-full mt-1 z-10 bg-surface ring-1 ring-surface-container rounded-lg shadow-lg p-1 w-44">
               {pickerDays.map(({ iso, label, dayNum }) => (
                 <button
                   key={iso}
@@ -1539,7 +1542,7 @@ function BacklogRow({
         <button
           type="button"
           onClick={onDelete}
-          className="w-6 h-6 rounded-md grid place-items-center text-rose-600/70 hover:bg-rose-50 hover:text-rose-700"
+          className="ml-auto w-6 h-6 rounded-md grid place-items-center text-rose-600/70 hover:bg-rose-50 hover:text-rose-700 transition-colors"
           aria-label="Delete task"
         >
           <Trash2 size={11} />
