@@ -168,6 +168,10 @@ type CoreDataContextValue = {
   addTaskAsync: (title: string, projectId?: string | null, opts?: { scheduledFor?: string | null }) => Promise<string>;
   /** Permanently deletes a task from the DB and removes it from local state. */
   deleteTaskAsync: (taskId: string) => Promise<void>;
+  /** Set/clear a task's scheduled day (YYYY-MM-DD or null). Optimistic. */
+  rescheduleTaskAsync: (taskId: string, isoDate: string | null) => Promise<void>;
+  /** Mark a task dropped ("let go") — removes it from open lists. Optimistic. */
+  dropTaskAsync: (taskId: string) => Promise<void>;
   /**
    * Patch a task — title, project_id, weekly_intention_id, energy_level.
    * Optimistic local update + DB write. Other fields can be added as the
@@ -694,6 +698,43 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
               tasks: current.tasks.some((x) => x.id === taskId)
                 ? current.tasks
                 : [...current.tasks, t],
+            }));
+          }
+          throw err;
+        }
+      },
+      rescheduleTaskAsync: async (taskId, isoDate) => {
+        const prev = state.tasks.find((t) => t.id === taskId)?.scheduledFor ?? null;
+        setState((current) => ({
+          ...current,
+          tasks: current.tasks.map((t) => (t.id === taskId ? { ...t, scheduledFor: isoDate } : t)),
+        }));
+        try {
+          await TaskService.updateTask(taskId, { scheduled_for: isoDate });
+        } catch (err) {
+          console.error('[CoreDataContext] rescheduleTaskAsync failed, reverting:', err);
+          setState((current) => ({
+            ...current,
+            tasks: current.tasks.map((t) => (t.id === taskId ? { ...t, scheduledFor: prev } : t)),
+          }));
+          throw err;
+        }
+      },
+      dropTaskAsync: async (taskId) => {
+        let snapshot: CoreTask | undefined;
+        setState((current) => {
+          snapshot = current.tasks.find((t) => t.id === taskId);
+          return { ...current, tasks: current.tasks.filter((t) => t.id !== taskId) };
+        });
+        try {
+          await TaskService.updateTask(taskId, { status: 'dropped' });
+        } catch (err) {
+          console.error('[CoreDataContext] dropTaskAsync failed, restoring:', err);
+          if (snapshot) {
+            const t = snapshot;
+            setState((current) => ({
+              ...current,
+              tasks: current.tasks.some((x) => x.id === taskId) ? current.tasks : [...current.tasks, t],
             }));
           }
           throw err;

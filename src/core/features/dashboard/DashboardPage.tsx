@@ -64,6 +64,7 @@ import { DashboardTabs } from './DashboardTabs';
 import { StatsTab } from './StatsTab';
 import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
 import { PlanTasksCard } from './PlanTasksCard';
+import { TaskCheckInCard } from './TaskCheckInCard';
 import { PulsePeopleTab } from './PulsePeopleTab';
 // OnboardingChecklist + ProfileCompletenessCard removed — the wizard now
 // handles all setup before the user reaches the home screen.
@@ -843,10 +844,13 @@ export function DashboardPage() {
             }
             plan={
               <div className="space-y-4">
+                {/* 0. Daily check-in — triage anything that slipped (once/day) */}
+                <TaskCheckInCard tasks={tasks} projects={projects} />
+
                 {/* 1. Goals — weekly intentions (strategic, 1-3 per week) */}
                 <WeeklyIntentionsCard />
 
-                {/* 2. Tasks — operational backlog with quick-start */}
+                {/* 2. Tasks — today's focus + quick-start */}
                 <PlanTasksCard
                   tasks={tasks}
                   projects={projects}
