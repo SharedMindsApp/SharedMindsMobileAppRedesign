@@ -23,7 +23,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera,
   AlertCircle, Eye, EyeOff, UserRound, Bell, Shield, Settings as SettingsIcon,
-  Sun, Moon, Zap, Check, Smartphone,
+  Sun, Moon, Zap, Check, Smartphone, Download, Trash2,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
@@ -34,6 +34,7 @@ import { CityAutocomplete } from '../../ui/CityAutocomplete';
 import { SkillsEditor } from '../../ui/SkillsEditor';
 import { formatLocation } from '../../../lib/countries';
 import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
+import { exportMyData, deleteMyAccount } from '../../services/PrivacyService';
 import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
 import {
   isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush, isSubscribed,
@@ -552,7 +553,130 @@ function AccountTab() {
           </button>
         </div>
       </SurfaceCard>
+
+      {/* ── Your data (GDPR) ─────────────────────────────── */}
+      <DataRightsCard />
     </div>
+  );
+}
+
+// ── Your data: export (Art. 20) + delete account (Art. 17) ────────────────
+
+function DataRightsCard() {
+  const navigate = useNavigate();
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const { skipped } = await exportMyData();
+      setExportMsg(
+        skipped.length > 0
+          ? `Download started. (${skipped.length} section${skipped.length === 1 ? '' : 's'} unavailable — email privacy@sharedminds.app for the rest.)`
+          : 'Download started — check your downloads folder.',
+      );
+    } catch (e: any) {
+      setExportMsg(e?.message ?? 'Export failed. Please email privacy@sharedminds.app.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (deleting || deleteText !== 'DELETE') return;
+    setDeleting(true);
+    setDeleteError(null);
+    const res = await deleteMyAccount();
+    if (res.ok) {
+      // Account + session are gone — bounce to the marketing/home root.
+      navigate('/');
+    } else {
+      setDeleteError(res.error ?? 'Deletion failed. Please email privacy@sharedminds.app.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <SurfaceCard>
+      <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Your data</p>
+
+      {/* Export */}
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={exporting}
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-low hover:bg-surface-container stitch-text-primary text-sm font-semibold transition-all active:scale-[0.98]"
+      >
+        {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+        {exporting ? 'Preparing your data…' : 'Download my data'}
+      </button>
+      <p className="text-[11px] stitch-text-secondary mt-2 leading-relaxed">
+        Exports your profile, sessions, tasks, projects, messages and more as a JSON file (GDPR data portability).
+      </p>
+      {exportMsg && (
+        <p className="text-[11px] font-semibold text-primary mt-2">{exportMsg}</p>
+      )}
+
+      {/* Delete account */}
+      <div className="mt-5 pt-4 border-t border-red-200/60">
+        <p className="text-[10px] font-bold text-red-600 tracking-widest uppercase mb-2">Danger zone</p>
+        {!confirmingDelete ? (
+          <button
+            type="button"
+            onClick={() => { setConfirmingDelete(true); setDeleteError(null); }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-sm font-semibold transition-all active:scale-[0.98]"
+          >
+            <Trash2 size={15} />
+            Delete my account
+          </button>
+        ) : (
+          <div className="rounded-xl bg-red-50 ring-1 ring-red-200 p-4">
+            <p className="text-sm font-bold text-red-700 mb-1">This is permanent.</p>
+            <p className="text-[12px] text-red-700/90 leading-relaxed mb-3">
+              Your profile, sessions, tasks, projects, messages and connections will be permanently deleted. This cannot be undone. Type <span className="font-mono font-bold">DELETE</span> to confirm.
+            </p>
+            <input
+              type="text"
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+              disabled={deleting}
+              className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-mono text-red-900 placeholder:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400 mb-3"
+            />
+            {deleteError && (
+              <p className="text-[12px] font-semibold text-red-700 mb-3">{deleteError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setConfirmingDelete(false); setDeleteText(''); setDeleteError(null); }}
+                disabled={deleting}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-white ring-1 ring-red-200 text-red-700 text-sm font-semibold hover:bg-red-50 transition-all active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting || deleteText !== 'DELETE'}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-all active:scale-[0.98] disabled:bg-red-300 disabled:cursor-not-allowed"
+              >
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deleting ? 'Deleting…' : 'Delete forever'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </SurfaceCard>
   );
 }
 

@@ -382,9 +382,9 @@ export function PrivacyPolicyPage() {
       <ul className="list-disc pl-5 space-y-1">
         <li><strong>Access (Art. 15)</strong> — request a copy of your data</li>
         <li><strong>Rectification (Art. 16)</strong> — correct inaccurate data; most fields are editable on the Profile page</li>
-        <li><strong>Erasure (Art. 17)</strong> — request account deletion; we complete within 30 days</li>
+        <li><strong>Erasure (Art. 17)</strong> — delete your account instantly from Settings → Your data → Delete my account, or email us; deletion is permanent and immediate</li>
         <li><strong>Restriction (Art. 18)</strong> — pause processing while a complaint is resolved</li>
-        <li><strong>Portability (Art. 20)</strong> — receive your data in JSON / CSV format</li>
+        <li><strong>Portability (Art. 20)</strong> — download all your data as JSON from Settings → Your data → Download my data</li>
         <li><strong>Object (Art. 21)</strong> — object to legitimate-interest processing</li>
         <li><strong>Withdraw consent (Art. 7(3))</strong> — for any consent-based processing</li>
         <li><strong>Automated decision-making (Art. 22)</strong> — request human review (see above)</li>
