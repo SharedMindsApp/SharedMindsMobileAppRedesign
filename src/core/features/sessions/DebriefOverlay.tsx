@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, MinusCircle, XCircle, Clock } from 'lucide-react';
+import { CheckCircle2, MinusCircle, XCircle, Clock, Inbox, Plus, Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import {
   submitSessionOutcome,
@@ -21,6 +21,8 @@ import {
   type SessionOutcomeRow,
 } from '../../services/SessionService';
 import { TaskService } from '../../services/TaskService';
+import { CaptureService, type SessionCapture } from '../../services/CaptureService';
+import { SpaceService } from '../../services/SpaceService';
 import { MoodPicker } from './MoodPicker';
 import type { SessionKind } from '../../../lib/sessionMood';
 
@@ -60,6 +62,41 @@ export function DebriefOverlay({
   const [endMood, setEndMood] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(DEBRIEF_DURATION_S);
   const finalizedRef = useRef(false);
+
+  // Parked distractions captured during the session, awaiting triage.
+  const [captures, setCaptures] = useState<SessionCapture[]>([]);
+  const [captureBusy, setCaptureBusy] = useState<string | null>(null);
+  const spaceIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    CaptureService.getCapturesForSession(sessionId)
+      .then((rows) => { if (!cancelled) setCaptures(rows.filter((c) => !c.resolved_at)); })
+      .catch(() => {});
+    // Bootstrap the personal space lazily so "make a task" has a home.
+    SpaceService.bootstrapPersonalSpace(currentUserId)
+      .then((s) => { spaceIdRef.current = s.id; })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId, currentUserId]);
+
+  async function keepCaptureAsTask(c: SessionCapture) {
+    if (captureBusy || !spaceIdRef.current) return;
+    setCaptureBusy(c.id);
+    try {
+      await CaptureService.convertToTask(c, spaceIdRef.current, currentUserId);
+      setCaptures((prev) => prev.filter((x) => x.id !== c.id));
+    } catch { /* leave in list */ }
+    finally { setCaptureBusy(null); }
+  }
+  async function discardCapture(c: SessionCapture) {
+    if (captureBusy) return;
+    setCaptureBusy(c.id);
+    try {
+      await CaptureService.deleteCapture(c.id);
+      setCaptures((prev) => prev.filter((x) => x.id !== c.id));
+    } catch { /* leave in list */ }
+    finally { setCaptureBusy(null); }
+  }
 
   const myOutcome = useMemo(
     () => outcomes.find((o) => o.user_id === currentUserId)?.outcome ?? null,
@@ -185,6 +222,47 @@ export function DebriefOverlay({
             </p>
             <p className="text-sm font-bold text-white leading-snug">
               {declaredGoal}
+            </p>
+          </div>
+        )}
+
+        {/* ── Parked distractions — triage what you caught mid-session ── */}
+        {captures.length > 0 && (
+          <div className="mb-5 rounded-2xl bg-white/5 border border-white/10 p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Inbox size={13} className="text-violet-300" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">
+                Parked · {captures.length}
+              </p>
+            </div>
+            <ul className="space-y-1.5">
+              {captures.map((c) => (
+                <li key={c.id} className="flex items-center gap-2">
+                  <span className="flex-1 min-w-0 text-[13px] text-white/85 leading-snug break-words">{c.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => keepCaptureAsTask(c)}
+                    disabled={captureBusy === c.id}
+                    className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-500/90 hover:bg-violet-500 text-white text-[11px] font-bold transition-colors disabled:opacity-50"
+                    title="Make this a task"
+                  >
+                    {captureBusy === c.id ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} strokeWidth={3} />}
+                    Task
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => discardCapture(c)}
+                    disabled={captureBusy === c.id}
+                    className="shrink-0 w-7 h-7 rounded-lg grid place-items-center text-white/40 hover:text-rose-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+                    aria-label="Discard"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[10px] text-white/35 mt-2 leading-snug">
+              Anything you leave stays in your parking lot to sort later.
             </p>
           </div>
         )}

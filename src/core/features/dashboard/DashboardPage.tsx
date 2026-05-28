@@ -65,6 +65,7 @@ import { StatsTab } from './StatsTab';
 import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
 import { PlanTasksCard } from './PlanTasksCard';
 import { TaskCheckInCard } from './TaskCheckInCard';
+import { ParkingLotCard } from './ParkingLotCard';
 const ReEntryWizard = lazy(() =>
   import('./ReEntryWizard').then((m) => ({ default: m.ReEntryWizard })));
 import { PulsePeopleTab } from './PulsePeopleTab';
@@ -865,6 +866,9 @@ export function DashboardPage() {
               <div className="space-y-4">
                 {/* 0. Daily check-in — triage anything that slipped (once/day) */}
                 <TaskCheckInCard tasks={tasks} projects={projects} />
+
+                {/* 0b. Parking lot — distractions parked during sessions */}
+                <ParkingLotCard />
 
                 {/* 1. Goals — weekly intentions (strategic, 1-3 per week) */}
                 <WeeklyIntentionsCard />

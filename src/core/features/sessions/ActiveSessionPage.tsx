@@ -13,6 +13,7 @@ import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHos
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
+import { ParkItPanel } from './ParkItPanel';
 import { WaitingRoom } from './WaitingRoom';
 import { AmbientPeersStrip } from './AmbientPeersStrip';
 import { SoloVisualizer, readVisualizerStyle, writeVisualizerStyle, type VisualizerStyle } from './SoloVisualizer';
@@ -916,6 +917,10 @@ export function ActiveSessionPage() {
         applicable={!isMusicGroupSession || isMusicHost}
         onRepick={() => wizards.launchWizard('arrival_state')}
       />
+
+      {/* Distraction parking lot — capture interruptions without chasing
+          them. Hidden during the debrief (captures get triaged there). */}
+      {session && !showDebrief && <ParkItPanel sessionId={session.id} />}
     </div>,
     document.body,
   );
