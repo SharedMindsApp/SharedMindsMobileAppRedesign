@@ -37,6 +37,7 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { IntentionWizard } from '../reflection/IntentionWizard';
 import { fetchUpcomingScheduledSessions, type ScheduledSessionWithProfile } from '../../services/SessionService';
 import type { GridSession } from '../sessions/CalendarView';
+import { SessionHoverCard } from '../sessions/SessionHoverCard';
 
 // The session detail sheet lives in CalendarView (the /sessions route chunk).
 // Lazy-load it so opening a session on home pulls that chunk on demand rather
@@ -535,12 +536,13 @@ function WeekGoalsSidebar({
 function WeekTimeline({
   weekDays, weekBlocks, weekSessions, todayKey, currentHour, currentMin,
   nowLabel, showNowLine, nowYpx,
-  onToggle, onStart, onDelete, onSwitchToDay, onSelectSession,
+  onToggle, onStart, onDelete, onSwitchToDay, onSelectSession, onHoverSession,
 }: {
   weekDays: WeekDay[];
   weekBlocks: TimeBlock[];
   weekSessions: PlannerSession[];
   onSelectSession: (ps: PlannerSession) => void;
+  onHoverSession: (ps: PlannerSession | null, rect: DOMRect | null) => void;
   todayKey: string;
   currentHour: number;
   currentMin: number;
@@ -699,6 +701,8 @@ function WeekTimeline({
                       tabIndex={0}
                       onClick={() => onSelectSession(ps)}
                       onKeyDown={(e) => { if (e.key === 'Enter') onSelectSession(ps); }}
+                      onMouseEnter={(e) => onHoverSession(ps, e.currentTarget.getBoundingClientRect())}
+                      onMouseLeave={() => onHoverSession(null, null)}
                       className={`absolute left-1 right-1 rounded-lg pl-2 pr-1.5 py-1 overflow-hidden cursor-pointer hover:brightness-[0.97] hover:z-10 transition ${completed ? '' : 'opacity-90'}`}
                       style={{ ...style, top: `${sessionTopPx(ps.startsAt)}px`, height: `${sessionHeightPx(ps.durationMins)}px` }}
                       title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
@@ -793,6 +797,8 @@ export function TodayPlannerCard({
   const [plannerSessions, setPlannerSessions] = useState<PlannerSession[]>([]);
   // The session whose detail sheet is open (clicked from the grid).
   const [selectedGridSession, setSelectedGridSession] = useState<GridSession | null>(null);
+  // The session being hovered → shows a preview card anchored to its block.
+  const [hoveredSession, setHoveredSession] = useState<{ session: GridSession; rect: DOMRect } | null>(null);
 
   const reloadSessions = useCallback(async () => {
     if (!user) return;
@@ -1276,6 +1282,8 @@ export function TodayPlannerCard({
                               tabIndex={0}
                               onClick={() => setSelectedGridSession(plannerToGrid(ps.raw))}
                               onKeyDown={(e) => { if (e.key === 'Enter') setSelectedGridSession(plannerToGrid(ps.raw)); }}
+                              onMouseEnter={(e) => setHoveredSession({ session: plannerToGrid(ps.raw), rect: e.currentTarget.getBoundingClientRect() })}
+                              onMouseLeave={() => setHoveredSession(null)}
                               className={`relative flex items-center gap-1.5 rounded-lg pl-3 pr-2 py-1.5 mb-1 cursor-pointer hover:brightness-[0.97] active:scale-[0.99] transition ${completed ? '' : 'opacity-90'}`}
                               style={style}
                               title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
@@ -1336,6 +1344,8 @@ export function TodayPlannerCard({
               onDelete={handleDelete}
               onSwitchToDay={(d) => { setSelectedDateStr(d); setViewMode('day'); }}
               onSelectSession={(ps) => setSelectedGridSession(plannerToGrid(ps.raw))}
+              onHoverSession={(ps, rect) =>
+                setHoveredSession(ps && rect ? { session: plannerToGrid(ps.raw), rect } : null)}
             />
           )}
 
@@ -1354,6 +1364,11 @@ export function TodayPlannerCard({
       {/* Find sessions sheet (modal on desktop, bottom-sheet on mobile) */}
       {showFindSessions && (
         <FindSessionsSheet onClose={() => setShowFindSessions(false)} />
+      )}
+
+      {/* Hover preview — anchored card, same info as the /sessions calendar */}
+      {hoveredSession && !selectedGridSession && (
+        <SessionHoverCard session={hoveredSession.session} anchorRect={hoveredSession.rect} />
       )}
 
       {/* Session detail — same sheet as the /sessions calendar, on click */}
