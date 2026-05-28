@@ -9,7 +9,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -155,6 +155,11 @@ export function ActiveSessionPage() {
   // Debrief is shown when the user clicks End OR the timer reaches 0.
   // It overlays the live video; only after it finalizes do we navigate.
   const [showDebrief, setShowDebrief] = useState(false);
+  // Host-abandonment takeover (Option A): when the host disappears from the
+  // session's realtime presence for a grace period, the remaining partner is
+  // offered to take over as host (which re-opens the door for a new match).
+  const [showTakeover, setShowTakeover] = useState(false);
+  const [takingOver, setTakingOver] = useState(false);
 
   // Prefer router state (passed by DeclareSessionModal) → context → null.
   // Router state is synchronously available on first render and avoids the
@@ -283,6 +288,67 @@ export function ActiveSessionPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, [session?.id, session?.session_mode, session?.open_to_match, session?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Host-abandonment takeover (Option A) ───────────────────────
+  // Both parties of a CLAIMED 1-on-1 join a per-session realtime presence
+  // channel. If the remaining partner sees the host drop out of presence and
+  // stay gone past a grace window — and it wasn't a deliberate End (no
+  // debrief broadcast) — we offer them takeover. Presence is socket-level, so
+  // it fires even when the host closes the tab; the grace window tolerates a
+  // refresh/reconnect.
+  useEffect(() => {
+    if (!session || !user) return;
+    if (session.status !== 'active') return;
+    const hostId = session.user_id;
+    if (!session.partner_user_id) return;          // not matched yet
+    const amPartner = user.id === session.partner_user_id;
+
+    const channel = supabase.channel(`session-presence:${session.id}`, {
+      config: { presence: { key: user.id } },
+    });
+
+    let graceTimer: number | null = null;
+    const clearGrace = () => { if (graceTimer) { window.clearTimeout(graceTimer); graceTimer = null; } };
+
+    const evaluate = () => {
+      if (!amPartner || session.debrief_started_at) { clearGrace(); return; }
+      const present = Object.keys(channel.presenceState()).includes(hostId);
+      if (present) {
+        clearGrace();
+        setShowTakeover(false);
+      } else if (!graceTimer) {
+        graceTimer = window.setTimeout(() => setShowTakeover(true), 25_000);
+      }
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, evaluate)
+      .on('presence', { event: 'join' }, evaluate)
+      .on('presence', { event: 'leave' }, evaluate)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') channel.track({ user_id: user.id, at: Date.now() });
+      });
+
+    return () => { clearGrace(); supabase.removeChannel(channel); };
+  }, [session?.id, session?.user_id, session?.partner_user_id, session?.status, session?.debrief_started_at, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleTakeOver = useCallback(async () => {
+    if (!session || takingOver) return;
+    setTakingOver(true);
+    try {
+      const updated = await takeOverAsHost(session.id);
+      if (updated) {
+        setSession(updated);
+        setActiveSession(updated);
+        setPartnerJoined(false);
+      }
+      setShowTakeover(false);
+    } catch (e) {
+      console.warn('[ActiveSessionPage] takeOver failed:', e);
+    } finally {
+      setTakingOver(false);
+    }
+  }, [session, takingOver, setActiveSession]);
 
   // Intro-phase transition watcher. While intro_phase_ends_at is set
   // and in the future, music stays ducked and the overlay is visible.
@@ -668,6 +734,31 @@ export function ActiveSessionPage() {
           style={{ width: `${progress * 100}%` }}
         />
       </div>
+
+      {/* ── Host-left takeover banner (Option A) ─────────────────
+          Shown to the partner when the host has dropped out of presence.
+          Taking over makes them the host and re-opens the door for a new
+          match. Hidden during the debrief. */}
+      {showTakeover && !showDebrief && (
+        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-amber-500/15 ring-1 ring-amber-400/40 px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-amber-300 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white leading-tight">Your partner stepped out</p>
+            <p className="text-[11px] text-white/70 leading-snug mt-0.5">
+              Keep going — take over as host and the door re-opens for a new match.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleTakeOver}
+            disabled={takingOver}
+            className="shrink-0 inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
+          >
+            {takingOver ? <Loader2 size={13} className="animate-spin" /> : <DoorOpen size={13} />}
+            Take over
+          </button>
+        </div>
+      )}
 
       {/* ── Intro phase overlay — visible to both parties when a fresh
             matched pair are in their "say hi" window. Disappears when
