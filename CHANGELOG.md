@@ -35,6 +35,11 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   naming it. Applying reloads the planner grid in place.
 
 ### Changed
+- **Match me now is always 1-on-1** — the declare modal no longer shows the
+  Solo / 1-on-1 / Group picker (or the solo-only body-double toggle, or the
+  redundant "open the door" switch) when started from Match me now. You just
+  set goal + duration + vibe; the door's open for one partner. Title/banner
+  reframed to "Open for a 1-on-1".
 - **Sessions are camera-on** — removed the "Real world · away from screen"
   (no-camera, offline) option from the declare modal. Solo focus, body-double
   (camera required), and live modes remain.

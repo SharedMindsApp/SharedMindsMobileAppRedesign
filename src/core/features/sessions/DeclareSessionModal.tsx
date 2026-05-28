@@ -468,7 +468,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </div>
             <div>
               <h2 className="stitch-headline text-base font-extrabold leading-tight">
-                {isScheduling ? 'Schedule a session' : forceSoloMode ? 'Solo focus session' : 'Declare your focus'}
+                {isScheduling ? 'Schedule a session' : startOpenToMatch ? 'Open for a 1-on-1' : forceSoloMode ? 'Solo focus session' : 'Declare your focus'}
               </h2>
               <p className="text-xs stitch-text-secondary">
                 {scheduledLabel ?? "What's the one thing you'll finish?"}
@@ -503,7 +503,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           <div className="shrink-0 mx-5 mb-2 flex items-center gap-2 rounded-xl bg-amber-50 ring-1 ring-amber-200/70 px-3 py-2">
             <DoorOpen size={15} className="text-amber-600 shrink-0" />
             <p className="text-[11px] font-semibold text-amber-800 leading-snug">
-              Your door's open — anyone can drop in to work alongside you.
+              Open for a 1-on-1 — the first person to drop in becomes your partner.
               {wizardStep === 'goal' ? ' Set your vibe on the next step.' : ' Pick your vibe below.'}
             </p>
           </div>
@@ -1099,8 +1099,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           </div>
         )}
 
-        {/* ── Session mode (hidden when locked to Solo or when scheduling) ── */}
-        {!forceSoloMode && !isScheduling && (
+        {/* ── Session mode (hidden when locked to Solo, when scheduling, or
+            in Match-me-now mode — a match is always 1-on-1, so the picker
+            would be misleading). ── */}
+        {!forceSoloMode && !startOpenToMatch && !isScheduling && (
         <div className="shrink-0 px-5 pt-3">
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
             Mode
@@ -1140,6 +1142,9 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         {/* ── Solo sub-toggles: Body double + Open the door ────── */}
         {sessionMode === 'solo' && (
           <div className="shrink-0 px-5 pt-3 space-y-2">
+            {/* Body double is a solo-alone option — hidden in Match-me-now,
+                where a partner is going to join. */}
+            {!startOpenToMatch && (
             <button
               type="button"
               onClick={() => setBodyDouble((v) => !v)}
@@ -1172,11 +1177,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                 }`} />
               </div>
             </button>
+            )}
 
-            {/* ── Open to match: solo session that anyone can drop into ──
-                When toggled, expands a 3-way vibe picker so the host signals
-                their social preference upfront. See migration 20260527000015. */}
+            {/* ── Open to match: an open 1-on-1 anyone can drop into. In
+                Match-me-now the door is implicitly open (it IS the point), so
+                we hide the on/off toggle and just show the vibe picker. ── */}
             {(<>
+              {!startOpenToMatch && (
               <button
                 type="button"
                 onClick={() => setOpenToMatch((v) => !v)}
@@ -1209,6 +1216,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                   }`} />
                 </div>
               </button>
+              )}
 
               {/* Vibe picker — only relevant when the door is open.
                   Three options drive intro-phase + auto-mute behavior
@@ -1293,7 +1301,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         )}
 
         {/* ── Step 2 footer: Back + Start ─────────────────────── */}
-        <div className="shrink-0 px-5 pt-3 pb-6 flex gap-2">
+        <div
+          className="shrink-0 px-5 pt-3 pb-6 flex gap-2"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.5rem)' }}
+        >
           <button
             type="button"
             onClick={() => setWizardStep('goal')}
