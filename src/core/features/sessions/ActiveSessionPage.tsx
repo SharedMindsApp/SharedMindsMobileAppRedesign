@@ -512,7 +512,7 @@ export function ActiveSessionPage() {
     >
 
       {/* ── Top bar ─────────────────────────────────────────── */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm">
+      <div className="shrink-0 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm">
         {/* Goal */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
@@ -567,19 +567,26 @@ export function ActiveSessionPage() {
         </div>
 
         {/* Timer */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Wizard launcher. Shown to anyone who controls music in this
               session: solo users, both sides of a 1-on-1, and group hosts.
               Group participants don't see it — they can only mute. */}
           {(!isMusicGroupSession || isMusicHost) && (
             <WizardLauncher onLaunch={wizards.launchWizard} />
           )}
-          <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1.5">
-            <Clock size={12} className="text-white/60" />
-            <span className={`text-sm font-bold tabular-nums ${timerSecondsRemaining <= 300 && timerSecondsRemaining > 0 ? 'text-amber-400' : 'text-white'}`}>
-              {formatRemaining(timerSecondsRemaining)}
-            </span>
-          </div>
+          {/* Header timer pill. Hidden in solo — the big circular timer in
+              the focus view IS the timer there, so showing both is a
+              confusing duplicate (and wastes scarce header width on mobile).
+              Jitsi (group/1-on-1) sessions have no circular timer, so they
+              keep this pill. */}
+          {!isSolo && (
+            <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1.5">
+              <Clock size={12} className="text-white/60" />
+              <span className={`text-sm font-bold tabular-nums ${timerSecondsRemaining <= 300 && timerSecondsRemaining > 0 ? 'text-amber-400' : 'text-white'}`}>
+                {formatRemaining(timerSecondsRemaining)}
+              </span>
+            </div>
+          )}
 
           {/* Minimize — keeps the session running in the background as
               a floating pill (FloatingTimerWidget in Layout) so the user
