@@ -115,9 +115,11 @@ export function ConductGateModal({ onAccepted, onCancel }: Props) {
   }
 
   return (
-    // z-[80] so this sits on top of every other overlay (DeclareSessionModal,
-    // SessionDetailSheet, etc.) when triggered from a session start flow.
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+    // z-[120] so this sits ON TOP of every other overlay when triggered from a
+    // session-start flow. The DeclareSessionModal is z-[100]/[101]; anything
+    // lower than that here would render BEHIND the declare sheet, leaving the
+    // gate unreachable and the Start button looking like it does nothing.
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full sm:max-w-md max-h-[90vh] flex flex-col bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl">
         {/* Header */}
         <div className="px-5 pt-5 pb-3 border-b border-surface-container">
