@@ -44,6 +44,15 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   go") instead of deleting on the first tap.
 
 ### Fixed
+- **App-wide data stalls / infinite spinners** — supabase-js serialises auth
+  token access through the Web Locks API and the default waits forever, so a
+  stale lock (crashed/backgrounded tab, rapid reloads) could deadlock *every*
+  authenticated query: home dashboard, "this week's sessions", templates and
+  more would spin indefinitely with no error. Added a resilient lock that
+  proceeds after a short timeout instead of hanging.
+- **Home page hanging on the loading skeleton** — the day-zero gate now always
+  resolves (resolved-null + safety timeout), and returning users render
+  instantly from a cached flag.
 - **Week planner project tags** — fixed a scope bug where the week grid
   couldn't resolve project names for time blocks (the lookup map is now
   threaded into the week timeline).
