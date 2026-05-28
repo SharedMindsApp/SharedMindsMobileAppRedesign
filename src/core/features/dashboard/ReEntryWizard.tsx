@@ -18,8 +18,9 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X, ArrowLeft, ArrowRight, Play, Loader2, Coffee } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight, Play, Loader2, Coffee, Circle, CheckCircle2 } from 'lucide-react';
 import { useCoreData, type BrainStateId, type CoreTask } from '../../data/CoreDataContext';
+import { TaskService, type TaskStep } from '../../services/TaskService';
 import {
   buildReEntryShortlist, loadCopy, loadForMood, reasonLabel,
   type ReEntryTask, type ScoredTask, type Load,
@@ -63,7 +64,7 @@ export function ReEntryWizard({ variant = 'manual', onClose, onStartSession }: P
   const navigate = useNavigate();
   const {
     state, brainStateOptions, setCurrentBrainState,
-    toggleTask, rescheduleTaskAsync, dropTaskAsync, deleteTaskAsync, updateTaskAsync,
+    toggleTask, rescheduleTaskAsync, dropTaskAsync, deleteTaskAsync, updateTaskAsync, reloadTasks,
   } = useCoreData();
   const { tasks, projects, activeProjectId } = state;
 
@@ -75,6 +76,10 @@ export function ReEntryWizard({ variant = 'manual', onClose, onStartSession }: P
   const [shortlist, setShortlist] = useState<ScoredTask[]>([]);
   const [busyLoadId, setBusyLoadId] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // Stepping stones: the smallest open step of each shortlisted task, so even
+  // a heavy task offers a one-tap pebble when the whole thing feels like a lot.
+  const [nextSteps, setNextSteps] = useState<Record<string, TaskStep | null>>({});
+  const [stepBusy, setStepBusy] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -94,6 +99,34 @@ export function ReEntryWizard({ variant = 'manual', onClose, onStartSession }: P
     // per mood selection, not a re-rank on every energy edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mood, downshift]);
+
+  // Fetch the smallest open step for each shortlisted task (bounded to ≤3,
+  // so no N+1 storm). Re-runs only when the shortlist identity changes.
+  const shortlistKey = shortlist.map((s) => s.task.id).join(',');
+  useEffect(() => {
+    if (shortlist.length === 0) { setNextSteps({}); return; }
+    let cancelled = false;
+    Promise.all(
+      shortlist.map((s) =>
+        TaskService.getStepsByTask(s.task.id)
+          .then((steps) => [s.task.id, steps.find((st) => !st.done && !st.promoted_task_id) ?? null] as const)
+          .catch(() => [s.task.id, null] as const)),
+    ).then((entries) => { if (!cancelled) setNextSteps(Object.fromEntries(entries)); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shortlistKey]);
+
+  async function tickStep(taskId: string, step: TaskStep) {
+    if (stepBusy) return;
+    setStepBusy(step.id);
+    try {
+      await TaskService.updateStep(step.id, { done: true });
+      const steps = await TaskService.getStepsByTask(taskId);
+      const open = steps.find((st) => !st.done && !st.promoted_task_id) ?? null;
+      setNextSteps((prev) => ({ ...prev, [taskId]: open }));
+    } catch { /* leave as-is */ }
+    finally { setStepBusy(null); }
+  }
 
   function pickMood(id: BrainStateId) {
     setMood(id);
@@ -253,6 +286,31 @@ export function ReEntryWizard({ variant = 'manual', onClose, onStartSession }: P
                         Work on it
                       </button>
                     </div>
+
+                    {/* Stepping stone — the smallest pebble of this task. Tick
+                        it for an instant win without committing to anything. */}
+                    {nextSteps[live.id] && (
+                      <button
+                        type="button"
+                        onClick={() => tickStep(live.id, nextSteps[live.id]!)}
+                        disabled={stepBusy === nextSteps[live.id]!.id}
+                        className="mt-2 w-full flex items-center gap-2 rounded-xl bg-surface px-2.5 py-2 ring-1 ring-surface-container/60 text-left hover:ring-primary/30 transition-all"
+                      >
+                        <span className="shrink-0 text-slate-300">
+                          {stepBusy === nextSteps[live.id]!.id
+                            ? <Loader2 size={15} className="animate-spin" />
+                            : <Circle size={15} strokeWidth={2} />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[9px] font-bold uppercase tracking-wider text-primary/70 leading-none">
+                            One small step
+                          </span>
+                          <span className="block text-[12px] stitch-text-primary leading-snug truncate mt-0.5">
+                            {nextSteps[live.id]!.title}
+                          </span>
+                        </span>
+                      </button>
+                    )}
                   </div>
                 );
               })
@@ -317,6 +375,7 @@ export function ReEntryWizard({ variant = 'manual', onClose, onStartSession }: P
             onDrop={() => dropTaskAsync(openTask.id)}
             onDelete={() => deleteTaskAsync(openTask.id)}
             onStartSession={() => { onStartSession(openTask.title); onClose(); }}
+            onStepPromoted={() => { void reloadTasks(); }}
           />
         </Suspense>
       )}

@@ -832,6 +832,10 @@ export function ProjectDetailPage() {
             onRename={(title) => renameTask(t.id, title)}
             onDelete={() => deleteTask(t.id)}
             onStartSession={() => setDeclareOpen(true)}
+            onStepPromoted={() => {
+              // Promoted step → a new task in this project. Refresh the board.
+              TaskService.getTasksByProject(project.id).then(setTasks).catch(() => {});
+            }}
           />
           </Suspense>
         );

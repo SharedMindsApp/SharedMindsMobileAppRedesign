@@ -50,7 +50,7 @@ export function PlanTasksCard({
   const navigate = useNavigate();
   const {
     addTaskAsync, toggleTask,
-    rescheduleTaskAsync, dropTaskAsync, deleteTaskAsync, updateTaskAsync,
+    rescheduleTaskAsync, dropTaskAsync, deleteTaskAsync, updateTaskAsync, reloadTasks,
   } = useCoreData();
   const [newTaskText, setNewTaskText] = useState('');
   const [savingTask, setSavingTask] = useState(false);
@@ -231,6 +231,7 @@ export function PlanTasksCard({
         onDrop={() => dropTaskAsync(openTask.id)}
         onDelete={() => deleteTaskAsync(openTask.id)}
         onStartSession={() => onSelectTask(openTask.title)}
+        onStepPromoted={() => { void reloadTasks(); }}
       />
       </Suspense>
     )}

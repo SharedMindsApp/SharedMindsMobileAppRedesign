@@ -162,6 +162,10 @@ type CoreDataContextValue = {
   setCurrentBrainState: (brainStateId: BrainStateId) => void;
   setActiveProject: (projectId: string | null) => void;
   refreshProjects: () => Promise<void>;
+  /** Re-fetch the user's tasks from the DB into local state. Used after an
+   *  out-of-band write (e.g. promoting a step into a new task) so the change
+   *  shows immediately rather than after the next cold load. */
+  reloadTasks: () => Promise<void>;
   toggleTask: (taskId: string) => void;
   addTask: (title: string, projectId?: string | null) => void;
   /** Same as addTask, but awaits the DB insert and returns the real task id. */
@@ -222,6 +226,27 @@ const brainStateOptions: BrainStateOption[] = [
   { id: 'low', label: 'Low battery', emoji: '🪫', tone: 'bg-rose-100 text-rose-800' },
   { id: 'brainfog', label: 'Brain fog', emoji: '🌫️', tone: 'bg-slate-200 text-slate-700' },
 ];
+
+/** Map a raw TaskService row → the CoreTask shape the app renders. One place,
+ *  reused by the initial load and reloadTasks so they can't drift. */
+function mapTaskRow(t: import('../services/TaskService').Task): CoreTask {
+  return {
+    id: t.id,
+    title: t.title,
+    projectId: t.project_id ?? null,
+    energy: t.energy_level === 'high' ? 'deep' : t.energy_level === 'medium' ? 'medium' : 'light',
+    priority: t.priority,
+    dueLabel: t.due_on ? new Date(t.due_on).toLocaleDateString() : 'Inbox',
+    dueOn: t.due_on ?? null,
+    done: t.status === 'done' || t.status === 'dropped',
+    weeklyIntentionId: t.weekly_intention_id ?? null,
+    lastSessionOutcome: t.last_session_outcome ?? null,
+    lastSessionAt: t.last_session_at ?? null,
+    sessionsCount: t.sessions_count ?? 0,
+    scheduledFor: t.scheduled_for ?? null,
+    status: t.status,
+  };
+}
 
 function makeId(prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -457,22 +482,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         // Tasks keep null projectId when unscoped (fixes earlier bug that
         // silently re-pointed inbox tasks at the first project).
-        const mappedTasks: CoreTask[] = tasks.map(t => ({
-          id: t.id,
-          title: t.title,
-          projectId: t.project_id ?? null,
-          energy: t.energy_level === 'high' ? 'deep' : t.energy_level === 'medium' ? 'medium' : 'light',
-          priority: t.priority,
-          dueLabel: t.due_on ? new Date(t.due_on).toLocaleDateString() : 'Inbox',
-          dueOn: t.due_on ?? null,
-          done: t.status === 'done' || t.status === 'dropped',
-          weeklyIntentionId: t.weekly_intention_id ?? null,
-          lastSessionOutcome: t.last_session_outcome ?? null,
-          lastSessionAt: t.last_session_at ?? null,
-          sessionsCount: t.sessions_count ?? 0,
-          scheduledFor: t.scheduled_for ?? null,
-          status: t.status,
-        }));
+        const mappedTasks: CoreTask[] = tasks.map(mapTaskRow);
         const restoredActive = readActiveProject();
         setState(s => ({ ...s, tasks: mappedTasks, activeProjectId: restoredActive }));
       } catch (err) {
@@ -550,6 +560,15 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
         setState((current) => ({ ...current, activeProjectId: projectId }));
       },
       refreshProjects,
+      reloadTasks: async () => {
+        if (!activeSpaceId) return;
+        try {
+          const rows = await TaskService.getTasksBySpace(activeSpaceId);
+          setState((s) => ({ ...s, tasks: rows.map(mapTaskRow) }));
+        } catch (err) {
+          console.warn('[CoreData] reloadTasks failed:', err);
+        }
+      },
       toggleTask: (taskId) => {
         setState((current) => ({
           ...current,
