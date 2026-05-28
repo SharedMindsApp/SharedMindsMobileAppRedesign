@@ -19,7 +19,10 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+- **Task detail sheet** — moved the Edit action down beside Delete in the
+  footer, and Delete now arms an "are you sure?" confirm (matching "Let it
+  go") instead of deleting on the first tap.
 
 
 ## [v0.6.0] — 2026-05-28

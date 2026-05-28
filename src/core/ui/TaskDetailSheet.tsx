@@ -80,9 +80,10 @@ export function TaskDetailSheet({
   const [draft, setDraft] = useState(task.title);
   // Local optimistic load so the picker reflects the tap instantly.
   const [loadValue, setLoadValue] = useState<TaskLoad>(task.load ?? 'medium');
-  // "Let it go" is destructive + easy to mis-tap, so the first tap arms an
-  // inline confirm rather than acting immediately.
+  // "Let it go" + "Delete" are destructive + easy to mis-tap, so the first
+  // tap arms an inline confirm rather than acting immediately.
   const [confirmingDrop, setConfirmingDrop] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Esc closes the sheet.
   useEffect(() => {
@@ -179,11 +180,6 @@ export function TaskDetailSheet({
                 className={`block w-full text-left text-lg font-extrabold leading-snug ${done ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
               >
                 {task.title}
-                {onRename && (
-                  <span className="inline-flex items-center gap-0.5 align-middle ml-2 px-1.5 py-0.5 rounded-md bg-surface-container-low text-[10px] font-bold text-primary">
-                    <Pencil size={10} /> Edit
-                  </span>
-                )}
               </button>
             )}
 
@@ -280,8 +276,9 @@ export function TaskDetailSheet({
           <TaskStepsSection taskId={task.id} onPromoted={onStepPromoted} />
         </div>
 
-        {/* Footer actions — let go / delete */}
-        {(onDrop || onDelete) && !done && (
+        {/* Footer actions — edit / let go / delete. Both destructive paths
+            (let go, delete) arm an inline "are you sure?" before acting. */}
+        {(onRename || onDrop || onDelete) && !done && (
           confirmingDrop ? (
             <div className="px-5 py-4 border-t border-surface-container/70">
               <p className="text-xs font-semibold stitch-text-primary mb-2.5">
@@ -307,6 +304,31 @@ export function TaskDetailSheet({
                 </button>
               </div>
             </div>
+          ) : confirmingDelete ? (
+            <div className="px-5 py-4 border-t border-surface-container/70">
+              <p className="text-xs font-semibold stitch-text-primary mb-2.5">
+                Delete this task? This can't be undone.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => run('delete', onDelete, true)}
+                  disabled={busy !== null}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold active:scale-[0.98] transition-transform"
+                >
+                  {busy === 'delete' ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                  Yes, delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={busy !== null}
+                  className="flex-1 inline-flex items-center justify-center px-3 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
+                >
+                  Keep it
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="px-5 py-4 border-t border-surface-container/70 flex items-center gap-2">
               {onDrop && (
@@ -320,15 +342,25 @@ export function TaskDetailSheet({
                   Let it go
                 </button>
               )}
+              {/* Edit + Delete grouped on the right */}
+              {onRename && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  disabled={busy !== null}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
+                >
+                  <Pencil size={13} /> Edit
+                </button>
+              )}
               {onDelete && (
                 <button
                   type="button"
-                  onClick={() => run('delete', onDelete, true)}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={busy !== null}
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl stitch-text-secondary text-xs font-bold hover:bg-surface-container-low active:scale-[0.98] transition-all"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-rose-600/80 text-xs font-bold hover:bg-rose-50 hover:text-rose-700 active:scale-[0.98] transition-all"
                 >
-                  {busy === 'delete' ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                  Delete
+                  <Trash2 size={13} /> Delete
                 </button>
               )}
             </div>
