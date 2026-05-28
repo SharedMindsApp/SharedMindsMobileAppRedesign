@@ -18,6 +18,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Sun, Sparkles, ArrowRight, Plus,
@@ -250,12 +251,15 @@ function nextFreeSlot(blocks: TimeBlock[]): number {
 // ── BlockCard ──────────────────────────────────────────────────────
 
 function BlockCard({
-  block, onToggle, onStart, onDelete,
+  block, onToggle, onStart, onDelete, onEdit, projectName,
 }: {
   block: TimeBlock;
   onToggle: (b: TimeBlock) => void;
   onStart:  (b: TimeBlock) => void;
   onDelete: (id: string) => void;
+  /** Tap the body to edit the block (title, length, type, project). */
+  onEdit:   (b: TimeBlock) => void;
+  projectName?: string | null;
 }) {
   const s    = BLOCK_STYLES[block.block_type];
   const done = !!block.completed_at;
@@ -274,16 +278,19 @@ function BlockCard({
           }
         </button>
 
-        <div className="flex-1 min-w-0">
+        <button type="button" onClick={() => onEdit(block)} className="flex-1 min-w-0 text-left" title="Edit block">
           <p className={`text-sm font-bold leading-tight truncate ${done ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}>
             {block.title}
           </p>
-          <div className="flex items-center gap-1.5 mt-0.5">
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
             <span className={`text-[10px] font-bold ${s.text}`}>{s.label}</span>
             <span className="text-[10px] font-semibold stitch-text-secondary">· {block.duration_mins}m</span>
+            {projectName && (
+              <span className="text-[10px] font-bold stitch-text-secondary truncate">· {projectName}</span>
+            )}
           </div>
-        </div>
+        </button>
 
         {!done && (
           <button
@@ -325,17 +332,19 @@ const LENGTH_OPTIONS: { key: string; label: string; mins: number; startHour?: nu
 ];
 
 function AddBlockForm({
-  onAdd, onCancel, projects,
+  onAdd, onCancel, projects, initialProjectId = null,
 }: {
   onAdd:    (title: string, durationMins: number, blockType: BlockType, projectId: string | null, startHour: number | null) => void;
   onCancel: () => void;
   /** User's active projects, for dedicating a block to one. */
   projects: { id: string; name: string }[];
+  /** Pre-select a project (used by the project quick-add chips). */
+  initialProjectId?: string | null;
 }) {
   const [title,    setTitle]    = useState('');
   const [lengthKey, setLengthKey] = useState('60');
   const [type,     setType]     = useState<BlockType>('focus');
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -406,6 +415,136 @@ function AddBlockForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// ── BlockEditPopover ───────────────────────────────────────────────
+// Tap a block to edit it: title, length/span, type, project, done, delete.
+
+function BlockEditPopover({
+  block, projects, onSave, onDelete, onToggleDone, onClose,
+}: {
+  block: TimeBlock;
+  projects: { id: string; name: string }[];
+  onSave: (patch: { title: string; duration_mins: number; block_type: BlockType; project_id: string | null; start_time?: string }) => void;
+  onDelete: () => void;
+  onToggleDone: () => void;
+  onClose: () => void;
+}) {
+  const initialLengthKey = LENGTH_OPTIONS.find((o) => o.mins === block.duration_mins)?.key ?? '60';
+  const [title, setTitle] = useState(block.title);
+  const [lengthKey, setLengthKey] = useState(initialLengthKey);
+  const [type, setType] = useState<BlockType>(block.block_type);
+  const [projectId, setProjectId] = useState<string | null>(block.project_id);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const done = !!block.completed_at;
+
+  function handleSave() {
+    if (!title.trim()) return;
+    const opt = LENGTH_OPTIONS.find((o) => o.key === lengthKey) ?? LENGTH_OPTIONS[1];
+    const patch: { title: string; duration_mins: number; block_type: BlockType; project_id: string | null; start_time?: string } = {
+      title: title.trim(), duration_mins: opt.mins, block_type: type, project_id: projectId,
+    };
+    // A span preset also relocates the block's start.
+    if (opt.startHour != null) patch.start_time = `${String(opt.startHour).padStart(2, '0')}:00`;
+    onSave(patch);
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full sm:max-w-sm max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl p-5"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sm:hidden flex justify-center -mt-2 mb-2"><span className="w-9 h-1 rounded-full bg-surface-container" /></div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-extrabold stitch-text-primary">Edit block</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low">
+            <X size={16} />
+          </button>
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={200}
+          autoFocus
+          placeholder="What will you work on?"
+          className="w-full text-sm font-semibold stitch-text-primary bg-surface-container-low rounded-xl px-3 py-2.5 outline-none ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30 mb-3"
+        />
+
+        <div className="flex items-center gap-1.5 flex-wrap mb-4">
+          <select
+            value={lengthKey}
+            onChange={(e) => setLengthKey(e.target.value)}
+            className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high"
+          >
+            <optgroup label="Length">
+              {LENGTH_OPTIONS.filter((o) => !o.startHour).map((o) => (<option key={o.key} value={o.key}>{o.label}</option>))}
+            </optgroup>
+            <optgroup label="Span">
+              {LENGTH_OPTIONS.filter((o) => o.startHour).map((o) => (<option key={o.key} value={o.key}>{o.label}</option>))}
+            </optgroup>
+          </select>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as BlockType)}
+            className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high"
+          >
+            {(Object.keys(BLOCK_STYLES) as BlockType[]).map((t) => (<option key={t} value={t}>{BLOCK_STYLES[t].label}</option>))}
+          </select>
+          {projects.length > 0 && (
+            <select
+              value={projectId ?? ''}
+              onChange={(e) => setProjectId(e.target.value || null)}
+              className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high flex-1 min-w-[90px]"
+            >
+              <option value="">No project</option>
+              {projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+            </select>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!title.trim()}
+          className="w-full px-3 py-2.5 rounded-xl bg-primary text-white text-sm font-bold active:scale-[0.98] transition-transform disabled:opacity-40 mb-2"
+        >
+          Save changes
+        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleDone}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container-low stitch-text-primary text-xs font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
+          >
+            {done ? <Circle size={13} /> : <CheckCircle2 size={13} className="text-emerald-600" />}
+            {done ? 'Mark not done' : 'Mark done'}
+          </button>
+          {confirmDelete ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold active:scale-[0.98] transition-transform"
+            >
+              <Trash2 size={13} /> Confirm delete
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 text-xs font-bold hover:bg-rose-50 active:scale-[0.98] transition-all"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -836,6 +975,10 @@ export function TodayPlannerCard({
   const [weekBlockCounts, setWeekBlockCounts] = useState<Record<string, { done: number; total: number }>>({});
   const [mutating,        setMutating]        = useState(false);
   const [addingAtHour,    setAddingAtHour]    = useState<number | null>(null);
+  // Project pre-selected by a quick-add chip (passed to the next composer).
+  const [quickProjectId,  setQuickProjectId]  = useState<string | null>(null);
+  // Block whose edit popover is open. null = closed.
+  const [editingBlock,    setEditingBlock]    = useState<TimeBlock | null>(null);
 
   // ── Logged + booked focus sessions (read-only overlay) ─────────────
   // The planner shows your editable time blocks; this lays your actual
@@ -1004,6 +1147,33 @@ export function TodayPlannerCard({
     await TimeBlockService.deleteBlock(blockId);
     setBlocks((prev) => prev.filter((b) => b.id !== blockId));
     setWeekBlocks((prev) => prev.filter((b) => b.id !== blockId));
+  }
+
+  /** Save edits from the block-edit popover. Optimistic. */
+  async function handleSaveBlockEdit(
+    blockId: string,
+    patch: { title: string; duration_mins: number; block_type: BlockType; project_id: string | null; start_time?: string },
+  ) {
+    const apply = (b: TimeBlock): TimeBlock => (b.id === blockId ? { ...b, ...patch } : b);
+    setBlocks((prev) => prev.map(apply).sort((a, b) => a.start_time.localeCompare(b.start_time)));
+    setWeekBlocks((prev) => prev.map(apply));
+    setEditingBlock(null);
+    try {
+      await TimeBlockService.updateBlock(blockId, patch);
+    } catch (e) {
+      console.warn('[TodayPlannerCard] block edit failed:', e);
+      // Reload to resync on failure.
+      TimeBlockService.getBlocksForDate(selectedDateStr).then(setBlocks).catch(() => {});
+    }
+  }
+
+  /** Open the composer at the next free slot, dedicated to a project. */
+  function handleProjectQuickAdd(projectId: string) {
+    const hour = nextFreeSlot(blocks);
+    setQuickProjectId(projectId);
+    setAddingAtHour(hour);
+    // Make sure the day view is showing (not week) so the composer is visible.
+    setViewMode('day');
   }
 
   // ── Derived ────────────────────────────────────────────────────
@@ -1231,23 +1401,43 @@ export function TodayPlannerCard({
               />
             </div>
 
-            {/* Quick-add */}
+            {/* Quick-add — a chip per project. Tap to open the composer
+                pre-dedicated to that project; pick a span and it's blocked
+                out. Falls back to generic work-type templates when the user
+                has no projects yet. */}
             <div className="px-4 sm:px-5 pb-3">
-              <p className="text-[9px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5">Block out</p>
+              <p className="text-[9px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5">
+                {activeProjects.length > 0 ? 'Block out for a project' : 'Block out'}
+              </p>
               <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-                {QUICK_TEMPLATES.map((t) => (
-                  <button
-                    key={t.title}
-                    type="button"
-                    onClick={() => handleQuickAdd(t)}
-                    disabled={mutating}
-                    className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-full shrink-0 ring-1 transition-all disabled:opacity-50 hover:shadow-sm hover:-translate-y-px ${t.chipCls}`}
-                  >
-                    <t.Icon size={11} />
-                    {t.title}
-                    <span className="opacity-60 font-semibold">{t.durationMins}m</span>
-                  </button>
-                ))}
+                {activeProjects.length > 0 ? (
+                  activeProjects.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleProjectQuickAdd(p.id)}
+                      disabled={mutating}
+                      className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-full shrink-0 ring-1 ring-primary/20 bg-primary/8 text-primary transition-all disabled:opacity-50 hover:shadow-sm hover:-translate-y-px"
+                    >
+                      <Plus size={11} />
+                      {p.name}
+                    </button>
+                  ))
+                ) : (
+                  QUICK_TEMPLATES.map((t) => (
+                    <button
+                      key={t.title}
+                      type="button"
+                      onClick={() => handleQuickAdd(t)}
+                      disabled={mutating}
+                      className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-full shrink-0 ring-1 transition-all disabled:opacity-50 hover:shadow-sm hover:-translate-y-px ${t.chipCls}`}
+                    >
+                      <t.Icon size={11} />
+                      {t.title}
+                      <span className="opacity-60 font-semibold">{t.durationMins}m</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1318,9 +1508,11 @@ export function TodayPlannerCard({
                           <BlockCard
                             key={block.id}
                             block={block}
+                            projectName={block.project_id ? projectNameById.get(block.project_id) : null}
                             onToggle={handleToggle}
                             onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
                             onDelete={handleDelete}
+                            onEdit={(b) => setEditingBlock(b)}
                           />
                         ))}
                         {/* Logged + booked sessions for this hour (read-only), tinted by project */}
@@ -1357,8 +1549,9 @@ export function TodayPlannerCard({
                         {isAdding && (
                           <AddBlockForm
                             projects={activeProjects}
-                            onAdd={(title, dur, type, projectId, startHour) => handleAddAt(hour, title, dur, type, projectId, startHour)}
-                            onCancel={() => setAddingAtHour(null)}
+                            initialProjectId={quickProjectId}
+                            onAdd={(title, dur, type, projectId, startHour) => { handleAddAt(hour, title, dur, type, projectId, startHour); setQuickProjectId(null); }}
+                            onCancel={() => { setAddingAtHour(null); setQuickProjectId(null); }}
                           />
                         )}
 
@@ -1417,6 +1610,18 @@ export function TodayPlannerCard({
       {/* Find sessions sheet (modal on desktop, bottom-sheet on mobile) */}
       {showFindSessions && (
         <FindSessionsSheet onClose={() => setShowFindSessions(false)} />
+      )}
+
+      {/* Block edit popover — tap a block to edit title/length/type/project */}
+      {editingBlock && (
+        <BlockEditPopover
+          block={editingBlock}
+          projects={activeProjects}
+          onSave={(patch) => handleSaveBlockEdit(editingBlock.id, patch)}
+          onDelete={() => { handleDelete(editingBlock.id); setEditingBlock(null); }}
+          onToggleDone={() => { handleToggle(editingBlock); setEditingBlock(null); }}
+          onClose={() => setEditingBlock(null)}
+        />
       )}
 
       {/* Hover preview — anchored card, same info as the /sessions calendar */}
