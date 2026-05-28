@@ -44,39 +44,43 @@ import type { GridSession } from '../sessions/CalendarView';
 const SessionDetailSheet = lazy(() =>
   import('../sessions/CalendarView').then((m) => ({ default: m.SessionDetailSheet })));
 
-/** Project colour tokens → hex, matching the widgets used elsewhere. */
-const PROJECT_HEX: Record<string, string> = {
-  cyan: '#06b6d4', blue: '#3b82f6', violet: '#8b5cf6',
-  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
-};
-function resolveProjectHex(token: string | null | undefined): string | null {
-  if (!token) return null;
-  return PROJECT_HEX[token] ?? (token.startsWith('#') ? token : null);
+type SessionMode = 'group' | 'one_on_one' | 'solo';
+
+/** Mode → hex, matching the SessionModeChip palette on the /sessions calendar
+ *  (Timer=amber, 1-on-1=violet, Group=blue, Solo=rose). The home grid has no
+ *  room for a tag, so the block colour carries the mode instead. */
+function modeHex(mode: SessionMode, isQuickTimer: boolean): string {
+  if (isQuickTimer) return '#f59e0b';        // amber
+  if (mode === 'one_on_one') return '#8b5cf6'; // violet
+  if (mode === 'group') return '#3b82f6';      // blue
+  return '#f43f5e';                            // rose (solo)
 }
 
 /** A focus session reduced to what the planner grid needs. Read-only —
  *  these are a record of work done/booked, laid over the editable blocks.
- *  Colour-coded by the pinned project (falls back to a status colour). */
+ *  Colour-coded by session mode, mirroring the /sessions calendar tags. */
 interface PlannerSession {
   id: string;
   startsAt: Date;
   durationMins: number;
   title: string;
   status: 'scheduled' | 'completed';
-  /** Resolved hex for the pinned project, or null when unscoped. */
-  projectHex: string | null;
+  mode: SessionMode;
+  isQuickTimer: boolean;
   /** The source row, so a click can open the shared SessionDetailSheet. */
   raw: ScheduledSessionWithProfile;
 }
 
 function toPlannerSession(s: ScheduledSessionWithProfile): PlannerSession {
+  const a = s as Record<string, unknown>;
   return {
     id: s.id,
-    startsAt: new Date((s as { scheduled_at?: string }).scheduled_at ?? s.start_time),
+    startsAt: new Date((a.scheduled_at as string) ?? s.start_time),
     durationMins: s.intended_duration_minutes ?? 50,
     title: s.session_title ?? s.session_goal ?? 'Focus session',
-    status: ((s as { status?: string }).status === 'completed' ? 'completed' : 'scheduled'),
-    projectHex: resolveProjectHex(s.project?.color),
+    status: (a.status === 'completed' ? 'completed' : 'scheduled'),
+    mode: (a.session_mode as SessionMode) ?? 'group',
+    isQuickTimer: !!a.is_quick_timer,
     raw: s,
   };
 }
@@ -107,10 +111,9 @@ function plannerToGrid(s: ScheduledSessionWithProfile): GridSession {
   };
 }
 
-/** Inline style for a session block, tinted by its colour (project or status
- *  fallback). Completed = filled tint; scheduled = lighter + dashed ring. */
+/** Inline style for a session block, tinted by its mode colour. */
 function sessionBlockStyle(ps: PlannerSession): { hex: string; style: React.CSSProperties } {
-  const hex = ps.projectHex ?? (ps.status === 'completed' ? '#10b981' : '#6366f1');
+  const hex = modeHex(ps.mode, ps.isQuickTimer);
   return {
     hex,
     style: {
