@@ -62,6 +62,11 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   go") instead of deleting on the first tap.
 
 ### Fixed
+- **First-session "Start" did nothing** — the conduct/ground-rules gate that
+  appears before a user's first session rendered at `z-[80]`, behind the
+  declare modal (`z-[100]`), so it was invisible and unreachable. Tapping
+  Start opened a gate nobody could see and the session never began. Bumped the
+  gate to `z-[120]` so it sits on top.
 - **Declare-session modal: "Start" button was unreachable** — step 2's controls
   weren't in a scroll region, so on shorter viewports the modal overflowed its
   max height and clipped the footer, making it impossible to start the session.
