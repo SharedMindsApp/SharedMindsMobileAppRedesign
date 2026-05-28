@@ -126,15 +126,36 @@ export function NextActionControl({ projectId, nextAction, variant = 'card', onC
 
   // ── No action set ────────────────────────────────────────────────
   if (!nextAction) {
+    // Prominent (detail/home): the card has real estate, so make the empty
+    // state feel intentional — eyebrow label, a one-line nudge, and a proper
+    // button — rather than a lone link floating in white space.
+    if (prominent) {
+      return (
+        <div onClick={stop} className="space-y-2">
+          <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+            Your next step
+          </p>
+          <p className="text-sm stitch-text-secondary leading-snug">
+            Pre-decide the one small thing to do next, so you never face a blank page.
+          </p>
+          <button
+            type="button"
+            onClick={(e) => { stop(e); beginEdit(); }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary/10 text-primary text-sm font-bold hover:bg-primary/15 active:scale-[0.98] transition-all"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            Set next step
+          </button>
+        </div>
+      );
+    }
     return (
       <button
         type="button"
         onClick={(e) => { stop(e); beginEdit(); }}
-        className={`inline-flex items-center gap-1.5 font-bold text-primary hover:opacity-80 transition-opacity ${
-          prominent ? 'text-sm' : 'text-xs'
-        }`}
+        className="inline-flex items-center gap-1.5 font-bold text-primary hover:opacity-80 transition-opacity text-xs"
       >
-        <Plus size={prominent ? 15 : 13} strokeWidth={2.5} />
+        <Plus size={13} strokeWidth={2.5} />
         Set next step
       </button>
     );
