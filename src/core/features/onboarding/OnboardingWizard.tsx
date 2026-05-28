@@ -2699,11 +2699,13 @@ export function OnboardingWizard({
           }
         </button>
 
-        {/* ── Validate with your own AI ──────────────────────────
-            Once there's a draft roadmap, hand it to an assistant that
-            already knows the project deeply for a second opinion — then
-            paste the corrected version straight back. */}
-        {milestoneInputs.some((m) => m.title.trim()) && (
+        {/* ── Use your own AI ────────────────────────────────────
+            Available from the start: hand the project to an assistant that
+            already knows it to WRITE the whole roadmap — or, once there's a
+            draft, to sanity-check it — then paste the result straight back. */}
+        {projectTitle.trim() && (() => {
+          const hasDraft = milestoneInputs.some((m) => m.title.trim());
+          return (
           <div className="mb-4">
             {!showRoadmapHelper ? (
               <button
@@ -2712,7 +2714,9 @@ export function OnboardingWizard({
                 className="text-xs font-semibold text-violet-700 hover:opacity-70 transition-opacity inline-flex items-center gap-1.5"
               >
                 <Sparkles size={12} />
-                Want a second opinion? Get your own AI to sanity-check this roadmap
+                {hasDraft
+                  ? 'Want a second opinion? Get your own AI to sanity-check this roadmap'
+                  : 'Prefer your own AI? Get it to write the whole roadmap, paste it back'}
               </button>
             ) : (
               <div
@@ -2722,7 +2726,9 @@ export function OnboardingWizard({
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-1.5">
                     <Sparkles size={13} className="text-violet-600 shrink-0" />
-                    <p className="text-xs font-bold text-violet-900">Validate with your AI</p>
+                    <p className="text-xs font-bold text-violet-900">
+                      {hasDraft ? 'Validate with your AI' : 'Write it with your AI'}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -2734,9 +2740,9 @@ export function OnboardingWizard({
                   </button>
                 </div>
                 <ol className="text-[11px] text-violet-900 leading-relaxed list-decimal pl-4 space-y-0.5 mb-2.5">
-                  <li>Copy the prompt — it bundles your project + this draft roadmap</li>
+                  <li>{hasDraft ? 'Copy the prompt — it bundles your project + this draft roadmap' : 'Copy the prompt — it bundles your project context'}</li>
                   <li>Paste it into your AI chat (the one that knows this project)</li>
-                  <li>Paste its corrected roadmap back below and Apply</li>
+                  <li>Paste the roadmap it returns back below and Apply</li>
                 </ol>
                 <div className="rounded-lg bg-white border border-violet-200 p-2.5 max-h-32 overflow-y-auto mb-2">
                   <pre className="text-[10.5px] leading-snug text-slate-700 whitespace-pre-wrap font-mono">
@@ -2779,7 +2785,8 @@ export function OnboardingWizard({
               <p className="text-[11px] font-semibold text-violet-700 mt-1.5">{roadmapApplyMsg}</p>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {aiError && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">

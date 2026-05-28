@@ -44,18 +44,26 @@ export function buildRoadmapValidationPrompt(args: {
     })
     .join('\n');
 
-  return `I'm planning a project called "${subject}".${ctx}
+  // Two modes: with a draft → review/correct; without → write from scratch.
+  const task = draft
+    ? `Here's my current draft roadmap — milestones (major destinations, weighted as % of the whole project) and phases (the work inside each milestone, weighted as % within that milestone):
 
-Here's my current draft roadmap — milestones (major destinations, weighted as % of the whole project) and phases (the work inside each milestone, weighted as % within that milestone):
-
-${draft || '(no milestones drafted yet)'}
+${draft}
 
 Please review it as a thoughtful collaborator who knows this work:
 - Are these the right milestones, in a sensible order? Add, remove, merge, or rename as needed.
 - Are the phases under each one complete and concrete? Fix gaps.
-- Sanity-check the weights (milestone weights should total ~100; phase weights within each milestone should total ~100).
+- Sanity-check the weights (milestone weights should total ~100; phase weights within each milestone should total ~100).`
+    : `Please draft a complete roadmap for this project: a handful of milestones (major destinations) and the phases (the work) inside each one.
+- Order the milestones sensibly from where I am now to "done".
+- Give each milestone a weight as % of the whole project (they should total ~100).
+- Give each phase a weight as % within its milestone (each milestone's phases should total ~100).`;
 
-Return ONLY the corrected roadmap, nothing else, in EXACTLY this line format (no headings, no bullets, no commentary):
+  return `I'm planning a project called "${subject}".${ctx}
+
+${task}
+
+Return ONLY the roadmap, nothing else, in EXACTLY this line format (no headings, no bullets, no commentary):
 
 M: <milestone title> | <weight 0-100>
 P: <phase title> | <weight 0-100>
