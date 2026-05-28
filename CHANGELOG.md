@@ -19,6 +19,11 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+
+## [v0.6.0] — 2026-05-28
+
 Projects grow up: a real "+ New project" wizard, a planning board with
 deadlines and difficulty, and a focused mobile add-task flow — plus a
 round of home / PWA polish.
@@ -75,7 +80,6 @@ round of home / PWA polish.
   vertical-text slivers; the "Today" day-strip badge no longer wraps.
 - **"Pick day" menu** offers the next 7 days from today instead of surfacing
   days already past.
-
 
 ## [v0.5.0] — 2026-05-27
 
