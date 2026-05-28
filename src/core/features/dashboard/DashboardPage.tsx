@@ -486,8 +486,19 @@ export function DashboardPage() {
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
+    // Safety net: the day-zero gate (and thus the whole body below the hero)
+    // is blocked until `hasAnySession` flips off null. If the home RPC is slow
+    // or silently resolves to nothing, fall back to the non-day-zero UI after
+    // a few seconds so the page ALWAYS renders rather than hanging on the
+    // skeleton. The individual cards load their own data independently.
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setHasAnySession((prev) => (prev === null ? false : prev));
+    }, 6000);
     fetchHomeDashboard(user.id).then((dash) => {
-      if (cancelled || !dash) return;
+      if (cancelled) return;
+      // Resolved-null (RPC errored and the service returned null) must still
+      // resolve the gate — otherwise the skeleton hangs forever with no error.
+      if (!dash) { setHasAnySession(false); return; }
       // One batched setState call — React 18 commits these atomically
       // so the whole dashboard paints in a single render.
       setHasAnySession(dash.hasAnySession);
@@ -514,11 +525,11 @@ export function DashboardPage() {
         peopleAlongsideThisMonth: 0,
       });
     }).catch(() => {
-      // Soft-fail: leave hasAnySession null so the skeleton stays put
-      // briefly, then resolves on a retry. Don't lock the user out.
+      // Soft-fail: resolve to the non-day-zero UI rather than locking the
+      // user out behind the skeleton.
       if (!cancelled) setHasAnySession(false);
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; window.clearTimeout(safety); };
   }, [user?.id]);
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
