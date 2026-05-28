@@ -20,6 +20,13 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 ## [Unreleased]
 
 ### Added
+- **Host left? Take over** — if the host of a matched 1-on-1 abandons the
+  session (closes the tab / leaves without ending), the remaining partner is
+  offered to take over as host. Taking over re-opens the door so the session
+  re-enters the match pool and someone new can drop in — no one gets orphaned
+  mid-focus. Detected via realtime presence with a grace window; a deliberate
+  "End" still ends the session for both. **Migration required:**
+  `20260529000010_take_over_as_host`.
 - **Editable templates** — every weekly template is now fully editable: rename
   it and add / edit / delete blocks on any day (start time, duration, type,
   project). Adopting a preset drops you straight into the editor so it becomes

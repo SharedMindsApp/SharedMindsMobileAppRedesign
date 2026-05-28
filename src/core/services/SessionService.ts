@@ -1024,6 +1024,19 @@ export async function claimOpenSession(sessionId: string): Promise<FocusSession 
   return data as FocusSession;
 }
 
+/** When the host abandons a matched session, the remaining partner takes it
+ *  over: they become the host and the door re-opens for a new match. Returns
+ *  the updated session, or null if the caller wasn't the partner / it was
+ *  already taken over / the session ended. See migration 20260529000010. */
+export async function takeOverAsHost(sessionId: string): Promise<FocusSession | null> {
+  const { data, error } = await supabase.rpc('take_over_as_host', {
+    p_session_id: sessionId,
+  });
+  if (error) throw error;
+  if (!data) return null;
+  return data as FocusSession;
+}
+
 /** Host's mid-session escape hatch — flips open_to_match=false so the
  *  session disappears from the Live-now lane. Idempotent: no-op if the
  *  caller isn't the host or if someone's already joined. */
