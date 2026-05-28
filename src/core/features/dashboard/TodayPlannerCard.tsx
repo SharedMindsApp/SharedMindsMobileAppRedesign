@@ -35,6 +35,34 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { IntentionWizard } from '../reflection/IntentionWizard';
+import { fetchUpcomingScheduledSessions, type ScheduledSessionWithProfile } from '../../services/SessionService';
+
+/** A focus session reduced to what the planner grid needs. Read-only —
+ *  these are a record of work done/booked, laid over the editable blocks. */
+interface PlannerSession {
+  id: string;
+  startsAt: Date;
+  durationMins: number;
+  title: string;
+  status: 'scheduled' | 'completed';
+}
+
+function toPlannerSession(s: ScheduledSessionWithProfile): PlannerSession {
+  return {
+    id: s.id,
+    startsAt: new Date((s as { scheduled_at?: string }).scheduled_at ?? s.start_time),
+    durationMins: s.intended_duration_minutes ?? 50,
+    title: s.session_title ?? s.session_goal ?? 'Focus session',
+    status: ((s as { status?: string }).status === 'completed' ? 'completed' : 'scheduled'),
+  };
+}
+
+/** Same local calendar day? Avoids UTC-slice off-by-one near midnight. */
+function sameLocalDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+}
 
 // ── Layout constants ───────────────────────────────────────────────
 
@@ -431,12 +459,13 @@ function WeekGoalsSidebar({
 // ── WeekTimeline (7-day calendar grid) ─────────────────────────────
 
 function WeekTimeline({
-  weekDays, weekBlocks, todayKey, currentHour, currentMin,
+  weekDays, weekBlocks, weekSessions, todayKey, currentHour, currentMin,
   nowLabel, showNowLine, nowYpx,
   onToggle, onStart, onDelete, onSwitchToDay,
 }: {
   weekDays: WeekDay[];
   weekBlocks: TimeBlock[];
+  weekSessions: PlannerSession[];
   todayKey: string;
   currentHour: number;
   currentMin: number;
@@ -467,6 +496,12 @@ function WeekTimeline({
   }
   function blockHeightPx(block: TimeBlock): number {
     return Math.max(28, (block.duration_mins / 60) * HOUR_PX - 2);
+  }
+  function sessionTopPx(d: Date): number {
+    return ((d.getHours() - 7) * 60 + d.getMinutes()) * (HOUR_PX / 60) + GRID_TOP_PADDING;
+  }
+  function sessionHeightPx(mins: number): number {
+    return Math.max(20, (mins / 60) * HOUR_PX - 2);
   }
 
   return (
@@ -577,6 +612,33 @@ function WeekTimeline({
                     </div>
                   );
                 })}
+
+                {/* Logged + booked sessions (read-only overlay) */}
+                {weekSessions.filter((ps) => sameLocalDay(ps.startsAt, d.date)).map((ps) => {
+                  const completed = ps.status === 'completed';
+                  return (
+                    <div
+                      key={ps.id}
+                      className={`absolute left-1 right-1 rounded-lg px-1.5 py-1 overflow-hidden ring-1 ${
+                        completed ? 'bg-emerald-50 ring-emerald-200' : 'bg-indigo-50 ring-indigo-200'
+                      }`}
+                      style={{ top: `${sessionTopPx(ps.startsAt)}px`, height: `${sessionHeightPx(ps.durationMins)}px` }}
+                      title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
+                    >
+                      <p className={`text-[10px] font-bold leading-tight truncate flex items-center gap-0.5 ${
+                        completed ? 'text-emerald-800' : 'text-indigo-800'
+                      }`}>
+                        {completed
+                          ? <Check size={9} strokeWidth={3} className="shrink-0" />
+                          : <CalendarIcon size={8} className="shrink-0" />}
+                        {ps.title}
+                      </p>
+                      <p className={`text-[9px] font-semibold ${completed ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                        {ps.durationMins}m
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -646,6 +708,33 @@ export function TodayPlannerCard({
   const [weekBlockCounts, setWeekBlockCounts] = useState<Record<string, { done: number; total: number }>>({});
   const [mutating,        setMutating]        = useState(false);
   const [addingAtHour,    setAddingAtHour]    = useState<number | null>(null);
+
+  // ── Logged + booked focus sessions (read-only overlay) ─────────────
+  // The planner shows your editable time blocks; this lays your actual
+  // sessions on top so the calendar reflects work done, like /sessions.
+  const [plannerSessions, setPlannerSessions] = useState<PlannerSession[]>([]);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetchUpcomingScheduledSessions(user.id)
+      .then((rows) => {
+        if (cancelled) return;
+        // Only MY sessions on my personal planner (host or partner).
+        const mine = rows
+          .filter((s) => s.user_id === user.id || (s as { partner_user_id?: string }).partner_user_id === user.id)
+          .map(toPlannerSession);
+        setPlannerSessions(mine);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // Sessions on the day-view's selected day (parse YYYY-MM-DD as local).
+  const daySessions = useMemo(() => {
+    const [yy, mm, dd] = selectedDateStr.split('-').map(Number);
+    const sel = new Date(yy, mm - 1, dd);
+    return plannerSessions.filter((ps) => sameLocalDay(ps.startsAt, sel));
+  }, [plannerSessions, selectedDateStr]);
 
   // ── Weekly intentions ──────────────────────────────────────────
   const [weeklyData,    setWeeklyData]    = useState<ReflectionWithIntentions | null>(null);
@@ -1067,6 +1156,7 @@ export function TodayPlannerCard({
                   const isCurrent  = isViewingToday && hour === currentHour;
                   const isAdding   = addingAtHour === hour;
                   const hasBlocks  = blocksHere.length > 0;
+                  const sessHere   = daySessions.filter((ps) => ps.startsAt.getHours() === hour);
 
                   return (
                     <div
@@ -1096,6 +1186,29 @@ export function TodayPlannerCard({
                             onDelete={handleDelete}
                           />
                         ))}
+                        {/* Logged + booked sessions for this hour (read-only) */}
+                        {sessHere.map((ps) => {
+                          const completed = ps.status === 'completed';
+                          return (
+                            <div
+                              key={ps.id}
+                              className={`flex items-center gap-1.5 rounded-lg px-2 py-1 mb-1 ring-1 ${
+                                completed ? 'bg-emerald-50 ring-emerald-200' : 'bg-indigo-50 ring-indigo-200'
+                              }`}
+                              title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
+                            >
+                              {completed
+                                ? <Check size={11} strokeWidth={3} className={`shrink-0 ${completed ? 'text-emerald-600' : 'text-indigo-600'}`} />
+                                : <CalendarIcon size={10} className="shrink-0 text-indigo-600" />}
+                              <span className={`flex-1 min-w-0 text-[11px] font-bold truncate ${completed ? 'text-emerald-800' : 'text-indigo-800'}`}>
+                                {ps.title}
+                              </span>
+                              <span className={`text-[10px] font-semibold shrink-0 ${completed ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                                {ps.durationMins}m
+                              </span>
+                            </div>
+                          );
+                        })}
 
                         {isAdding && (
                           <AddBlockForm
@@ -1127,6 +1240,7 @@ export function TodayPlannerCard({
             <WeekTimeline
               weekDays={weekDays}
               weekBlocks={weekBlocks}
+              weekSessions={plannerSessions}
               todayKey={today}
               currentHour={currentHour}
               currentMin={currentMin}
