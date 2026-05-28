@@ -448,19 +448,13 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!activeSpaceId) return;
     let isMounted = true;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // ── Critical: tasks (the Today view needs them). Load on the boot path. ──
     (async () => {
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        const [tasks, activities, responsibilities, checkins, journal] = await Promise.all([
-          TaskService.getTasksBySpace(activeSpaceId),
-          DailyOSService.getActivityLogs(user!.id, todayStr),
-          DailyOSService.getResponsibilities(activeSpaceId, user!.id, todayStr),
-          DailyOSService.getCheckins(user!.id, todayStr),
-          DailyOSService.getJournalEntry(user!.id, todayStr)
-        ]);
+        const tasks = await TaskService.getTasksBySpace(activeSpaceId);
         if (!isMounted) return;
-
         // Tasks keep null projectId when unscoped (fixes earlier bug that
         // silently re-pointed inbox tasks at the first project).
         const mappedTasks: CoreTask[] = tasks.map(t => ({
@@ -479,24 +473,55 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           scheduledFor: t.scheduled_for ?? null,
           status: t.status,
         }));
-
-        // Restore active project from localStorage (validated by refreshProjects).
         const restoredActive = readActiveProject();
-
-        setState(s => ({
-          ...s,
-          tasks: mappedTasks,
-          activeProjectId: restoredActive,
-          activityLog: activities.length > 0 ? activities : s.activityLog,
-          responsibilities: responsibilities.length > 0 ? responsibilities : s.responsibilities,
-          checkins: checkins.length > 0 ? checkins : s.checkins,
-          journal: journal || s.journal,
-        }));
+        setState(s => ({ ...s, tasks: mappedTasks, activeProjectId: restoredActive }));
       } catch (err) {
-        console.error('[CoreData] Background sync error:', err);
+        console.error('[CoreData] Task load error:', err);
       }
     })();
-    return () => { isMounted = false; };
+
+    // ── Deferred: DailyOS extras (activity log, responsibilities, check-ins,
+    //    journal). Nothing on the home screen consumes these — responsibilities
+    //    + check-ins have no consumers at all; activity log + journal are only
+    //    read by JournalPage. Loading them at boot was four wasted concurrent
+    //    queries contending the pool (which was stalling getProjectsForUser).
+    //    Defer them to idle time so they're off the cold-load critical path. ──
+    let idleHandle: number | undefined;
+    const schedule = (cb: () => void) =>
+      (typeof (window as any).requestIdleCallback === 'function'
+        ? (window as any).requestIdleCallback(cb, { timeout: 4000 })
+        : window.setTimeout(cb, 1500)) as number;
+    idleHandle = schedule(() => {
+      (async () => {
+        try {
+          const [activities, responsibilities, checkins, journal] = await Promise.all([
+            DailyOSService.getActivityLogs(user!.id, todayStr),
+            DailyOSService.getResponsibilities(activeSpaceId, user!.id, todayStr),
+            DailyOSService.getCheckins(user!.id, todayStr),
+            DailyOSService.getJournalEntry(user!.id, todayStr),
+          ]);
+          if (!isMounted) return;
+          setState(s => ({
+            ...s,
+            activityLog: activities.length > 0 ? activities : s.activityLog,
+            responsibilities: responsibilities.length > 0 ? responsibilities : s.responsibilities,
+            checkins: checkins.length > 0 ? checkins : s.checkins,
+            journal: journal || s.journal,
+          }));
+        } catch (err) {
+          console.error('[CoreData] Deferred DailyOS sync error:', err);
+        }
+      })();
+    });
+
+    return () => {
+      isMounted = false;
+      if (idleHandle !== undefined && typeof (window as any).cancelIdleCallback === 'function') {
+        (window as any).cancelIdleCallback(idleHandle);
+      } else if (idleHandle !== undefined) {
+        clearTimeout(idleHandle);
+      }
+    };
   }, [activeSpaceId, user]);
 
   // Projects load independently of space — they may live in another user's space.
