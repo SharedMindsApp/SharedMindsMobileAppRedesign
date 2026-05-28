@@ -141,7 +141,6 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   //   • Body double (shared silent video room)
   //   • Real world (no screen, mobile chrome, offline-friendly)
   const [bodyDouble, setBodyDouble] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
   /** Open-to-match: "I'm starting solo, but if someone wants to drop in
    *  for a body-double, the door's open." See migration 20260527000015. */
@@ -363,11 +362,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         sessionMode,
         // Solo has no audio room — quiet mode is meaningless there
         quietMode: sessionMode === 'solo' ? false : quietMode,
-        bodyDouble: sessionMode === 'solo' && !isOffline ? bodyDouble : false,
-        isOffline: sessionMode === 'solo' ? isOffline : false,
-        // Open-to-match is solo-only (service layer enforces too). Offline
-        // sessions don't accept joiners because there's no screen to share.
-        openToMatch: sessionMode === 'solo' && !isOffline && openToMatch,
+        bodyDouble: sessionMode === 'solo' ? bodyDouble : false,
+        isOffline: false,
+        // Open-to-match is solo-only (the service layer enforces this too).
+        openToMatch: sessionMode === 'solo' && openToMatch,
         vibe: openToMatch ? vibe : undefined,
         sessionKind,
         startMood,
@@ -839,6 +837,12 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             ═══════════════════════════════════════════════════════ */}
         {wizardStep === 'settings' && (<>
 
+        {/* All step-2 controls live in this scroll region so the footer
+            (Back + Start) below stays pinned and always clickable — without
+            it the modal overflows its max-height and the Start button gets
+            clipped off-screen. */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+
         {/* ── Selected-goal recap (shown atop step 2) ───────── */}
         <div className="shrink-0 px-5 pb-2">
           <div className="rounded-2xl bg-primary/5 ring-1 ring-primary/15 px-3 py-2 flex items-center gap-2">
@@ -1133,16 +1137,12 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
         )}
 
-        {/* ── Solo sub-toggles: Body double + Real world ──────────
-            Mutually exclusive. Picking one forces the other off. */}
+        {/* ── Solo sub-toggles: Body double + Open the door ────── */}
         {sessionMode === 'solo' && (
           <div className="shrink-0 px-5 pt-3 space-y-2">
             <button
               type="button"
-              onClick={() => {
-                setBodyDouble((v) => !v);
-                if (!bodyDouble) setIsOffline(false);
-              }}
+              onClick={() => setBodyDouble((v) => !v)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
                 bodyDouble
                   ? 'bg-violet-500/10 ring-2 ring-violet-400/30'
@@ -1173,52 +1173,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               </div>
             </button>
 
-            {/* Real-world / offline session — for tasks away from the
-                screen (allotment, exercise, household, parenting prep).
-                Switches the active session UI to a phone-optimised chrome
-                and fires a Web Notification when the timer completes. */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsOffline((v) => !v);
-                if (!isOffline) setBodyDouble(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left ${
-                isOffline
-                  ? 'bg-emerald-500/10 ring-2 ring-emerald-400/30'
-                  : 'bg-surface-container-low hover:bg-surface-container'
-              }`}
-            >
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                isOffline ? 'bg-emerald-500 text-white' : 'bg-white stitch-text-secondary'
-              }`}>
-                <Leaf size={14} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold stitch-text-primary leading-tight">
-                  Real world · away from screen {isOffline && <span className="text-emerald-600">· on</span>}
-                </p>
-                <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
-                  {isOffline
-                    ? "We'll ping your phone when the timer's up. Walk away — your session keeps running."
-                    : 'For gardening, exercise, errands — anything that isn\'t at your screen.'}
-                </p>
-              </div>
-              <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
-                isOffline ? 'bg-emerald-500' : 'bg-surface-container'
-              }`}>
-                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
-                  isOffline ? 'translate-x-4' : 'translate-x-0'
-                }`} />
-              </div>
-            </button>
-
             {/* ── Open to match: solo session that anyone can drop into ──
-                Mutually exclusive with offline mode (no screen = no room
-                for a joiner). Hidden when isOffline is on. When toggled,
-                expands a 3-way vibe picker so the host signals their
-                social preference upfront. See migration 20260527000015. */}
-            {!isOffline && (<>
+                When toggled, expands a 3-way vibe picker so the host signals
+                their social preference upfront. See migration 20260527000015. */}
+            {(<>
               <button
                 type="button"
                 onClick={() => setOpenToMatch((v) => !v)}
@@ -1326,6 +1284,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </button>
           </div>
         )}
+
+        </div>{/* end step-2 scroll region */}
 
         {/* ── Error ────────────────────────────────────────── */}
         {error && (
