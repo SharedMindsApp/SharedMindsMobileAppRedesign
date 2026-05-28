@@ -22,6 +22,12 @@ export interface SpaceMember {
     updated_at: string;
 }
 
+// Cold-load dedup: bootstrapPersonalSpace is called from BOTH AuthProvider
+// and CoreDataContext on every boot. Cache the in-flight/resolved promise per
+// user so the underlying spaces query runs ONCE, not twice (it was adding a
+// redundant round-trip to the cold-load query storm).
+const bootstrapCache = new Map<string, Promise<Space>>();
+
 export const SpaceService = {
     /**
      * Fetches all spaces the current user is an active member of.
@@ -47,9 +53,20 @@ export const SpaceService = {
 
     /**
      * Checks if the user has a personal space, and creates one if they don't.
-     * Returns the personal space.
+     * Returns the personal space. Deduped per user (see bootstrapCache) so the
+     * multiple cold-load callers share a single query.
      */
     async bootstrapPersonalSpace(userId: string): Promise<Space> {
+        const cached = bootstrapCache.get(userId);
+        if (cached) return cached;
+        const run = this._bootstrapPersonalSpaceImpl(userId);
+        bootstrapCache.set(userId, run);
+        // On failure, clear the cache so a later attempt can retry.
+        run.catch(() => bootstrapCache.delete(userId));
+        return run;
+    },
+
+    async _bootstrapPersonalSpaceImpl(userId: string): Promise<Space> {
         // 1. Check if they already have one
         const { data: existingSpaces, error: fetchError } = await supabase
             .from('spaces')

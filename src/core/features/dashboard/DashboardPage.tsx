@@ -19,7 +19,7 @@
  *      Checklist → WeekStrip → Recent finishes
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight, Check, Flame, CheckCircle2, Plus, Target, Users, Flag, Layers,
@@ -446,8 +446,16 @@ export function DashboardPage() {
   // 20260527000022, and (b) it needs to refresh whenever a session
   // completes — which the bundled RPC doesn't reactively know about.
   const [streakDays, setStreakDays] = useState<number>(0);
+  // Cold-load perf: the bundled fetchHomeDashboard RPC already returns
+  // currentStreak, so we seed streakDays from it (below) and DON'T fire the
+  // standalone current_streak RPC on first mount — that was a duplicate query
+  // in the cold-load storm. We only call it on a *subsequent* session-end
+  // (activeSession id change) to refresh the streak reactively.
+  const streakInitRef = useRef(false);
   useEffect(() => {
     if (!user?.id) return;
+    // Skip the very first run — the home RPC seeds the streak.
+    if (!streakInitRef.current) { streakInitRef.current = true; return; }
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase.rpc('current_streak');
@@ -456,14 +464,10 @@ export function DashboardPage() {
         console.warn('[DashboardPage] current_streak failed:', error);
         return;
       }
-      // RPC returns a single row {days, last_session_date}; supabase-js
-      // sometimes hands back an array, sometimes the row directly.
       const row = Array.isArray(data) ? data[0] : data;
       setStreakDays((row?.days as number) ?? 0);
     })();
     return () => { cancelled = true; };
-    // Re-run when the active session ends — most likely streak-change
-    // moment. activeSession transitions to null when the user finishes.
   }, [user?.id, activeSession?.id]);
 
   // Profile-completion modal trigger: first dashboard load after the
@@ -519,6 +523,7 @@ export function DashboardPage() {
       setMyShips(dash.recentShips);
       setWeekSessions(dash.weekSessions);
       setLastActiveAt(dash.lastActiveAt);
+      setStreakDays(dash.currentStreak ?? 0);
       // Synthesize a partial ProfileStats from the home RPC for the
       // identity chips. Full stats (best day/week, longest streak, etc.)
       // still loads lazily when the user opens the Stats tab.
