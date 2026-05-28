@@ -110,57 +110,17 @@ export const ProjectService = {
         // fetch:
         //   • own projects   → created_by = me      (projects_created_by_idx)
         //   • shared projects → id IN (my memberships) (PK lookups)
-        // Use the LOCAL session (no network) to get the uid. getUser() hits
-        // the auth server over the network and, under the cold-load request
-        // storm, was hanging for many seconds — getSession() reads from
-        // storage and is instant.
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
-        if (!user) return [];
-
-        const [ownRes, memRes] = await Promise.all([
-            supabase
-                .from('projects')
-                .select('*')
-                .eq('created_by', user.id)
-                .neq('status', 'archived'),
-            supabase
-                .from('project_members')
-                .select('project_id')
-                .eq('user_id', user.id),
-        ]);
-
-        if (ownRes.error) {
-            console.error('[ProjectService] Failed to fetch own projects:', ownRes.error);
-            throw ownRes.error;
+        // Single SECURITY DEFINER RPC: does the own/shared/space visibility
+        // decision in ONE indexed query, bypassing the slow per-row RLS
+        // policy-function evaluation that was stalling under cold-load pool
+        // pressure (a 1-row fetch was taking 11–16s). See migration
+        // 20260528000008_get_my_projects_rpc.
+        const { data, error } = await supabase.rpc('get_my_projects');
+        if (error) {
+            console.error('[ProjectService] get_my_projects failed:', error);
+            throw error;
         }
-
-        const own = (ownRes.data ?? []) as Project[];
-        const ownIds = new Set(own.map((p) => p.id));
-
-        // Shared projects: memberships pointing at projects I didn't create.
-        const sharedIds = (memRes.data ?? [])
-            .map((m: { project_id: string }) => m.project_id)
-            .filter((id) => !ownIds.has(id));
-
-        let shared: Project[] = [];
-        if (sharedIds.length > 0) {
-            const { data, error } = await supabase
-                .from('projects')
-                .select('*')
-                .in('id', sharedIds)
-                .neq('status', 'archived');
-            if (error) {
-                console.error('[ProjectService] Failed to fetch shared projects:', error);
-            } else {
-                shared = (data ?? []) as Project[];
-            }
-        }
-
-        // Merge + sort newest-updated first (matches the old behaviour).
-        return [...own, ...shared].sort(
-            (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
-        );
+        return (data ?? []) as Project[];
     },
 
     async getProjectById(projectId: string): Promise<Project | null> {
