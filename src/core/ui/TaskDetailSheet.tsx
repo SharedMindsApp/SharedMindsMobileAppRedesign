@@ -50,6 +50,10 @@ interface Props {
   onStepPromoted?: (task: import('../services/TaskService').Task) => void;
 }
 
+// Task titles stay short + scannable — a single concrete next action, not a
+// paragraph. Long context belongs in steps, not the title.
+const MAX_TITLE = 140;
+
 function isoToday(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -106,7 +110,7 @@ export function TaskDetailSheet({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl"
+        className="w-full sm:max-w-md min-h-[62dvh] max-h-[92dvh] sm:min-h-0 overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -133,27 +137,45 @@ export function TaskDetailSheet({
 
           <div className="flex-1 min-w-0">
             {editing ? (
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-                  if (e.key === 'Escape') { e.preventDefault(); setEditing(false); setDraft(task.title); }
-                }}
-                autoFocus
-                rows={2}
-                className="w-full resize-none text-lg font-extrabold stitch-text-primary leading-snug bg-surface-container-low rounded-xl px-2.5 py-2 outline-none focus:ring-2 ring-primary/30"
-              />
+              <div>
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value.slice(0, MAX_TITLE))}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                    if (e.key === 'Escape') { e.preventDefault(); setEditing(false); setDraft(task.title); }
+                  }}
+                  autoFocus
+                  rows={3}
+                  maxLength={MAX_TITLE}
+                  className="w-full resize-none text-lg font-extrabold stitch-text-primary leading-snug bg-surface-container-low rounded-xl px-2.5 py-2 outline-none focus:ring-2 ring-primary/30"
+                />
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className={`text-[10px] font-semibold ${draft.length >= MAX_TITLE ? 'text-rose-600' : 'stitch-text-secondary'}`}>
+                    {draft.length}/{MAX_TITLE}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={commitRename}
+                    className="text-[11px] font-bold text-primary hover:opacity-70 transition-opacity"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
             ) : (
               <button
                 type="button"
                 onClick={() => onRename && setEditing(true)}
-                className={`group block w-full text-left text-lg font-extrabold leading-snug ${done ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
+                disabled={!onRename}
+                className={`block w-full text-left text-lg font-extrabold leading-snug ${done ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
               >
                 {task.title}
                 {onRename && (
-                  <Pencil size={13} className="inline-block ml-1.5 mb-0.5 stitch-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <span className="inline-flex items-center gap-0.5 align-middle ml-2 px-1.5 py-0.5 rounded-md bg-surface-container-low text-[10px] font-bold text-primary">
+                    <Pencil size={10} /> Edit
+                  </span>
                 )}
               </button>
             )}

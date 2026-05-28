@@ -212,9 +212,10 @@ export function AddTaskSheet({
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => setTitle(e.target.value.slice(0, 140))}
               onKeyDown={(e) => { if (e.key === 'Enter') handleManualAdd(); }}
               autoFocus
+              maxLength={140}
               placeholder="What do you want to get done?"
               className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none border-0 min-w-0"
             />

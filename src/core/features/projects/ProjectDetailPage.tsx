@@ -1377,6 +1377,7 @@ function TasksTab({
                 onScheduleToday={() => onSchedule(t.id, todayIso)}
                 onSchedulePicker={(date) => onSchedule(t.id, date)}
                 onDelete={() => onDelete(t.id)}
+                onOpen={() => onOpenTask(t.id)}
               />
             ))}
           </div>
@@ -1422,12 +1423,14 @@ function TasksTab({
 
 // ── Backlog row — compact, with a "schedule" action ─────────────────────
 function BacklogRow({
-  task, onScheduleToday, onSchedulePicker, onDelete,
+  task, onScheduleToday, onSchedulePicker, onDelete, onOpen,
 }: {
   task: Task;
   onScheduleToday: () => void;
   onSchedulePicker: (date: string) => void;
   onDelete: () => void;
+  /** Tap the title to open the "work on this" sheet (edit, steps, etc.). */
+  onOpen: () => void;
 }) {
   const [showDays, setShowDays] = useState(false);
   // The "Pick day" menu offers the next 7 days starting from today —
@@ -1442,8 +1445,14 @@ function BacklogRow({
   });
   return (
     <div className="group bg-white rounded-lg ring-1 ring-surface-container px-3 py-2 flex items-center gap-2">
-      <p className="flex-1 text-xs font-semibold stitch-text-primary truncate">{task.title}</p>
-      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex-1 min-w-0 text-left text-xs font-semibold stitch-text-primary truncate hover:text-primary transition-colors"
+      >
+        {task.title}
+      </button>
+      <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <button
           type="button"
           onClick={onScheduleToday}
