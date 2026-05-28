@@ -984,16 +984,28 @@ export function TodayPlannerCard({
         {/* HERO: gradient banner with 7-day pills                  */}
         {/* ─────────────────────────────────────────────────────── */}
         <div className="relative px-4 sm:px-6 pt-6 pb-5 bg-gradient-to-br from-violet-50 via-blue-50/40 to-cyan-50/30 border-b border-violet-200/30">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div>
+          {/* Header — two rows on mobile (heading, then controls) so the
+              controls never get squeezed into vertical-text slivers; a single
+              justify-between row from sm+ where there's width to spare. */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
                 <p className="text-[10px] font-extrabold tracking-widest uppercase text-violet-600 mb-0.5">Plan</p>
-                <h2 className="text-base font-extrabold stitch-text-primary leading-tight">
+                <h2 className="text-base font-extrabold stitch-text-primary leading-tight truncate">
                   Week of {weekLabel}
                 </h2>
               </div>
-              {/* Week prev/next — pill buttons so they're obviously clickable */}
-              <div className="flex items-center gap-1 ml-2">
+              {/* Today count — visible on mobile here (was hidden), sits with the heading */}
+              <div className="flex sm:hidden items-center gap-1.5 shrink-0 text-[10px] font-bold stitch-text-secondary bg-white/70 backdrop-blur px-2.5 py-1.5 rounded-full ring-1 ring-violet-200/40 whitespace-nowrap">
+                <CalendarIcon size={11} className="text-violet-600" />
+                <span className="tabular-nums">{doneCount} / {totalCount || '—'}</span> today
+              </div>
+            </div>
+
+            {/* Controls row — wraps gracefully if it ever runs out of room */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Week prev/next */}
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1002,7 +1014,7 @@ export function TodayPlannerCard({
                     setSelectedDateStr(newOffset === 0 ? today : weekDays[0].dateStr);
                   }}
                   disabled={weekOffset === 0}
-                  className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-white/80 ring-1 ring-violet-200 text-violet-700 hover:bg-white hover:shadow-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 shrink-0 whitespace-nowrap text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-white/80 ring-1 ring-violet-200 text-violet-700 hover:bg-white hover:shadow-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="Previous week"
                 >
                   <ChevronLeft size={12} strokeWidth={2.5} />
@@ -1017,21 +1029,20 @@ export function TodayPlannerCard({
                     setSelectedDateStr(newWeekDays[0].dateStr);
                   }}
                   disabled={weekOffset >= MAX_WEEK_OFFSET}
-                  className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-white/80 ring-1 ring-violet-200 text-violet-700 hover:bg-white hover:shadow-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 shrink-0 whitespace-nowrap text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-white/80 ring-1 ring-violet-200 text-violet-700 hover:bg-white hover:shadow-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="Next week"
                 >
                   Next
                   <ChevronRight size={12} strokeWidth={2.5} />
                 </button>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
+
               {/* Day / Week toggle */}
-              <div className="inline-flex items-center gap-0.5 bg-white/70 backdrop-blur rounded-full p-0.5 ring-1 ring-violet-200/40">
+              <div className="inline-flex items-center gap-0.5 shrink-0 bg-white/70 backdrop-blur rounded-full p-0.5 ring-1 ring-violet-200/40">
                 <button
                   type="button"
                   onClick={() => setViewMode('day')}
-                  className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full transition-all ${
+                  className={`text-[10px] font-extrabold uppercase tracking-wider whitespace-nowrap px-2.5 py-1 rounded-full transition-all ${
                     viewMode === 'day'
                       ? 'bg-gradient-to-br from-violet-600 to-blue-500 text-white shadow-md'
                       : 'stitch-text-secondary hover:text-violet-700'
@@ -1042,7 +1053,7 @@ export function TodayPlannerCard({
                 <button
                   type="button"
                   onClick={() => setViewMode('week')}
-                  className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full transition-all ${
+                  className={`text-[10px] font-extrabold uppercase tracking-wider whitespace-nowrap px-2.5 py-1 rounded-full transition-all ${
                     viewMode === 'week'
                       ? 'bg-gradient-to-br from-violet-600 to-blue-500 text-white shadow-md'
                       : 'stitch-text-secondary hover:text-violet-700'
@@ -1056,16 +1067,11 @@ export function TodayPlannerCard({
               <button
                 type="button"
                 onClick={() => setShowFindSessions(true)}
-                className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-white/85 backdrop-blur ring-1 ring-violet-200/50 text-violet-700 hover:bg-white hover:shadow-sm hover:-translate-y-px transition-all"
+                className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-white/85 backdrop-blur ring-1 ring-violet-200/50 text-violet-700 hover:bg-white hover:shadow-sm hover:-translate-y-px transition-all"
               >
                 <Search size={11} strokeWidth={2.5} />
                 Find sessions
               </button>
-
-              <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-bold stitch-text-secondary bg-white/70 backdrop-blur px-2.5 py-1.5 rounded-full ring-1 ring-violet-200/40">
-                <CalendarIcon size={11} className="text-violet-600" />
-                <span className="tabular-nums">{doneCount} / {totalCount || '—'}</span> today
-              </div>
             </div>
           </div>
 
@@ -1108,7 +1114,7 @@ export function TodayPlannerCard({
                   </span>
                   <div className="h-[14px] flex items-center">
                     {total > 0 ? (
-                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full tabular-nums leading-none ${
+                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full tabular-nums leading-none whitespace-nowrap ${
                         isToday
                           ? 'bg-white/25 text-white'
                           : allDone
