@@ -77,9 +77,9 @@ export function IntentionWizard({
       const refl = await ReflectionService.ensureReflection(targetWeek);
       setReflectionId(refl.id);
 
-      // Pull existing intentions (could be 0-3) and slot into drafts
-      const existing = await ReflectionService.getReflectionByWeek(targetWeek);
-      const ints = existing?.intentions ?? [];
+      // Pull existing intentions (could be 0-3) directly by reflection id —
+      // ensureReflection already gave us the row, so no need to re-fetch it.
+      const ints = await ReflectionService.listIntentions(refl.id);
       const filled: DraftIntention[] = [0, 1, 2].map((i) => {
         const found = ints.find((x) => x.sort_order === i);
         if (!found) return { id: null, title: '', note: '', projectId: null };

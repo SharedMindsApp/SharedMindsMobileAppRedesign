@@ -186,6 +186,18 @@ export const ReflectionService = {
     return row as WeeklyReflection;
   },
 
+  /** Lean intentions fetch by reflection id — no microtask join. Used by
+   *  the wizard, which only needs title/notes/project/sort. */
+  async listIntentions(reflectionId: string): Promise<WeeklyIntention[]> {
+    const { data, error } = await supabase
+      .from('weekly_intentions')
+      .select('id, reflection_id, title, notes, project_id, sort_order, completed_at, created_at')
+      .eq('reflection_id', reflectionId)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+    return (data ?? []) as WeeklyIntention[];
+  },
+
   async updateReflection(
     reflectionId: string,
     patch: Partial<Pick<WeeklyReflection, 'reflection_text' | 'overall_rating' | 'status'>>,
