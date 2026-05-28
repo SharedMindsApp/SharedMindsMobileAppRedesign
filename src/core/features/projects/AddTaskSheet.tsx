@@ -180,7 +180,7 @@ export function AddTaskSheet({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md h-[94dvh] sm:h-auto sm:max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl"
+        className="w-full sm:max-w-md min-h-[55dvh] max-h-[92dvh] sm:min-h-0 overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -234,9 +234,9 @@ export function AddTaskSheet({
             )}
           </div>
 
-          {/* Difficulty / focus for the new task */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">Focus</span>
+          {/* Difficulty / cognitive load for the new task */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">Difficulty</span>
             <TaskLoadPicker value={manualLoad} onChange={setManualLoad} size="sm" />
           </div>
 
@@ -244,7 +244,7 @@ export function AddTaskSheet({
           {milestones.length > 0 && (
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary mb-1.5">
-                Focus (optional)
+                Focus area <span className="font-semibold normal-case tracking-normal opacity-70">· optional</span>
               </p>
               <div className="flex flex-wrap gap-1.5">
                 <FocusChip
