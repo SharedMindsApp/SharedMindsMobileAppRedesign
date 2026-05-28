@@ -47,6 +47,9 @@ export interface Profile {
     location?: string | null;
     country_code?: string | null;
     city?: string | null;
+    /** Home-planner visible day window (hours, 0–23). Same-day range. */
+    planner_start_hour?: number | null;
+    planner_end_hour?: number | null;
     is_hidden_from_directory?: boolean;
     suspended_until?: string | null;
     warning_count?: number | null;

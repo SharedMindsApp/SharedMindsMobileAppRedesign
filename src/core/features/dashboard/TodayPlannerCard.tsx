@@ -137,8 +137,16 @@ function sameLocalDay(a: Date, b: Date): boolean {
 // ── Layout constants ───────────────────────────────────────────────
 
 const HOUR_PX = 56;                                       // height of one hour row
-const HOURS   = Array.from({ length: 15 }, (_, i) => i + 7); // 7am → 9pm
 const GRID_TOP_PADDING = 12;
+// Default visible day window (user-configurable, stored on the profile).
+const DEFAULT_PLANNER_START = 7;
+const DEFAULT_PLANNER_END   = 22;
+/** Inclusive hour list start..end (clamped to a sane same-day window). */
+function hoursRange(start: number, end: number): number[] {
+  const s = Math.max(0, Math.min(23, start));
+  const e = Math.max(s + 1, Math.min(23, end));
+  return Array.from({ length: e - s + 1 }, (_, i) => i + s);
+}
 
 // ── Templates + styles ─────────────────────────────────────────────
 
@@ -240,12 +248,12 @@ function nearestDuration(mins: number): 25 | 50 | 90 {
   return 90;                  // 90 or 120 min block → 90 min session
 }
 
-function nextFreeSlot(blocks: TimeBlock[]): number {
+function nextFreeSlot(blocks: TimeBlock[], dayStart = DEFAULT_PLANNER_START, dayEnd = DEFAULT_PLANNER_END): number {
   const now = new Date();
   const taken = new Set(blocks.map((b) => parseInt(b.start_time.split(':')[0], 10)));
-  let h = Math.max(7, now.getHours());
-  while (h <= 20 && taken.has(h)) h++;
-  return Math.min(h, 20);
+  let h = Math.max(dayStart, now.getHours());
+  while (h < dayEnd && taken.has(h)) h++;
+  return Math.min(h, dayEnd);
 }
 
 // ── BlockCard ──────────────────────────────────────────────────────
@@ -712,7 +720,7 @@ function WeekGoalsSidebar({
 
 function WeekTimeline({
   weekDays, weekBlocks, weekSessions, todayKey, currentHour, currentMin,
-  nowLabel, showNowLine, nowYpx,
+  nowLabel, showNowLine, nowYpx, hours, dayStart,
   onToggle, onStart, onDelete, onSwitchToDay, onSelectSession, onHoverSession,
 }: {
   weekDays: WeekDay[];
@@ -726,6 +734,9 @@ function WeekTimeline({
   nowLabel: string;
   showNowLine: boolean;
   nowYpx: number;
+  /** Visible hour rows + the first hour (grid origin). */
+  hours: number[];
+  dayStart: number;
   onToggle: (b: TimeBlock) => void;
   onStart:  (b: TimeBlock) => void;
   onDelete: (id: string) => void;
@@ -737,22 +748,22 @@ function WeekTimeline({
   useEffect(() => {
     const t = setTimeout(() => {
       if (!scrollRef.current) return;
-      const targetY = Math.max(0, (currentHour - 7 - 1) * HOUR_PX);
+      const targetY = Math.max(0, (currentHour - dayStart - 1) * HOUR_PX);
       scrollRef.current.scrollTo({ top: targetY, behavior: 'smooth' });
     }, 200);
     return () => clearTimeout(t);
-  }, [currentHour]);
+  }, [currentHour, dayStart]);
 
   function blockTopPx(block: TimeBlock): number {
     const h = parseInt(block.start_time.split(':')[0], 10);
     const m = parseInt(block.start_time.split(':')[1] ?? '0', 10);
-    return ((h - 7) * 60 + m) * (HOUR_PX / 60) + GRID_TOP_PADDING;
+    return ((h - dayStart) * 60 + m) * (HOUR_PX / 60) + GRID_TOP_PADDING;
   }
   function blockHeightPx(block: TimeBlock): number {
     return Math.max(28, (block.duration_mins / 60) * HOUR_PX - 2);
   }
   function sessionTopPx(d: Date): number {
-    return ((d.getHours() - 7) * 60 + d.getMinutes()) * (HOUR_PX / 60) + GRID_TOP_PADDING;
+    return ((d.getHours() - dayStart) * 60 + d.getMinutes()) * (HOUR_PX / 60) + GRID_TOP_PADDING;
   }
   function sessionHeightPx(mins: number): number {
     return Math.max(20, (mins / 60) * HOUR_PX - 2);
@@ -791,11 +802,11 @@ function WeekTimeline({
 
       {/* Scrollable hours + columns */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto relative" style={{ scrollbarWidth: 'none' }}>
-        <div className="grid grid-cols-[44px_repeat(7,1fr)] relative" style={{ minHeight: `${HOURS.length * HOUR_PX + GRID_TOP_PADDING * 2}px` }}>
+        <div className="grid grid-cols-[44px_repeat(7,1fr)] relative" style={{ minHeight: `${hours.length * HOUR_PX + GRID_TOP_PADDING * 2}px` }}>
 
           {/* Hour rail (left column) */}
           <div className="relative" style={{ paddingTop: `${GRID_TOP_PADDING}px` }}>
-            {HOURS.map((hour) => (
+            {hours.map((hour) => (
               <div key={hour} className="text-right pr-2" style={{ height: `${HOUR_PX}px` }}>
                 <span className={`text-[10px] font-extrabold tabular-nums -translate-y-1 inline-block ${
                   hour === currentHour ? 'text-rose-600' : 'text-slate-400'
@@ -819,7 +830,7 @@ function WeekTimeline({
                 style={{ paddingTop: `${GRID_TOP_PADDING}px` }}
               >
                 {/* Hour grid lines */}
-                {HOURS.map((hour) => (
+                {hours.map((hour) => (
                   <div
                     key={hour}
                     className="border-t border-surface-container/30"
@@ -934,7 +945,27 @@ export function TodayPlannerCard({
 }: {
   onStartSession: (goal: string, duration: 25 | 50 | 90) => void;
 }) {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
+  // User-defined visible day window (same-day range), stored on the profile.
+  const dayStart = Math.max(0, Math.min(23, profile?.planner_start_hour ?? DEFAULT_PLANNER_START));
+  const dayEnd   = Math.max(dayStart + 1, Math.min(23, profile?.planner_end_hour ?? DEFAULT_PLANNER_END));
+  const hours    = useMemo(() => hoursRange(dayStart, dayEnd), [dayStart, dayEnd]);
+  const [savingWindow, setSavingWindow] = useState(false);
+
+  async function saveDayWindow(nextStart: number, nextEnd: number) {
+    if (!user || savingWindow) return;
+    const s = Math.max(0, Math.min(22, nextStart));
+    const e = Math.max(s + 1, Math.min(23, nextEnd));
+    setSavingWindow(true);
+    try {
+      await supabase.from('profiles').update({ planner_start_hour: s, planner_end_hour: e }).eq('id', user.id);
+      await refreshProfile();
+    } catch (err) {
+      console.warn('[TodayPlannerCard] saveDayWindow failed:', err);
+    } finally {
+      setSavingWindow(false);
+    }
+  }
   const { state: { spaces, projects } } = useCoreData();
   const personalSpace = spaces.find((s) => s.type === 'personal');
   // Active projects, for dedicating a block to one.
@@ -1073,7 +1104,7 @@ export function TodayPlannerCard({
   useEffect(() => {
     const t = setTimeout(() => {
       if (!gridScrollRef.current) return;
-      const targetY = Math.max(0, (currentHour - 7 - 1) * HOUR_PX);
+      const targetY = Math.max(0, (currentHour - dayStart - 1) * HOUR_PX);
       gridScrollRef.current.scrollTo({ top: targetY, behavior: 'smooth' });
     }, 200);
     return () => clearTimeout(t);
@@ -1108,7 +1139,7 @@ export function TodayPlannerCard({
   // ── Mutations ──────────────────────────────────────────────────
   async function handleQuickAdd(template: QuickTemplate) {
     if (!user || mutating) return;
-    const hour = nextFreeSlot(blocks);
+    const hour = nextFreeSlot(blocks, dayStart, dayEnd);
     const startTime = `${String(hour).padStart(2, '0')}:00`;
     setMutating(true);
     try {
@@ -1169,7 +1200,7 @@ export function TodayPlannerCard({
 
   /** Open the composer at the next free slot, dedicated to a project. */
   function handleProjectQuickAdd(projectId: string) {
-    const hour = nextFreeSlot(blocks);
+    const hour = nextFreeSlot(blocks, dayStart, dayEnd);
     setQuickProjectId(projectId);
     setAddingAtHour(hour);
     // Make sure the day view is showing (not week) so the composer is visible.
@@ -1184,10 +1215,10 @@ export function TodayPlannerCard({
   const totalCount       = blocks.length;
   const weekLabel        = formatWeekRange(weekDays);
 
-  const nowMinutesFromGridStart = (currentHour - 7) * 60 + currentMin;
+  const nowMinutesFromGridStart = (currentHour - dayStart) * 60 + currentMin;
   const nowYpx      = nowMinutesFromGridStart * (HOUR_PX / 60) + GRID_TOP_PADDING;
   // Only draw the live "now" line when the user is looking at today's timeline
-  const showNowLine = isViewingToday && currentHour >= 7 && currentHour <= 21;
+  const showNowLine = isViewingToday && currentHour >= dayStart && currentHour <= dayEnd;
   const nowLabel    = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 
   return (
@@ -1286,6 +1317,34 @@ export function TodayPlannerCard({
                 <Search size={11} strokeWidth={2.5} />
                 Find sessions
               </button>
+
+              {/* Day window — set the hours your planner shows (night owls,
+                  early birds, evening workers). Persists to the profile. */}
+              <div className="inline-flex items-center gap-1 shrink-0 text-[10px] font-bold stitch-text-secondary bg-white/70 backdrop-blur px-1.5 py-1 rounded-full ring-1 ring-violet-200/40">
+                <select
+                  value={dayStart}
+                  onChange={(e) => saveDayWindow(Number(e.target.value), dayEnd)}
+                  disabled={savingWindow}
+                  aria-label="Day starts at"
+                  className="bg-transparent outline-none cursor-pointer disabled:opacity-50"
+                >
+                  {Array.from({ length: 23 }, (_, i) => i).map((h) => (
+                    <option key={h} value={h}>{formatHour(h)}</option>
+                  ))}
+                </select>
+                <span>–</span>
+                <select
+                  value={dayEnd}
+                  onChange={(e) => saveDayWindow(dayStart, Number(e.target.value))}
+                  disabled={savingWindow}
+                  aria-label="Day ends at"
+                  className="bg-transparent outline-none cursor-pointer disabled:opacity-50"
+                >
+                  {Array.from({ length: 23 }, (_, i) => i + 1).filter((h) => h > dayStart).map((h) => (
+                    <option key={h} value={h}>{formatHour(h)}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1476,7 +1535,7 @@ export function TodayPlannerCard({
                 )}
 
                 {/* Hour rows */}
-                {HOURS.map((hour) => {
+                {hours.map((hour) => {
                   const blocksHere = blocks.filter((b) => parseInt(b.start_time.split(':')[0], 10) === hour);
                   // When viewing today: hours already passed are greyed. On future days: nothing is past.
                   const isPast     = isViewingToday && hour < currentHour;
@@ -1585,6 +1644,8 @@ export function TodayPlannerCard({
               nowLabel={nowLabel}
               showNowLine={showNowLine}
               nowYpx={nowYpx}
+              hours={hours}
+              dayStart={dayStart}
               onToggle={handleToggle}
               onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
               onDelete={handleDelete}
