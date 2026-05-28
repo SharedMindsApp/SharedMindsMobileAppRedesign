@@ -8,70 +8,95 @@
  * line-based format we can paste back and parse reliably (free-form prose is
  * too fragile to re-import).
  *
- * Format the AI is told to return:
- *   M: <milestone title> | <weight 0-100>
- *   P: <phase title> | <weight 0-100>
- *   P: <phase title> | <weight 0-100>
- *   M: <milestone title> | <weight 0-100>
+ * Format the AI is told to return — a [x]/[ ] box carries what's already done
+ * so the sense of progress survives the round-trip:
+ *   M: [x] <milestone title> | <weight 0-100>
+ *   P: [ ] <phase title> | <weight 0-100>
+ *   P: [x] <phase title> | <weight 0-100>
  *   ...
  * (weights optional — we even-split if missing or invalid.)
  */
 
-export interface ParsedPhase { title: string; weight_pct: number; }
-export interface ParsedMilestone { title: string; weight_pct: number; phases: ParsedPhase[]; }
+export interface ParsedPhase { title: string; weight_pct: number; done: boolean; }
+export interface ParsedMilestone { title: string; weight_pct: number; done: boolean; phases: ParsedPhase[]; }
 
-interface DraftMilestone { title: string; weight_pct: number; phases: { title: string; weight_pct: number }[]; }
+interface DraftPhase { title: string; weight_pct: number; already_done?: boolean; }
+interface DraftMilestone { title: string; weight_pct: number; already_done?: boolean; phases: DraftPhase[]; }
 
 export function buildRoadmapValidationPrompt(args: {
   projectName: string;
   brainDump?: string | null;
   milestones: DraftMilestone[];
+  /** Overall self-reported progress, so the AI can mark completed items to
+   *  match — fixes "70% done but nothing ticked". */
+  startedStatus?: 'not_started' | 'in_progress' | null;
+  completionPct?: number | null;
 }): string {
   const subject = args.projectName.trim() || '[PROJECT NAME]';
   const ctx = args.brainDump?.trim()
     ? `\n\nContext on the project:\n${args.brainDump.trim()}`
     : '';
 
+  const box = (done?: boolean) => (done ? '[x]' : '[ ]');
   const draft = args.milestones
     .filter((m) => m.title.trim())
     .map((m) => {
-      const head = `M: ${m.title.trim()} | ${Math.round(m.weight_pct)}`;
+      const head = `M: ${box(m.already_done)} ${m.title.trim()} | ${Math.round(m.weight_pct)}`;
       const ph = m.phases
         .filter((p) => p.title.trim())
-        .map((p) => `P: ${p.title.trim()} | ${Math.round(p.weight_pct)}`)
+        .map((p) => `P: ${box(p.already_done)} ${p.title.trim()} | ${Math.round(p.weight_pct)}`)
         .join('\n');
       return ph ? `${head}\n${ph}` : head;
     })
     .join('\n');
 
+  // Progress line: tell the AI roughly how far along the project is so the
+  // completed [x] items it returns reflect that — not a blank slate.
+  const progress = (() => {
+    if (args.startedStatus === 'not_started') {
+      return "I haven't started yet — nothing is done.";
+    }
+    if (typeof args.completionPct === 'number' && args.completionPct > 0) {
+      return `I'm already roughly ${Math.round(args.completionPct)}% of the way through this project overall.`;
+    }
+    if (args.startedStatus === 'in_progress') {
+      return "I'm already partway through this project.";
+    }
+    return null;
+  })();
+
+  const progressLine = progress ? `\n\n${progress}` : '';
+
   // Two modes: with a draft → review/correct; without → write from scratch.
   const task = draft
-    ? `Here's my current draft roadmap — milestones (major destinations, weighted as % of the whole project) and phases (the work inside each milestone, weighted as % within that milestone):
+    ? `Here's my current draft roadmap — milestones (major destinations, weighted as % of the whole project) and phases (the work inside each milestone, weighted as % within that milestone). A [x] means I've already completed it; [ ] means not yet:
 
 ${draft}
 
 Please review it as a thoughtful collaborator who knows this work:
 - Are these the right milestones, in a sensible order? Add, remove, merge, or rename as needed.
 - Are the phases under each one complete and concrete? Fix gaps.
+- Mark what's actually done with [x] and what's still to do with [ ] — keep my existing ticks unless they're clearly wrong, and make the completed items reflect my real progress.
 - Sanity-check the weights (milestone weights should total ~100; phase weights within each milestone should total ~100).`
     : `Please draft a complete roadmap for this project: a handful of milestones (major destinations) and the phases (the work) inside each one.
-- Order the milestones sensibly from where I am now to "done".
+- Order the milestones sensibly from the start of the project through to "done".
+- Mark each milestone/phase I've already completed with [x] and the rest with [ ], so the roadmap reflects where I actually am.
 - Give each milestone a weight as % of the whole project (they should total ~100).
 - Give each phase a weight as % within its milestone (each milestone's phases should total ~100).`;
 
-  return `I'm planning a project called "${subject}".${ctx}
+  return `I'm planning a project called "${subject}".${ctx}${progressLine}
 
 ${task}
 
-Return ONLY the roadmap, nothing else, in EXACTLY this line format (no headings, no bullets, no commentary):
+Return ONLY the roadmap, nothing else, in EXACTLY this line format (no headings, no extra bullets, no commentary). Put [x] for done or [ ] for not-done right after M:/P:, and a weight 0-100 after a pipe:
 
-M: <milestone title> | <weight 0-100>
-P: <phase title> | <weight 0-100>
-P: <phase title> | <weight 0-100>
-M: <milestone title> | <weight 0-100>
-P: <phase title> | <weight 0-100>
+M: [ ] <milestone title> | <weight 0-100>
+P: [x] <phase title> | <weight 0-100>
+P: [ ] <phase title> | <weight 0-100>
+M: [ ] <milestone title> | <weight 0-100>
+P: [ ] <phase title> | <weight 0-100>
 
-Use "M:" for each milestone and "P:" for each phase beneath it.`;
+Use "M:" for each milestone and "P:" for each phase beneath it. If I'm already partway through, the [x] items together should roughly match my stated progress.`;
 }
 
 /** Even-split helper: distribute 100 across n items (last absorbs rounding). */
@@ -101,11 +126,13 @@ export function parseRoadmapReply(text: string): ParsedMilestone[] {
     const m = /^M:\s*(.+)$/i.exec(line);
     const p = /^P:\s*(.+)$/i.exec(line);
     if (m) {
-      const { title, weight } = splitTitleWeight(m[1]);
-      if (title) milestones.push({ title, weight_pct: weight ?? 0, phases: [] });
+      const { done, rest } = extractDone(m[1]);
+      const { title, weight } = splitTitleWeight(rest);
+      if (title) milestones.push({ title, weight_pct: weight ?? 0, done, phases: [] });
     } else if (p && milestones.length > 0) {
-      const { title, weight } = splitTitleWeight(p[1]);
-      if (title) milestones[milestones.length - 1].phases.push({ title, weight_pct: weight ?? 0 });
+      const { done, rest } = extractDone(p[1]);
+      const { title, weight } = splitTitleWeight(rest);
+      if (title) milestones[milestones.length - 1].phases.push({ title, weight_pct: weight ?? 0, done });
     }
   }
 
@@ -126,6 +153,13 @@ export function parseRoadmapReply(text: string): ParsedMilestone[] {
     }
   }
   return milestones;
+}
+
+/** Pull a leading checkbox ("[x]" done / "[ ]" not) off the front of a line. */
+function extractDone(s: string): { done: boolean; rest: string } {
+  const m = /^\[\s*([xX✓✔yY])?\s*\]\s*/.exec(s);
+  if (m) return { done: !!m[1], rest: s.slice(m[0].length) };
+  return { done: false, rest: s };
 }
 
 function splitTitleWeight(s: string): { title: string; weight: number | null } {

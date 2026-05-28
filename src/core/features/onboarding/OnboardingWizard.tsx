@@ -1007,6 +1007,8 @@ export function OnboardingWizard({
           projectName: projectTitle,
           brainDump: projectBrainDump,
           milestones: milestoneInputs,
+          startedStatus: projectStartedStatus,
+          completionPct: projectStartedStatus === 'in_progress' ? projectCompletionPct : null,
         }),
       );
       setRoadmapPromptCopied(true);
@@ -1026,9 +1028,9 @@ export function OnboardingWizard({
     setMilestoneInputs(parsed.map((m) => ({
       title: m.title,
       weight_pct: m.weight_pct,
-      already_done: false,
+      already_done: m.done,
       phases: m.phases.length > 0
-        ? m.phases.map((p) => ({ title: p.title, weight_pct: p.weight_pct, already_done: false }))
+        ? m.phases.map((p) => ({ title: p.title, weight_pct: p.weight_pct, already_done: p.done }))
         : [{ title: '', weight_pct: 100, already_done: false }],
     })));
     const phaseCount = parsed.reduce((n, m) => n + m.phases.length, 0);
@@ -2746,7 +2748,7 @@ export function OnboardingWizard({
                 </ol>
                 <div className="rounded-lg bg-white border border-violet-200 p-2.5 max-h-32 overflow-y-auto mb-2">
                   <pre className="text-[10.5px] leading-snug text-slate-700 whitespace-pre-wrap font-mono">
-                    {buildRoadmapValidationPrompt({ projectName: projectTitle, brainDump: projectBrainDump, milestones: milestoneInputs })}
+                    {buildRoadmapValidationPrompt({ projectName: projectTitle, brainDump: projectBrainDump, milestones: milestoneInputs, startedStatus: projectStartedStatus, completionPct: projectStartedStatus === 'in_progress' ? projectCompletionPct : null })}
                   </pre>
                 </div>
                 <button
