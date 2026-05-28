@@ -19,7 +19,62 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 
 ## [Unreleased]
 
-_Nothing yet._
+Projects grow up: a real "+ New project" wizard, a planning board with
+deadlines and difficulty, and a focused mobile add-task flow — plus a
+round of home / PWA polish.
+
+> **Migration required** (apply via Supabase dashboard, in order):
+> `20260528000010_task_steps`, `20260528000011_session_state_of_mind`,
+> `20260528000012_session_captures`, `20260528000020_phase_milestone_deadlines`.
+> Reads degrade gracefully without them; writes (steps, deadlines, captures)
+> need the columns/tables to exist.
+
+### Added
+- **Full guided New Project wizard.** "+ New project" now opens the complete
+  setup flow (revived from onboarding): macro goal, colour, AI roadmap, and
+  first tasks — not the old stub popup.
+- **Bring-your-own-AI roadmap + tasks.** Copy a tailored prompt → paste the
+  reply back. The AI can *validate* or *write* the milestones/phases, and
+  *generate* the first tasks. Prompts carry completed milestones + overall
+  progress so a "70% done but nothing ticked" mismatch can't happen.
+- **New Project draft autosave** — the wizard persists to localStorage, so a
+  refresh or lost connection no longer wipes your progress.
+- **Project cover images** in the wizard (optional final step) — reuses the
+  existing project-covers bucket; the colour gradient is the default.
+- **Per-task cognitive load (Light / Medium / Deep)** captured in the wizard,
+  shown on every task surface (home, board, backlog, detail sheet) and
+  editable in the detail + add sheets.
+- **Per-task start-day scheduling** in the wizard (Today / Tomorrow / This
+  week / Backlog) so first steps land on a day, not in a void.
+- **Dedicated Add-task sheet** on the project board: capture by hand, focus
+  the AI on a milestone/phase, or "Help me figure out what to do" — which
+  asks your mood and suggests next steps matched to your energy.
+- **Project Week view as a vertical kanban** — each day shows To do → Active →
+  Done lanes; tasks move with explicit, labelled buttons.
+- **Phase + milestone deadlines** — an optional date plus a *flexible* (soft
+  aim) or *hard* (firm) type, with on-target chips (On track / Due soon /
+  Past aim / Overdue) at the phase, milestone, and project level.
+- **In-session distraction parking lot** — capture a stray thought mid-session,
+  triage it at debrief or from the home inbox.
+
+### Changed
+- **Home hero decluttered** — removed the passive identity/momentum chip row
+  (Founding member · role · streak · session count); identity lives on
+  Profile, counts live in the Stats tab.
+- **Task detail sheet** — discoverable "✎ Edit", taller sheet, 140-char title
+  limit with counter; backlog rows are now tappable to edit.
+- **Project backlog rows** restructured into two rows (title, then actions)
+  with controls always visible on mobile.
+- **Curated project colour palette** — dropped near-duplicates, added neutrals
+  (grey / taupe / cream), and flags a colour already used by another project.
+- **Tasks decoupled from sessions** — tapping a task opens a "work on this"
+  sheet (scheduling a session is one optional action), never forced.
+
+### Fixed
+- **Mobile PWA home planner** header no longer squashes its controls into
+  vertical-text slivers; the "Today" day-strip badge no longer wraps.
+- **"Pick day" menu** offers the next 7 days from today instead of surfacing
+  days already past.
 
 
 ## [v0.5.0] — 2026-05-27
