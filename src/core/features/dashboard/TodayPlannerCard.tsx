@@ -311,16 +311,29 @@ function BlockCard({
 
 // ── AddBlockForm ───────────────────────────────────────────────────
 
+// Length presets. The plain durations start at the clicked hour; the span
+// presets (Morning / Afternoon / Working hours) carry their own fixed start
+// so "block out the morning" lands 9–12 regardless of where you tapped.
+const LENGTH_OPTIONS: { key: string; label: string; mins: number; startHour?: number }[] = [
+  { key: '30',        label: '30 min',              mins: 30 },
+  { key: '60',        label: '1 hour',              mins: 60 },
+  { key: '90',        label: '1.5 hours',           mins: 90 },
+  { key: '120',       label: '2 hours',             mins: 120 },
+  { key: 'morning',   label: 'Morning · 9–12',      mins: 180, startHour: 9 },
+  { key: 'afternoon', label: 'Afternoon · 12–5',    mins: 300, startHour: 12 },
+  { key: 'work',      label: 'Working hours · 9–5', mins: 480, startHour: 9 },
+];
+
 function AddBlockForm({
   onAdd, onCancel, projects,
 }: {
-  onAdd:    (title: string, durationMins: number, blockType: BlockType, projectId: string | null) => void;
+  onAdd:    (title: string, durationMins: number, blockType: BlockType, projectId: string | null, startHour: number | null) => void;
   onCancel: () => void;
   /** User's active projects, for dedicating a block to one. */
   projects: { id: string; name: string }[];
 }) {
   const [title,    setTitle]    = useState('');
-  const [duration, setDuration] = useState<30 | 60 | 90 | 120>(60);
+  const [lengthKey, setLengthKey] = useState('60');
   const [type,     setType]     = useState<BlockType>('focus');
   const [projectId, setProjectId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -330,7 +343,8 @@ function AddBlockForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd(title.trim(), duration, type, projectId);
+    const opt = LENGTH_OPTIONS.find((o) => o.key === lengthKey) ?? LENGTH_OPTIONS[1];
+    onAdd(title.trim(), opt.mins, type, projectId, opt.startHour ?? null);
   }
 
   return (
@@ -346,14 +360,20 @@ function AddBlockForm({
       />
       <div className="flex items-center gap-1.5 flex-wrap">
         <select
-          value={duration}
-          onChange={(e) => setDuration(Number(e.target.value) as 30 | 60 | 90 | 120)}
+          value={lengthKey}
+          onChange={(e) => setLengthKey(e.target.value)}
           className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high"
         >
-          <option value={30}>30 min</option>
-          <option value={60}>1 hour</option>
-          <option value={90}>1.5 hours</option>
-          <option value={120}>2 hours</option>
+          <optgroup label="Length">
+            {LENGTH_OPTIONS.filter((o) => !o.startHour).map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Span">
+            {LENGTH_OPTIONS.filter((o) => o.startHour).map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </optgroup>
         </select>
         <select
           value={type}
@@ -960,9 +980,9 @@ export function TodayPlannerCard({
     } finally { setMutating(false); }
   }
 
-  async function handleAddAt(hour: number, title: string, durationMins: number, blockType: BlockType, projectId: string | null = null, dateStr: string = today) {
+  async function handleAddAt(hour: number, title: string, durationMins: number, blockType: BlockType, projectId: string | null = null, startHour: number | null = null, dateStr: string = today) {
     if (!user || mutating) return;
-    const startTime = `${String(hour).padStart(2, '0')}:00`;
+    const startTime = `${String(startHour ?? hour).padStart(2, '0')}:00`;
     setMutating(true);
     try {
       const nb = await TimeBlockService.addBlock({ blockDate: dateStr, startTime, durationMins, title, blockType, projectId });
@@ -1337,7 +1357,7 @@ export function TodayPlannerCard({
                         {isAdding && (
                           <AddBlockForm
                             projects={activeProjects}
-                            onAdd={(title, dur, type, projectId) => handleAddAt(hour, title, dur, type, projectId)}
+                            onAdd={(title, dur, type, projectId, startHour) => handleAddAt(hour, title, dur, type, projectId, startHour)}
                             onCancel={() => setAddingAtHour(null)}
                           />
                         )}
