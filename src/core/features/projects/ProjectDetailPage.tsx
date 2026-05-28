@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Loader2, Pencil, Play, Target, Calendar, ArrowLeft, Link2,
   CheckCircle2, Plus, Clock, Zap,
-  Archive, UserPlus, ChevronRight, Trash2, X, Check,
+  Archive, UserPlus, ChevronRight, ChevronDown, Trash2, X, Check,
   Columns, Flag, NotebookPen, Activity,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
@@ -1453,7 +1453,7 @@ function WeekGrid({
   // void unused warnings for handlers we don't yet expose from this view
   void onSchedule; void colorHex;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2 items-start">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-start">
       {days.map((d, i) => {
         const iso = isoDate(d);
         const dayTasks = tasks.filter((t) => t.scheduled_for === iso);
@@ -1468,18 +1468,18 @@ function WeekGrid({
         return (
           <div
             key={iso}
-            className={`rounded-xl p-2 min-h-[140px] ${
+            className={`rounded-2xl p-3 min-h-[160px] ${
               isToday
                 ? 'bg-primary/5 ring-1 ring-primary/20'
                 : 'bg-surface-container-low/60'
             }`}
           >
-            <div className="flex items-baseline justify-between mb-2 px-0.5">
+            <div className="flex items-baseline justify-between mb-3 px-0.5">
               <div>
                 <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest leading-none">
                   {DAY_NAMES_SHORT[i]}
                 </p>
-                <p className={`text-base font-extrabold leading-tight ${isToday ? 'text-primary' : 'stitch-text-primary'}`}>
+                <p className={`text-lg font-extrabold leading-tight mt-0.5 ${isToday ? 'text-primary' : 'stitch-text-primary'}`}>
                   {d.getDate()}
                 </p>
               </div>
@@ -1490,30 +1490,37 @@ function WeekGrid({
               )}
             </div>
             {dayTasks.length === 0 ? (
-              <p className="text-[10px] italic stitch-text-secondary/70 px-1 py-1">
+              <p className="text-[10px] italic stitch-text-secondary/70 px-1 py-2">
                 Nothing yet
               </p>
             ) : (
-              <div className="space-y-2">
-                {KANBAN_COLUMNS.map((col) => {
+              <div>
+                {KANBAN_COLUMNS.map((col, ci) => {
                   const laneTasks = grouped[col.key];
                   return (
                     <div key={col.key}>
-                      <div className="flex items-center gap-1 mb-1 px-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: col.dot }} />
-                        <span className="text-[9px] font-bold stitch-text-secondary uppercase tracking-wider">
+                      {/* Directional arrow between lanes — shows the
+                          To do → Active → Done progression direction. */}
+                      {ci > 0 && (
+                        <div className="flex justify-center py-1.5" aria-hidden="true">
+                          <ChevronDown size={14} className="stitch-text-secondary/40" strokeWidth={2.5} />
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 mb-1.5 px-0.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.dot }} />
+                        <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-wider">
                           {col.label}
                         </span>
                         {laneTasks.length > 0 && (
-                          <span className="text-[9px] font-bold stitch-text-secondary/60 tabular-nums">
+                          <span className="text-[10px] font-bold stitch-text-secondary/60 tabular-nums">
                             {laneTasks.length}
                           </span>
                         )}
                       </div>
                       {laneTasks.length === 0 ? (
-                        <div className="h-4 rounded border border-dashed border-surface-container-high/60" />
+                        <div className="h-6 rounded-lg border border-dashed border-surface-container-high/60" />
                       ) : (
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           {laneTasks.map((t) => (
                             <WeekTaskCard
                               key={t.id}
