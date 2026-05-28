@@ -20,6 +20,11 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 ## [Unreleased]
 
 ### Added
+- **Editable templates** — every weekly template is now fully editable: rename
+  it and add / edit / delete blocks on any day (start time, duration, type,
+  project). Adopting a preset drops you straight into the editor so it becomes
+  genuinely yours, and you can build a template from scratch with "New blank
+  template".
 - **Planner settings** — a single gear (showing your current hours, e.g.
   "7am–10pm") on the home planner opens a settings sheet (popup on web,
   bottom-sheet on mobile) with the **day window** and **weekly templates**

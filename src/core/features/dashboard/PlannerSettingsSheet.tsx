@@ -14,13 +14,14 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, CalendarCheck, Trash2, Loader2, Check, ChevronLeft, Sparkles, Clock } from 'lucide-react';
+import { X, Plus, CalendarCheck, Trash2, Loader2, Check, ChevronLeft, Sparkles, Clock, Pencil } from 'lucide-react';
 import {
   TimeBlockTemplateService, type TimeBlockTemplate,
 } from '../../services/TimeBlockTemplateService';
 import { TIME_BLOCK_STARTERS, type TimeBlockStarter } from '../../../lib/timeBlockStarters';
 import { useAuth } from '../../auth/AuthProvider';
 import { supabase } from '../../../lib/supabase';
+import { TimeBlockTemplateEditor } from './TimeBlockTemplateEditor';
 
 const DEFAULT_PLANNER_START = 7;
 const DEFAULT_PLANNER_END   = 22;
@@ -89,6 +90,8 @@ export function PlannerSettingsSheet({
   // Adopt-a-starter flow. null = browsing the list.
   const [adopt, setAdopt] = useState<{ starter: TimeBlockStarter; name: string; slots: Record<number, string | null> } | null>(null);
   const [saving, setSaving] = useState(false);
+  // Template-editor view. null = browsing the list.
+  const [editing, setEditing] = useState<TimeBlockTemplate | null>(null);
 
   const thisMon = mondayOf(new Date());
   const nextMon = new Date(thisMon); nextMon.setDate(nextMon.getDate() + 7);
@@ -135,12 +138,25 @@ export function PlannerSettingsSheet({
     if (!adopt || saving) return;
     setSaving(true);
     try {
-      await TimeBlockTemplateService.adoptStarter(adopt.starter, adopt.name.trim() || adopt.starter.name, adopt.slots);
+      const tpl = await TimeBlockTemplateService.adoptStarter(adopt.starter, adopt.name.trim() || adopt.starter.name, adopt.slots);
       setAdopt(null);
-      setMsg('Template created — apply it to a week below.');
       await reload();
+      // Drop straight into the editor so the preset is theirs to customise.
+      setEditing(tpl);
     } catch (e) {
       console.warn('[Templates] adopt failed:', e);
+    } finally { setSaving(false); }
+  }
+
+  async function createBlankTemplate() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const tpl = await TimeBlockTemplateService.createTemplate('My template');
+      await reload();
+      setEditing(tpl);
+    } catch (e) {
+      console.warn('[Templates] create blank failed:', e);
     } finally { setSaving(false); }
   }
 
@@ -156,13 +172,18 @@ export function PlannerSettingsSheet({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-3 sticky top-0 bg-surface z-10">
           <div className="flex items-center gap-2 min-w-0">
-            {adopt && (
-              <button type="button" onClick={() => setAdopt(null)} aria-label="Back" className="w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low">
+            {(adopt || editing) && (
+              <button
+                type="button"
+                onClick={() => { if (editing) { setEditing(null); void reload(); } else setAdopt(null); }}
+                aria-label="Back"
+                className="w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low"
+              >
                 <ChevronLeft size={18} />
               </button>
             )}
             <h2 className="text-lg font-extrabold stitch-text-primary leading-tight truncate">
-              {adopt ? 'Set up template' : 'Planner settings'}
+              {adopt ? 'Set up template' : editing ? 'Edit template' : 'Planner settings'}
             </h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low">
@@ -170,8 +191,10 @@ export function PlannerSettingsSheet({
           </button>
         </div>
 
-        {/* ── Adopt-a-starter step ───────────────────────────────── */}
-        {adopt ? (
+        {/* ── Template editor ────────────────────────────────────── */}
+        {editing ? (
+          <TimeBlockTemplateEditor template={editing} projects={projects} onChanged={reload} />
+        ) : adopt ? (
           <div className="px-5 pb-6 space-y-4">
             <p className="text-xs stitch-text-secondary leading-snug">
               {adopt.starter.description}
@@ -218,7 +241,7 @@ export function PlannerSettingsSheet({
               className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-primary text-white text-sm font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
             >
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} strokeWidth={3} />}
-              Create template
+              Create & customise
             </button>
           </div>
         ) : (
@@ -272,22 +295,33 @@ export function PlannerSettingsSheet({
               {loading ? (
                 <div className="flex items-center gap-2 stitch-text-secondary py-3"><Loader2 size={14} className="animate-spin" /><span className="text-xs">Loading…</span></div>
               ) : templates.length === 0 ? (
-                <p className="text-xs stitch-text-secondary italic px-1 py-2">No templates yet — start from a preset below.</p>
+                <p className="text-xs stitch-text-secondary italic px-1 py-2">No templates yet — build one from scratch, or start from a preset below.</p>
               ) : (
                 <div className="space-y-2">
                   {templates.map((t) => (
                     <div key={t.id} className="rounded-xl bg-surface-container-low ring-1 ring-surface-container p-3">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <p className="text-sm font-bold stitch-text-primary truncate">{t.name}</p>
-                        <button
-                          type="button"
-                          onClick={() => deleteTemplate(t.id)}
-                          disabled={busy !== null}
-                          aria-label="Delete template"
-                          className="shrink-0 w-7 h-7 rounded-md grid place-items-center text-rose-600/70 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                        >
-                          {busy === `del:${t.id}` ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(t)}
+                            disabled={busy !== null}
+                            aria-label="Edit template"
+                            className="w-7 h-7 rounded-md grid place-items-center stitch-text-secondary hover:bg-surface-container hover:stitch-text-primary transition-colors"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteTemplate(t.id)}
+                            disabled={busy !== null}
+                            aria-label="Delete template"
+                            className="w-7 h-7 rounded-md grid place-items-center text-rose-600/70 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                          >
+                            {busy === `del:${t.id}` ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -316,6 +350,17 @@ export function PlannerSettingsSheet({
                   ))}
                 </div>
               )}
+
+              {/* Build a custom template from scratch */}
+              <button
+                type="button"
+                onClick={createBlankTemplate}
+                disabled={saving || busy !== null}
+                className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl ring-1 ring-dashed ring-primary/30 text-primary text-xs font-bold hover:bg-primary/5 active:scale-[0.99] transition-all disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                New blank template
+              </button>
             </section>
 
             {/* Starter gallery */}
