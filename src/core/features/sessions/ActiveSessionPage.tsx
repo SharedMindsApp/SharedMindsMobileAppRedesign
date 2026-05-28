@@ -172,6 +172,10 @@ export function ActiveSessionPage() {
   const routerSession = (location.state as { session?: FocusSession } | null)?.session ?? null;
   const [session, setSession] = useState<FocusSession | null>(activeSession ?? routerSession);
   const [loadingSession, setLoadingSession] = useState(!(activeSession ?? routerSession));
+  // True when a hard-refresh restore hit a persistent transient error. We keep
+  // the user on the session URL and offer a retry rather than bouncing them to
+  // the sessions list (which is what used to happen on any backend hiccup).
+  const [restoreError, setRestoreError] = useState(false);
   const [partnerJoined, setPartnerJoined] = useState<boolean>(
     (activeSession?.partner_user_id ?? null) !== null,
   );
@@ -196,15 +200,49 @@ export function ActiveSessionPage() {
       navigate('/sessions', { replace: true });
       return;
     }
+    let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('focus_sessions')
-        .select('*, project:projects(id, title, color)')
-        .eq('id', sessionId)
-        .single();
+      // Refresh-restore: re-fetch the session by its URL id so a hard refresh
+      // lands the user back IN their session rather than bouncing them to the
+      // sessions list. We must distinguish three outcomes:
+      //   • row found        → restore it
+      //   • row truly absent  → redirect (stale/garbage url)
+      //   • transient error   → DON'T redirect; the backend was just slow /
+      //     throttled / the projects embed failed. Bouncing on a network
+      //     hiccup is exactly the bug we're fixing. Retry, then as a last
+      //     resort keep them on the session URL with a reload affordance.
+      const fetchOnce = async (withJoin: boolean) =>
+        supabase
+          .from('focus_sessions')
+          .select(withJoin ? '*, project:projects(id, title, color)' : '*')
+          .eq('id', sessionId)
+          .maybeSingle();
 
-      if (!data) {
+      let data: any = null;
+      let error: any = null;
+      for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+        // First attempts use the projects embed; if PostgREST rejects the
+        // relationship (FK not present yet), fall back to a plain select so
+        // the session still loads without its project chip.
+        const res = await fetchOnce(attempt === 0);
+        data = res.data;
+        error = res.error;
+        if (data || (!error && data === null)) break; // success or true-absent
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+      if (cancelled) return;
+
+      // Genuine not-found (query succeeded, no row) → stale url, redirect.
+      if (!data && !error) {
         navigate('/sessions', { replace: true });
+        return;
+      }
+      // Persistent transient error → stay put, surface a retry instead of
+      // silently dumping the user out of their live session.
+      if (!data && error) {
+        console.warn('[ActiveSessionPage] session restore failed:', error.message);
+        setRestoreError(true);
+        setLoadingSession(false);
         return;
       }
 
@@ -223,8 +261,10 @@ export function ActiveSessionPage() {
       }
       setActiveSession(data);
       setSession(data);
+      setRestoreError(false);
       setLoadingSession(false);
     })();
+    return () => { cancelled = true; };
   }, [sessionId, activeSession, routerSession, navigate, setActiveSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redirect to summary when time is up
@@ -620,6 +660,35 @@ export function ActiveSessionPage() {
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={32} className="animate-spin text-primary" />
           <p className="text-sm text-white/50">Loading session…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (restoreError && !session) {
+    return (
+      <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-[#1a1a2e] flex items-center justify-center z-[55] px-6">
+        <div className="flex flex-col items-center gap-3 text-center max-w-xs">
+          <p className="text-base font-extrabold text-white">Couldn’t reload your session</p>
+          <p className="text-sm text-white/55 leading-snug">
+            The connection hiccuped while restoring this session. It’s still running — try again.
+          </p>
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => { setRestoreError(false); setLoadingSession(true); window.location.reload(); }}
+              className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/sessions', { replace: true })}
+              className="px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-bold active:scale-[0.98] transition-transform"
+            >
+              Back to sessions
+            </button>
+          </div>
         </div>
       </div>
     );
