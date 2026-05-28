@@ -67,38 +67,43 @@ export function IntentionWizard({
   ]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // ── Bootstrap: ensure a reflection row + hydrate existing intentions ──
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const refl = await ReflectionService.ensureReflection(targetWeek);
-        if (cancelled) return;
-        setReflectionId(refl.id);
+  async function runBootstrap() {
+    setLoading(true);
+    setError(null);
+    try {
+      const refl = await ReflectionService.ensureReflection(targetWeek);
+      setReflectionId(refl.id);
 
-        // Pull existing intentions (could be 0-3) and slot into drafts
-        const existing = await ReflectionService.getReflectionByWeek(targetWeek);
-        if (cancelled) return;
-        const ints = existing?.intentions ?? [];
-        const filled: DraftIntention[] = [0, 1, 2].map((i) => {
-          const found = ints.find((x) => x.sort_order === i);
-          if (!found) return { id: null, title: '', note: '', projectId: null };
-          return {
-            id: found.id,
-            title: found.title,
-            note: found.notes ?? '',
-            projectId: found.project_id,
-          };
-        });
-        setDrafts(filled);
-      } catch (err) {
-        console.error('[IntentionWizard] bootstrap failed:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+      // Pull existing intentions (could be 0-3) and slot into drafts
+      const existing = await ReflectionService.getReflectionByWeek(targetWeek);
+      const ints = existing?.intentions ?? [];
+      const filled: DraftIntention[] = [0, 1, 2].map((i) => {
+        const found = ints.find((x) => x.sort_order === i);
+        if (!found) return { id: null, title: '', note: '', projectId: null };
+        return {
+          id: found.id,
+          title: found.title,
+          note: found.notes ?? '',
+          projectId: found.project_id,
+        };
+      });
+      setDrafts(filled);
+    } catch (err: any) {
+      console.error('[IntentionWizard] bootstrap failed:', err);
+      // Surface it: without a reflection row, intentions can't save, so we
+      // must NOT let the wizard look functional and silently discard work.
+      setError(err?.message ?? "Couldn't load your week. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    runBootstrap();
+    return () => { /* no-op */ };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -230,6 +235,18 @@ export function IntentionWizard({
             <div className="flex items-center justify-center py-12 stitch-text-secondary">
               <Loader2 size={20} className="animate-spin" />
             </div>
+          ) : error ? (
+            <div className="max-w-md mx-auto text-center py-10">
+              <h3 className="stitch-headline text-xl font-extrabold mb-2">Couldn't load your week</h3>
+              <p className="text-sm stitch-text-secondary leading-relaxed mb-5">{error}</p>
+              <button
+                type="button"
+                onClick={runBootstrap}
+                className="inline-flex items-center gap-2 py-3 px-6 rounded-xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98]"
+              >
+                <ArrowRight size={14} /> Try again
+              </button>
+            </div>
           ) : step === 0 ? (
             <WelcomeStep filledCount={filledCount} weekStart={targetWeek} />
           ) : step === 1 ? (
@@ -266,6 +283,7 @@ export function IntentionWizard({
         </div>
 
         {/* ── Footer ─────────────────────────────────────────── */}
+        {!error && !loading && (
         <div className="shrink-0 px-5 py-4 border-t border-surface-container/60 flex items-center justify-between gap-2">
           {step > 0 && step < 5 ? (
             <button
@@ -304,6 +322,7 @@ export function IntentionWizard({
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );
