@@ -6,6 +6,7 @@ import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
 import { useAuth } from '../../auth/AuthProvider';
+import { ReportModal } from '../moderation/ReportModal';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { DailyMeeting } from './DailyMeeting';
@@ -160,6 +161,9 @@ export function ActiveSessionPage() {
   // offered to take over as host (which re-opens the door for a new match).
   const [showTakeover, setShowTakeover] = useState(false);
   const [takingOver, setTakingOver] = useState(false);
+  // Leave-early confirm + report (matched 1-on-1 only).
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Prefer router state (passed by DeclareSessionModal) → context → null.
   // Router state is synchronously available on first render and avoids the
@@ -498,6 +502,28 @@ export function ActiveSessionPage() {
   const isSolo = session?.session_mode === 'solo';
   const isOneOnOne = session?.session_mode === 'one_on_one';
   const isQuiet = session?.quiet_mode === true;
+
+  // Matched = a live 1-on-1 with a partner present. Leaving a matched session
+  // is "leave early" (the partner keeps going / can take over), distinct from
+  // a solo "End" which finishes your own session.
+  const isMatched = isOneOnOne && partnerJoined;
+  const otherUserId = isPrimaryHost ? (session?.partner_user_id ?? null) : (session?.user_id ?? null);
+
+  /** Leave a matched session early WITHOUT ending it for the partner — we
+   *  deliberately don't broadcast the debrief here. The partner's presence
+   *  watcher offers them the takeover. */
+  const handleLeaveEarly = useCallback(() => {
+    setConfirmingLeave(false);
+    clearSession();
+    navigate('/sessions', { replace: true });
+  }, [clearSession, navigate]);
+
+  /** Leave this match and jump straight back into matching. */
+  const handleFindNewMatch = useCallback(() => {
+    setConfirmingLeave(false);
+    clearSession();
+    navigate('/home', { state: { openMatch: true } });
+  }, [clearSession, navigate]);
   /** Silent vibe = host wants no talking at all. Treat exactly like
    *  quiet_mode for the purpose of starting the meeting muted. */
   const isSilentVibe = session?.vibe === 'silent';
@@ -717,12 +743,12 @@ export function ActiveSessionPage() {
 
           <button
             type="button"
-            onClick={handleEnd}
+            onClick={() => (isMatched ? setConfirmingLeave(true) : handleEnd())}
             disabled={ending}
             className="flex items-center gap-1.5 bg-red-500/80 hover:bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full transition-all active:scale-95 disabled:opacity-50"
           >
             <StopCircle size={13} />
-            End
+            {isMatched ? 'Leave' : 'End'}
           </button>
         </div>
       </div>
@@ -1027,6 +1053,67 @@ export function ActiveSessionPage() {
       {/* Distraction parking lot — capture interruptions without chasing
           them. Hidden during the debrief (captures get triaged there). */}
       {session && !showDebrief && <ParkItPanel sessionId={session.id} />}
+
+      {/* Leave-early confirm (matched 1-on-1). Leaving doesn't end the
+          session for the partner — they get the takeover prompt. */}
+      {confirmingLeave && (
+        <div className="fixed inset-0 z-[115] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setConfirmingLeave(false)}>
+          <div
+            className="w-full sm:max-w-sm bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl p-5"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-extrabold stitch-text-primary">Leave early?</h2>
+            <p className="text-sm stitch-text-secondary mt-1 leading-snug">
+              Are you sure you want to leave early? Your partner can keep going and find a new match.
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={handleFindNewMatch}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white text-sm font-bold active:scale-[0.98] transition-transform"
+              >
+                <DoorOpen size={15} /> Find me a new match
+              </button>
+              <button
+                type="button"
+                onClick={handleLeaveEarly}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
+              >
+                <StopCircle size={15} /> Just leave
+              </button>
+              {otherUserId && (
+                <button
+                  type="button"
+                  onClick={() => { setConfirmingLeave(false); setReportOpen(true); }}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-rose-600 text-xs font-bold hover:bg-rose-50 active:scale-[0.98] transition-all"
+                >
+                  <AlertTriangle size={13} /> Report this person
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setConfirmingLeave(false)}
+                className="w-full px-3 py-2.5 rounded-xl stitch-text-secondary text-xs font-bold hover:bg-surface-container-low transition-colors"
+              >
+                Cancel — stay in the session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report the partner — reuses the shared moderation sheet. After
+          reporting they can still leave / find a new match. */}
+      {reportOpen && otherUserId && session && (
+        <ReportModal
+          contentType="user"
+          contentId={otherUserId}
+          flaggedUserId={otherUserId}
+          sessionContext={{ focusSessionId: session.id }}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
     </div>,
     document.body,
   );

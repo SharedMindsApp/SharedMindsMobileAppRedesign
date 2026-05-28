@@ -20,6 +20,12 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 ## [Unreleased]
 
 ### Added
+- **Leave a match (not "End")** — in a live 1-on-1 the session button now says
+  **Leave** (solo still says End) and asks "Are you sure you want to leave
+  early?". Leaving doesn't end the session for your partner — they keep going
+  / can take over. The confirm sheet also offers **"Find me a new match"**
+  (leave + jump back into matching) and **"Report this person"** (the shared
+  moderation sheet, with session evidence).
 - **Host left? Take over** — if the host of a matched 1-on-1 abandons the
   session (closes the tab / leaves without ending), the remaining partner is
   offered to take over as host. Taking over re-opens the door so the session

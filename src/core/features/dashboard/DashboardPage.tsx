@@ -20,7 +20,7 @@
  */
 
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowRight, Check, CheckCircle2, Plus, Target, Users, Flag, Layers, RotateCcw,
 } from 'lucide-react';
@@ -410,6 +410,17 @@ export function DashboardPage() {
     setMatchError(null);
     setShowMatchSheet(true);
   }
+
+  // "Find me a new match" from a session navigates here with state.openMatch
+  // → open the match sheet straight away, then clear the flag so a refresh
+  // doesn't re-open it.
+  const location = useLocation();
+  useEffect(() => {
+    if ((location.state as { openMatch?: boolean } | null)?.openMatch) {
+      setShowMatchSheet(true);
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
   const {
     state: { tasks, projects, activeProjectId },
     setActiveProject,
