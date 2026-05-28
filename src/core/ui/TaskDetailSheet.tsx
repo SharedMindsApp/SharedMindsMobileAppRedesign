@@ -22,6 +22,7 @@ import {
   Play, Trash2, ArrowRight, Loader2, Pencil, Check,
 } from 'lucide-react';
 import { taskUrgency, type UrgencyInput } from '../../lib/taskUrgency';
+import { TaskStepsSection } from './TaskStepsSection';
 
 export interface TaskDetailData extends UrgencyInput {
   id: string;
@@ -45,6 +46,8 @@ interface Props {
   onDelete?: () => void | Promise<void>;
   /** Optional: open session declaration pinned to this task. */
   onStartSession?: () => void;
+  /** Fired when a step is promoted into its own task — host can refresh lists. */
+  onStepPromoted?: (task: import('../services/TaskService').Task) => void;
 }
 
 function isoToday(): string {
@@ -58,7 +61,7 @@ function isoTomorrow(): string {
 }
 
 export function TaskDetailSheet({
-  task, onClose, onToggleDone, onReschedule, onRename, onDrop, onDelete, onStartSession,
+  task, onClose, onToggleDone, onReschedule, onRename, onDrop, onDelete, onStartSession, onStepPromoted,
 }: Props) {
   const u = taskUrgency(task);
   const done = u.kind === 'done';
@@ -224,6 +227,12 @@ export function TaskDetailSheet({
             </div>
           </div>
         )}
+
+        {/* Steps — break it into pebbles. Always available; the heart of
+            "feel productive without a session": tick one small step. */}
+        <div className="px-5 pb-4 pt-1">
+          <TaskStepsSection taskId={task.id} onPromoted={onStepPromoted} />
+        </div>
 
         {/* Footer actions — let go / delete */}
         {(onDrop || onDelete) && (
