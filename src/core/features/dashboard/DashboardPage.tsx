@@ -486,19 +486,30 @@ export function DashboardPage() {
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
-    // Safety net: the day-zero gate (and thus the whole body below the hero)
-    // is blocked until `hasAnySession` flips off null. If the home RPC is slow
-    // or silently resolves to nothing, fall back to the non-day-zero UI after
-    // a few seconds so the page ALWAYS renders rather than hanging on the
-    // skeleton. The individual cards load their own data independently.
+    const cacheKey = `sm_has_session_${user.id}`;
+    // Instant gate for returning users. Once a user has logged ANY session
+    // they can never be day-zero again, so a cached flag lets us resolve the
+    // day-zero gate (and render the whole body) immediately — no waiting on
+    // the home RPC. The RPC still runs and backfills the real stats/cards.
+    try {
+      if (localStorage.getItem(cacheKey) === '1') setHasAnySession(true);
+    } catch { /* private mode / disabled storage — ignore */ }
+    // Safety net: the day-zero gate blocks the body below the hero until
+    // `hasAnySession` flips off null. If the home RPC is slow, hangs, or
+    // silently resolves to nothing, fall back to the non-day-zero UI so the
+    // page ALWAYS renders. Each card loads its own data independently.
     const safety = window.setTimeout(() => {
       if (!cancelled) setHasAnySession((prev) => (prev === null ? false : prev));
-    }, 6000);
+    }, 2500);
     fetchHomeDashboard(user.id).then((dash) => {
       if (cancelled) return;
       // Resolved-null (RPC errored and the service returned null) must still
       // resolve the gate — otherwise the skeleton hangs forever with no error.
-      if (!dash) { setHasAnySession(false); return; }
+      if (!dash) { setHasAnySession((prev) => prev ?? false); return; }
+      // Once confirmed, remember it so future loads skip the gate wait.
+      try {
+        if (dash.hasAnySession) localStorage.setItem(cacheKey, '1');
+      } catch { /* ignore */ }
       // One batched setState call — React 18 commits these atomically
       // so the whole dashboard paints in a single render.
       setHasAnySession(dash.hasAnySession);
