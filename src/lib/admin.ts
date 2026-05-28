@@ -510,13 +510,35 @@ export async function getHeatmapAnalytics(
     : range === 'month'   ? new Date(Date.now() - 30 * 86400_000).toISOString()
     :                       new Date(Date.now() - 90 * 86400_000).toISOString();
 
-  // ── Fetch sessions ───────────────────────────────────────────────────────
+  // ── Fetch sessions (start_mood lives on focus_sessions) ─────────────────
   let sessionsQuery = supabase
     .from('focus_sessions')
-    .select('start_mood, end_mood, start_time, session_kind')
+    .select('id, start_mood, start_time, session_kind')
     .not('start_time', 'is', null);
   if (since) sessionsQuery = sessionsQuery.gte('start_time', since);
-  const { data: sessions } = await sessionsQuery;
+  const { data: rawSessions } = await sessionsQuery;
+
+  // ── Fetch end_mood from session_outcomes (one row per participant) ────────
+  // We need session_id → end_mood to join with focus_sessions for the
+  // before/after shift calculation. Only rows with a mood value are useful.
+  const sessionIds = (rawSessions ?? []).map((s) => s.id);
+  let endMoodMap = new Map<string, string>(); // session_id → end_mood
+  if (sessionIds.length > 0) {
+    const { data: outcomes } = await supabase
+      .from('session_outcomes')
+      .select('session_id, end_mood')
+      .in('session_id', sessionIds)
+      .not('end_mood', 'is', null);
+    for (const o of outcomes ?? []) {
+      if (o.end_mood) endMoodMap.set(o.session_id, o.end_mood);
+    }
+  }
+
+  // Merge end_mood back onto sessions for unified processing below
+  const sessions = (rawSessions ?? []).map((s) => ({
+    ...s,
+    end_mood: endMoodMap.get(s.id) ?? null,
+  }));
 
   // ── Fetch completed tasks ────────────────────────────────────────────────
   let tasksQuery = supabase

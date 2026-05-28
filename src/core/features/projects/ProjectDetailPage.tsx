@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Loader2, Pencil, Play, Target, Calendar, ArrowLeft, Link2,
   CheckCircle2, Plus, Clock, Zap,
-  Archive, UserPlus, ChevronRight, ChevronDown, Trash2, X, Check,
+  Archive, UserPlus, ChevronRight, ChevronDown, ChevronUp, Trash2, X, Check,
   Columns, Flag, NotebookPen, Activity, Sparkles,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
@@ -1610,51 +1610,56 @@ function WeekTaskCard({
   onOpen: () => void;
 }) {
   const isDone = status === 'done';
-  const canUp = status !== 'inbox';
-  const canDown = status !== 'done';
-  const upTarget: KanbanStatus = status === 'done' ? 'active' : 'inbox';
-  const downTarget: KanbanStatus = status === 'inbox' ? 'active' : 'done';
+  const upTarget: KanbanStatus | null = status === 'done' ? 'active' : status === 'active' ? 'inbox' : null;
+  const downTarget: KanbanStatus | null = status === 'inbox' ? 'active' : status === 'active' ? 'done' : null;
   const labelFor = (s: KanbanStatus) => (s === 'inbox' ? 'To do' : s === 'active' ? 'Active' : 'Done');
   return (
-    <div className="group flex items-start gap-1 bg-white rounded-md ring-1 ring-surface-container/60 px-1.5 py-1">
-      {/* Vertical move controls: ↑ = back a stage, ↓ = forward a stage */}
-      <div className="flex flex-col shrink-0 -my-0.5">
+    <div className="bg-white rounded-lg ring-1 ring-surface-container/70 p-2.5">
+      {/* Title — full text, wraps freely. Tap to open the "work on this" sheet. */}
+      <div className="flex items-start gap-1.5">
         <button
           type="button"
-          onClick={() => canUp && onMove(upTarget)}
-          disabled={!canUp}
-          aria-label={canUp ? `Move to ${labelFor(upTarget)}` : 'Already in first stage'}
-          title={canUp ? `Move to ${labelFor(upTarget)}` : ''}
-          className="h-3 leading-none text-[10px] stitch-text-secondary hover:stitch-text-primary disabled:opacity-25 disabled:cursor-not-allowed"
+          onClick={onOpen}
+          className={`flex-1 min-w-0 text-left text-xs leading-snug break-words hover:opacity-80 transition-opacity ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
         >
-          ↑
+          {task.title}
         </button>
         <button
           type="button"
-          onClick={() => canDown && onMove(downTarget)}
-          disabled={!canDown}
-          aria-label={canDown ? `Move to ${labelFor(downTarget)}` : 'Already done'}
-          title={canDown ? `Move to ${labelFor(downTarget)}` : ''}
-          className="h-3 leading-none text-[10px] stitch-text-secondary hover:stitch-text-primary disabled:opacity-25 disabled:cursor-not-allowed"
+          onClick={onDelete}
+          className="shrink-0 w-5 h-5 rounded grid place-items-center text-rose-600/70 hover:bg-rose-50 transition-colors"
+          aria-label="Delete"
         >
-          ↓
+          <Trash2 size={11} />
         </button>
       </div>
-      <button
-        type="button"
-        onClick={onOpen}
-        className={`flex-1 min-w-0 text-left text-[11px] leading-snug break-words hover:opacity-80 transition-opacity ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
-      >
-        {task.title}
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded grid place-items-center text-rose-600/70 hover:bg-rose-50 transition-opacity shrink-0"
-        aria-label="Delete"
-      >
-        <Trash2 size={9} />
-      </button>
+      {/* Explicit move controls — name the target stage so it's obvious where
+          the task goes. Back button (↑) + forward button (↓). */}
+      <div className="flex items-center gap-1.5 mt-2">
+        {upTarget && (
+          <button
+            type="button"
+            onClick={() => onMove(upTarget)}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-surface-container-low stitch-text-secondary hover:stitch-text-primary active:scale-95 transition-all"
+          >
+            <ChevronUp size={11} /> {labelFor(upTarget)}
+          </button>
+        )}
+        {downTarget && (
+          <button
+            type="button"
+            onClick={() => onMove(downTarget)}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold active:scale-95 transition-all ${
+              downTarget === 'done'
+                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            }`}
+          >
+            {downTarget === 'done' ? <Check size={11} strokeWidth={3} /> : <ChevronDown size={11} />}
+            {labelFor(downTarget)}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
