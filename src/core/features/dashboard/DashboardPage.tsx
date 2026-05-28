@@ -56,7 +56,6 @@ import { LiveNowDropInStrip } from './LiveNowDropInStrip';
 import { OnboardingNudges } from './OnboardingNudges';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
 import { SkillsPromptModal } from './SkillsPromptModal';
-import { PickUpCard } from './PickUpCard';
 import { shouldShowSkillsPrompt, markSkillsPromptShown } from '../../../lib/skillsPrompt';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
 import { ShippedFeedStrip } from './ShippedFeedStrip';
@@ -684,20 +683,6 @@ export function DashboardPage() {
         profileCountry={profile?.country_code}
         profileBio={profile?.bio}
         sessionsCompleted={stats?.totalSessions ?? 0}
-      />
-
-      {/* Re-entry hook: the one project + next step to pick back up,
-          one tap to start a session on it. Renders nothing until a
-          project has a next action set. */}
-      <PickUpCard
-        projects={projects}
-        activeProjectId={activeProjectId}
-        onChanged={refreshProjects}
-        onStartSession={(projectId) => {
-          setActiveProject(projectId);
-          setDeclareProjectId(projectId);
-          setShowDeclare(true);
-        }}
       />
 
       {/* Progressive render — sections paint as their data arrives. The

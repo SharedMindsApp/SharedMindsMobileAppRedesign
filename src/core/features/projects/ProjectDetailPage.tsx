@@ -36,7 +36,6 @@ import { CoverImage } from './CoverImage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { projectColorMeta } from './ProjectsPage';
-import { NextActionControl } from './NextActionControl';
 import { taskUrgency } from '../../../lib/taskUrgency';
 
 // Lazy — interaction-gated modal (opens on board task tap). Keeping it out of
@@ -622,22 +621,6 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
-
-      {/* ── Next step — the execution anchor for this project ──── */}
-      {!isArchived && (
-        <SurfaceCard className="mt-4">
-          <NextActionControl
-            projectId={project.id}
-            nextAction={project.next_action}
-            variant="detail"
-            onChanged={() => {
-              ProjectService.getProjectById(project.id).then((p) => { if (p) setProject(p); });
-              refreshProjects();
-            }}
-            onStartSession={() => setActionChooserOpen(true)}
-          />
-        </SurfaceCard>
-      )}
 
       {/* Breathing room before the tab strip */}
       <div className="h-4" />
