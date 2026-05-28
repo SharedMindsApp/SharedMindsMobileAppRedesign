@@ -19,11 +19,12 @@
  *      Checklist → WeekStrip → Recent finishes
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Check, Flame, CheckCircle2, Plus, Target, Users, Flag, Layers,
+  ArrowRight, Check, Flame, CheckCircle2, Plus, Target, Users, Flag, Layers, RotateCcw,
 } from 'lucide-react';
+import { isMorning, morningPromptSeenToday, markMorningPromptSeen } from '../../../lib/reentry';
 import { ProjectService, type ProjectStats } from '../../services/ProjectService';
 import { EMPTY_PROJECT_STATS, deriveProjectProgress, projectColorMeta } from '../projects/ProjectsPage';
 import { useAuth } from '../../auth/AuthProvider';
@@ -64,6 +65,8 @@ import { StatsTab } from './StatsTab';
 import { WeeklyIntentionsCard } from './WeeklyIntentionsCard';
 import { PlanTasksCard } from './PlanTasksCard';
 import { TaskCheckInCard } from './TaskCheckInCard';
+const ReEntryWizard = lazy(() =>
+  import('./ReEntryWizard').then((m) => ({ default: m.ReEntryWizard })));
 import { PulsePeopleTab } from './PulsePeopleTab';
 // OnboardingChecklist + ProfileCompletenessCard removed — the wizard now
 // handles all setup before the user reaches the home screen.
@@ -583,6 +586,23 @@ export function DashboardPage() {
     setShowDeclare(true);
   }
 
+  // ── Re-entry wizard ──────────────────────────────────────────────────
+  // Morning: auto-prompt once on the first open of the day (before 11am).
+  // Mid-day: the "I'm back" button opens it on demand. Gated so it never
+  // nags, and only for users who've actually started using the app (≥1
+  // session) — day-zero users get onboarding, not a check-in.
+  const [reEntryOpen, setReEntryOpen] = useState(false);
+  const [reEntryVariant, setReEntryVariant] = useState<'morning' | 'manual'>('manual');
+  const hasUsedApp = (stats?.totalSessions ?? 0) > 0;
+  useEffect(() => {
+    if (!hasUsedApp) return;
+    if (isMorning() && !morningPromptSeenToday()) {
+      markMorningPromptSeen();
+      setReEntryVariant('morning');
+      setReEntryOpen(true);
+    }
+  }, [hasUsedApp]);
+
   // Quick-start templates pre-fill goal AND duration
   const [templateDuration, setTemplateDuration] = useState<25 | 50 | 90 | undefined>(undefined);
   function openDeclareWithTemplate(goal: string, duration: 25 | 50 | 90) {
@@ -658,6 +678,20 @@ export function DashboardPage() {
         <p className="text-[11px] font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-100 rounded-lg px-2.5 py-1.5 -mt-2">
           {matchError}
         </p>
+      )}
+
+      {/* "I'm back" — on-demand re-entry. Sitting down mid-day after a break?
+          One tap to re-match tasks to your current headspace. Shown to users
+          who've started using the app; hidden while in a session. */}
+      {hasUsedApp && !activeSession && (
+        <button
+          type="button"
+          onClick={() => { setReEntryVariant('manual'); setReEntryOpen(true); }}
+          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface ring-1 ring-surface-container hover:ring-primary/30 stitch-text-primary text-sm font-bold active:scale-[0.99] transition-all"
+        >
+          <RotateCcw size={14} className="text-primary" />
+          I'm back — what should I do?
+        </button>
       )}
 
       {/* Live-now drop-in strip — surfaces open-to-match sessions on
@@ -894,6 +928,17 @@ export function DashboardPage() {
 
       {findOpen && (
         <FindSessionsSheet onClose={() => setFindOpen(false)} />
+      )}
+
+      {/* Re-entry wizard — mood → matched task shortlist */}
+      {reEntryOpen && (
+        <Suspense fallback={null}>
+          <ReEntryWizard
+            variant={reEntryVariant}
+            onClose={() => setReEntryOpen(false)}
+            onStartSession={(title) => { setReEntryOpen(false); openDeclare(title); }}
+          />
+        </Suspense>
       )}
     </div>
   );
