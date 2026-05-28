@@ -17,6 +17,8 @@ export interface TimeBlock {
   duration_mins: number;
   title: string;
   block_type: BlockType;
+  /** Project this block is dedicated to (tasks inside are scoped to it). Null = general. */
+  project_id: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -51,6 +53,7 @@ export const TimeBlockService = {
     durationMins: number;
     title: string;
     blockType?: BlockType;
+    projectId?: string | null;
   }): Promise<TimeBlock> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -64,6 +67,7 @@ export const TimeBlockService = {
         duration_mins: input.durationMins,
         title: input.title.trim(),
         block_type: input.blockType ?? 'focus',
+        project_id: input.projectId ?? null,
       })
       .select()
       .single();
@@ -73,7 +77,7 @@ export const TimeBlockService = {
 
   async updateBlock(
     blockId: string,
-    patch: Partial<Pick<TimeBlock, 'title' | 'start_time' | 'duration_mins' | 'block_type' | 'completed_at'>>,
+    patch: Partial<Pick<TimeBlock, 'title' | 'start_time' | 'duration_mins' | 'block_type' | 'completed_at' | 'project_id'>>,
   ): Promise<TimeBlock> {
     const { data, error } = await supabase
       .from('daily_time_blocks')

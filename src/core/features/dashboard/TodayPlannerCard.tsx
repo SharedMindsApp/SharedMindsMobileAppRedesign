@@ -312,14 +312,17 @@ function BlockCard({
 // ── AddBlockForm ───────────────────────────────────────────────────
 
 function AddBlockForm({
-  onAdd, onCancel,
+  onAdd, onCancel, projects,
 }: {
-  onAdd:    (title: string, durationMins: number, blockType: BlockType) => void;
+  onAdd:    (title: string, durationMins: number, blockType: BlockType, projectId: string | null) => void;
   onCancel: () => void;
+  /** User's active projects, for dedicating a block to one. */
+  projects: { id: string; name: string }[];
 }) {
   const [title,    setTitle]    = useState('');
   const [duration, setDuration] = useState<30 | 60 | 90 | 120>(60);
   const [type,     setType]     = useState<BlockType>('focus');
+  const [projectId, setProjectId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -327,7 +330,7 @@ function AddBlockForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd(title.trim(), duration, type);
+    onAdd(title.trim(), duration, type, projectId);
   }
 
   return (
@@ -355,12 +358,25 @@ function AddBlockForm({
         <select
           value={type}
           onChange={(e) => setType(e.target.value as BlockType)}
-          className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high flex-1 min-w-[80px]"
+          className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high"
         >
           {(Object.keys(BLOCK_STYLES) as BlockType[]).map((t) => (
             <option key={t} value={t}>{BLOCK_STYLES[t].label}</option>
           ))}
         </select>
+        {projects.length > 0 && (
+          <select
+            value={projectId ?? ''}
+            onChange={(e) => setProjectId(e.target.value || null)}
+            className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high flex-1 min-w-[90px]"
+            title="Dedicate this block to a project"
+          >
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
         <button type="submit" disabled={!title.trim()}
           className="text-[11px] font-bold text-white bg-primary rounded-lg px-3 py-1.5 disabled:opacity-40 transition-opacity">
           Add
@@ -670,6 +686,9 @@ function WeekTimeline({
                       </p>
                       <p className={`text-[9px] font-semibold pl-1.5 ${s.text}`}>
                         {b.duration_mins}m
+                        {b.project_id && projectNameById.get(b.project_id) && (
+                          <span className="ml-1 font-bold">· {projectNameById.get(b.project_id)}</span>
+                        )}
                       </p>
                       {!done && blockHeightPx(b) >= 50 && (
                         <button
@@ -757,8 +776,13 @@ export function TodayPlannerCard({
   onStartSession: (goal: string, duration: 25 | 50 | 90) => void;
 }) {
   const { user } = useAuth();
-  const { state: { spaces } } = useCoreData();
+  const { state: { spaces, projects } } = useCoreData();
   const personalSpace = spaces.find((s) => s.type === 'personal');
+  // Active projects, for dedicating a block to one.
+  const activeProjects = projects
+    .filter((p) => p.status === 'active')
+    .map((p) => ({ id: p.id, name: p.name }));
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name] as const));
   const navigate = useNavigate();
 
   const now = useMemo(() => new Date(), []);
@@ -936,12 +960,12 @@ export function TodayPlannerCard({
     } finally { setMutating(false); }
   }
 
-  async function handleAddAt(hour: number, title: string, durationMins: number, blockType: BlockType, dateStr: string = today) {
+  async function handleAddAt(hour: number, title: string, durationMins: number, blockType: BlockType, projectId: string | null = null, dateStr: string = today) {
     if (!user || mutating) return;
     const startTime = `${String(hour).padStart(2, '0')}:00`;
     setMutating(true);
     try {
-      const nb = await TimeBlockService.addBlock({ blockDate: dateStr, startTime, durationMins, title, blockType });
+      const nb = await TimeBlockService.addBlock({ blockDate: dateStr, startTime, durationMins, title, blockType, projectId });
       if (dateStr === today) {
         setBlocks((prev) => [...prev, nb].sort((a, b) => a.start_time.localeCompare(b.start_time)));
       }
@@ -1312,7 +1336,8 @@ export function TodayPlannerCard({
 
                         {isAdding && (
                           <AddBlockForm
-                            onAdd={(title, dur, type) => handleAddAt(hour, title, dur, type)}
+                            projects={activeProjects}
+                            onAdd={(title, dur, type, projectId) => handleAddAt(hour, title, dur, type, projectId)}
                             onCancel={() => setAddingAtHour(null)}
                           />
                         )}
