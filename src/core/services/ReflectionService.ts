@@ -150,25 +150,40 @@ export const ReflectionService = {
     };
   },
 
-  /** Create the empty reflection row for a week if it doesn't exist. */
+  /** Create the empty reflection row for a week if it doesn't exist.
+   *
+   *  Conflict-safe: the old check-then-insert raced (the wizard bootstrap
+   *  effect can fire twice — React StrictMode in dev, or concurrent mounts —
+   *  so two inserts hit the (user_id, week_start) unique constraint and the
+   *  second got a 409). We now upsert with ignoreDuplicates so a concurrent
+   *  insert is a no-op, then read the row back. ignoreDuplicates also means
+   *  we never clobber an existing row's status (e.g. a 'completed' week). */
   async ensureReflection(weekStart: string): Promise<WeeklyReflection> {
-    const { data: existing } = await supabase
-      .from('weekly_reflections')
-      .select('*')
-      .eq('week_start', weekStart)
-      .maybeSingle();
-    if (existing) return existing as WeeklyReflection;
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    const { data, error } = await supabase
+    // Insert-if-absent. On conflict this does nothing and returns no row.
+    const { data: inserted, error: upsertErr } = await supabase
       .from('weekly_reflections')
-      .insert({ user_id: user.id, week_start: weekStart, status: 'planning' })
+      .upsert(
+        { user_id: user.id, week_start: weekStart, status: 'planning' },
+        { onConflict: 'user_id,week_start', ignoreDuplicates: true },
+      )
       .select()
-      .single();
-    if (error) throw error;
-    return data as WeeklyReflection;
+      .maybeSingle();
+    if (upsertErr) throw upsertErr;
+    if (inserted) return inserted as WeeklyReflection;
+
+    // Row already existed — fetch it (preserves its current status).
+    const { data: existing, error: fetchErr } = await supabase
+      .from('weekly_reflections')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('week_start', weekStart)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!existing) throw new Error('Failed to ensure weekly reflection');
+    return existing as WeeklyReflection;
   },
 
   async updateReflection(
