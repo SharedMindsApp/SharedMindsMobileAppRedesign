@@ -1327,7 +1327,6 @@ function TasksTab({
                 onScheduleToday={() => onSchedule(t.id, todayIso)}
                 onSchedulePicker={(date) => onSchedule(t.id, date)}
                 onDelete={() => onDelete(t.id)}
-                weekStart={weekStart}
               />
             ))}
           </div>
@@ -1372,15 +1371,24 @@ function TasksTab({
 
 // ── Backlog row — compact, with a "schedule" action ─────────────────────
 function BacklogRow({
-  task, onScheduleToday, onSchedulePicker, onDelete, weekStart,
+  task, onScheduleToday, onSchedulePicker, onDelete,
 }: {
   task: Task;
   onScheduleToday: () => void;
   onSchedulePicker: (date: string) => void;
   onDelete: () => void;
-  weekStart: Date;
 }) {
   const [showDays, setShowDays] = useState(false);
+  // The "Pick day" menu offers the next 7 days starting from today —
+  // never a day that's already passed.
+  const today = new Date();
+  const pickerDays = [0, 1, 2, 3, 4, 5, 6].map((offset) => {
+    const d = addDays(today, offset);
+    const label = offset === 0 ? 'Today'
+      : offset === 1 ? 'Tomorrow'
+      : DAY_NAMES_LONG[(d.getDay() + 6) % 7];
+    return { iso: isoDate(d), label, dayNum: d.getDate() };
+  });
   return (
     <div className="group bg-white rounded-lg ring-1 ring-surface-container px-3 py-2 flex items-center gap-2">
       <p className="flex-1 text-xs font-semibold stitch-text-primary truncate">{task.title}</p>
@@ -1402,19 +1410,16 @@ function BacklogRow({
           </button>
           {showDays && (
             <div className="absolute right-0 top-full mt-1 z-10 bg-surface ring-1 ring-surface-container rounded-lg shadow-lg p-1 w-44">
-              {DAY_NAMES_SHORT.map((name, i) => {
-                const d = addDays(weekStart, i);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => { onSchedulePicker(isoDate(d)); setShowDays(false); }}
-                    className="w-full text-left px-2 py-1.5 rounded-md text-[11px] font-semibold stitch-text-primary hover:bg-surface-container-low"
-                  >
-                    {DAY_NAMES_LONG[i]}, {d.getDate()}
-                  </button>
-                );
-              })}
+              {pickerDays.map(({ iso, label, dayNum }) => (
+                <button
+                  key={iso}
+                  type="button"
+                  onClick={() => { onSchedulePicker(iso); setShowDays(false); }}
+                  className="w-full text-left px-2 py-1.5 rounded-md text-[11px] font-semibold stitch-text-primary hover:bg-surface-container-low"
+                >
+                  {label}, {dayNum}
+                </button>
+              ))}
             </div>
           )}
         </div>
