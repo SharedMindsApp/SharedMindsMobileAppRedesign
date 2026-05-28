@@ -607,10 +607,7 @@ export function ActiveSessionPage() {
       <div className="shrink-0 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm">
         {/* Goal */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">
-              Working on
-            </p>
+          <div className="flex items-center gap-1.5">
             {/* Mode + quiet badges */}
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/10 text-[9px] font-bold text-white/80 uppercase tracking-wider">
               {modeBadgeLabel}
@@ -621,19 +618,26 @@ export function ActiveSessionPage() {
               </span>
             )}
           </div>
-          <p className="text-sm font-bold text-white truncate leading-snug">
-            {currentGoal || 'Your session'}
-          </p>
-          {sessionProject && (
-            <div className="flex items-center gap-1.5 mt-1">
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: projectChipColor(sessionProject.color) }}
-              />
-              <span className="text-[11px] font-semibold text-white/70 truncate">
-                {sessionProject.title}
-              </span>
-            </div>
+          {/* The declared goal lives in the big "You declared" block below for
+              solo sessions, so the top bar stays clean. Jitsi (group/1-on-1)
+              has no central declaration, so the goal + project stay here. */}
+          {!isSolo && (
+            <>
+              <p className="text-sm font-bold text-white truncate leading-snug mt-0.5">
+                {currentGoal || 'Your session'}
+              </p>
+              {sessionProject && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: projectChipColor(sessionProject.color) }}
+                  />
+                  <span className="text-[11px] font-semibold text-white/70 truncate">
+                    {sessionProject.title}
+                  </span>
+                </div>
+              )}
+            </>
           )}
           {/* Open-to-match host pill — only the host of an unclaimed
               open session sees this. Tap the × to close the door
@@ -1342,17 +1346,17 @@ function OpenToMatchHostPill({ sessionId }: { sessionId: string }) {
       </span>
       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300/90 truncate">
         <DoorOpen size={11} />
-        Door open · waiting for a drop-in
+        Open for a match
       </span>
       <button
         type="button"
         onClick={handleClose}
         disabled={closing}
-        title="Close the door — finish solo without drop-ins"
-        className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold text-white/60 hover:text-white px-1.5 py-0.5 rounded-full bg-white/5 hover:bg-white/15 transition-colors shrink-0 disabled:opacity-50"
+        title="Stop looking — finish solo, no drop-ins"
+        className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold text-white/60 hover:text-white px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/15 transition-colors shrink-0 disabled:opacity-50"
       >
         {closing ? <Loader2 size={10} className="animate-spin" /> : <DoorClosed size={10} />}
-        Close
+        Stop looking
       </button>
     </div>
   );
