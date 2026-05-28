@@ -1129,7 +1129,7 @@ export function TodayPlannerCard({
                   </div>
 
                   {isToday && (
-                    <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-extrabold uppercase bg-amber-400 text-amber-950 px-1.5 py-0.5 rounded-full tracking-wider shadow-md">
+                    <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-extrabold uppercase bg-amber-400 text-amber-950 px-1.5 py-0.5 rounded-full tracking-wider shadow-md z-10">
                       Today
                     </span>
                   )}
