@@ -15,7 +15,7 @@
  * two surfaces' separate task stores in sync with their own mutations.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, Circle, CheckCircle2, Calendar, CalendarClock, Inbox,
@@ -80,6 +80,16 @@ export function TaskDetailSheet({
   const [draft, setDraft] = useState(task.title);
   // Local optimistic load so the picker reflects the tap instantly.
   const [loadValue, setLoadValue] = useState<TaskLoad>(task.load ?? 'medium');
+
+  // Auto-grow the title editor so a long title is fully visible (no cramped
+  // 3-row scroll). Re-fits on every keystroke and when edit mode opens.
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!editing || !el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [editing, draft]);
   // "Let it go" + "Delete" are destructive + easy to mis-tap, so the first
   // tap arms an inline confirm rather than acting immediately.
   const [confirmingDrop, setConfirmingDrop] = useState(false);
@@ -147,6 +157,7 @@ export function TaskDetailSheet({
             {editing ? (
               <div>
                 <textarea
+                  ref={titleRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value.slice(0, MAX_TITLE))}
                   onBlur={commitRename}
@@ -155,9 +166,8 @@ export function TaskDetailSheet({
                     if (e.key === 'Escape') { e.preventDefault(); setEditing(false); setDraft(task.title); }
                   }}
                   autoFocus
-                  rows={3}
                   maxLength={MAX_TITLE}
-                  className="w-full resize-none text-lg font-extrabold stitch-text-primary leading-snug bg-surface-container-low rounded-xl px-2.5 py-2 outline-none focus:ring-2 ring-primary/30"
+                  className="w-full resize-none overflow-hidden text-lg font-extrabold stitch-text-primary leading-snug bg-surface-container-low rounded-xl px-3 py-2.5 outline-none focus:ring-2 ring-primary/30 min-h-[5rem]"
                 />
                 <div className="flex items-center justify-between mt-1.5">
                   <span className={`text-[10px] font-semibold ${draft.length >= MAX_TITLE ? 'text-rose-600' : 'stitch-text-secondary'}`}>
