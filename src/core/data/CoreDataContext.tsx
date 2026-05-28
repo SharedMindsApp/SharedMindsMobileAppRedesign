@@ -372,7 +372,10 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
   // Exposed via context so list pages / editor modals can re-trigger after CUD.
   const refreshProjects = async () => {
     try {
+      const _t0 = performance.now();
       const rows = await ProjectService.getProjectsForUser();
+      const _t1 = performance.now();
+      console.log(`[perf] getProjectsForUser: ${(_t1 - _t0).toFixed(0)}ms (${rows.length} rows)`);
 
       // Member counts in one round-trip
       const memberCounts = new Map<string, number>();
@@ -385,6 +388,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           memberCounts.set(m.project_id, (memberCounts.get(m.project_id) ?? 0) + 1);
         }
       }
+      console.log(`[perf] member counts: ${(performance.now() - _t1).toFixed(0)}ms`);
 
       const mapped: CoreProject[] = rows.map(p => {
         const count = memberCounts.get(p.id) ?? 1;
