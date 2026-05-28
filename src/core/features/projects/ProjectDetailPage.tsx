@@ -46,6 +46,8 @@ const AddTaskSheet = lazy(() =>
   import('./AddTaskSheet').then((m) => ({ default: m.AddTaskSheet })));
 import { SurfaceCard } from '../../ui/CorePage';
 import { TaskLoadBadge, energyToLoad } from '../../ui/TaskLoadBadge';
+import { DeadlineChip, DeadlineEditor, rollupChipMeta } from '../../ui/DeadlineControls';
+import { deadlineStatus, rollupDeadline } from '../../../lib/deadlineStatus';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
 // Project = organising your work to be productive. Sessions live on
@@ -189,6 +191,28 @@ export function ProjectDetailPage() {
     }
     return Math.round(sum);
   }, [milestones, phases]);
+
+  // Project-level "on target?" verdict — worst live state across every
+  // milestone + phase deadline (plus the project's own target date).
+  const projectDeadlineKind = useMemo(() => {
+    const statuses = [
+      ...milestones.map((m) => deadlineStatus({
+        targetDate: m.target_date, deadlineType: m.deadline_type, done: !!m.completed_at,
+      })),
+      ...phases.map((p) => deadlineStatus({
+        targetDate: p.target_date, deadlineType: p.deadline_type, done: !!p.completed_at,
+      })),
+    ];
+    if (project?.target_date) {
+      const flex = (project as any).deadline_flexibility;
+      const type: 'flexible' | 'hard' | null = flex === 'fixed' ? 'hard'
+        : flex === 'flexible' ? 'flexible' : null;
+      if (type) statuses.push(deadlineStatus({
+        targetDate: project.target_date, deadlineType: type, done: projectCompletionPct >= 100,
+      }));
+    }
+    return rollupDeadline(statuses);
+  }, [milestones, phases, project, projectCompletionPct]);
 
   const openTasks = useMemo(() =>
     tasks.filter((t) => t.status !== 'done' && t.status !== 'dropped')
@@ -546,9 +570,20 @@ export function ProjectDetailPage() {
         {milestones.length > 0 && (
           <div className="px-4 pt-3 border-t border-surface-container/40">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
-                Project progress
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
+                  Project progress
+                </span>
+                {(() => {
+                  const meta = rollupChipMeta(projectDeadlineKind);
+                  if (!meta) return null;
+                  return (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${meta.tone}`}>
+                      {meta.label}
+                    </span>
+                  );
+                })()}
+              </div>
               <span className="text-xs font-extrabold tabular-nums" style={{ color: color.hex }}>
                 {projectCompletionPct}%
               </span>
@@ -1998,6 +2033,8 @@ function GoalsTab({
   const [openPhaseFor, setOpenPhaseFor] = useState<string | null>(null);
   const [newPhaseTitle, setNewPhaseTitle] = useState('');
   const [savingPhase, setSavingPhase] = useState(false);
+  // Which milestone/phase has its deadline editor expanded. Keyed by id.
+  const [deadlineOpenFor, setDeadlineOpenFor] = useState<string | null>(null);
 
   const evenSplit = milestones.length > 0 ? Math.round(100 / milestones.length) : 100;
 
@@ -2082,6 +2119,34 @@ function GoalsTab({
       onPhasesChange(phases.filter((x) => x.id !== p.id));
     } catch (e) {
       console.error('[GoalsTab] deletePhase', e);
+    }
+  }
+
+  /** Set/clear a milestone's deadline (date + flexible/hard). Optimistic. */
+  async function handleSetMilestoneDeadline(
+    m: ProjectMilestone, next: { date: string | null; type: 'flexible' | 'hard' | null },
+  ) {
+    onMilestonesChange(milestones.map((x) =>
+      x.id === m.id ? { ...x, target_date: next.date, deadline_type: next.type } : x));
+    try {
+      await ProjectService.updateMilestone(m.id, { target_date: next.date, deadline_type: next.type });
+    } catch (e) {
+      console.error('[GoalsTab] setMilestoneDeadline', e);
+      onMilestonesChange(milestones.map((x) => (x.id === m.id ? m : x)));
+    }
+  }
+
+  /** Set/clear a phase's deadline (date + flexible/hard). Optimistic. */
+  async function handleSetPhaseDeadline(
+    p: ProjectPhase, next: { date: string | null; type: 'flexible' | 'hard' | null },
+  ) {
+    onPhasesChange(phases.map((x) =>
+      x.id === p.id ? { ...x, target_date: next.date, deadline_type: next.type } : x));
+    try {
+      await ProjectService.updatePhase(p.id, { target_date: next.date, deadline_type: next.type });
+    } catch (e) {
+      console.error('[GoalsTab] setPhaseDeadline', e);
+      onPhasesChange(phases.map((x) => (x.id === p.id ? p : x)));
     }
   }
 
@@ -2180,7 +2245,27 @@ function GoalsTab({
                   >
                     {weight}% of project
                   </span>
+                  <DeadlineChip targetDate={m.target_date} deadlineType={m.deadline_type} done={isDone} />
+                  <button
+                    type="button"
+                    onClick={() => setDeadlineOpenFor(deadlineOpenFor === m.id ? null : m.id)}
+                    className="inline-flex items-center gap-0.5 text-[10px] font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
+                    title="Set a deadline for this milestone"
+                  >
+                    <Calendar size={11} /> {m.target_date ? 'Edit date' : 'Add date'}
+                  </button>
                 </div>
+
+                {deadlineOpenFor === m.id && (
+                  <div className="mt-2">
+                    <DeadlineEditor
+                      date={m.target_date}
+                      type={m.deadline_type}
+                      accentHex={colorHex}
+                      onChange={(next) => handleSetMilestoneDeadline(m, next)}
+                    />
+                  </div>
+                )}
 
                 {/* Per-milestone progress bar */}
                 <div className="mt-2 flex items-center gap-2">
@@ -2223,59 +2308,81 @@ function GoalsTab({
                 {myPhases.map((p) => {
                   const phaseDone = !!p.completed_at;
                   return (
-                    <li key={p.id} className="flex items-center gap-2 group">
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePhase(p)}
-                        className="flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center"
-                        style={{
-                          borderColor: colorHex,
-                          background: phaseDone ? colorHex : 'transparent',
-                        }}
-                        aria-label={phaseDone ? 'Mark phase incomplete' : 'Mark phase complete'}
-                      >
-                        {phaseDone && (
-                          <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                    <li key={p.id} className="group">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePhase(p)}
+                          className="flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                          style={{
+                            borderColor: colorHex,
+                            background: phaseDone ? colorHex : 'transparent',
+                          }}
+                          aria-label={phaseDone ? 'Mark phase incomplete' : 'Mark phase complete'}
+                        >
+                          {phaseDone && (
+                            <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                              <path
+                                d="M2 6L5 9L10 3"
+                                stroke="white"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                        <span
+                          className={`flex-1 min-w-0 text-xs ${
+                            phaseDone
+                              ? 'line-through stitch-text-secondary'
+                              : 'stitch-text-primary'
+                          }`}
+                        >
+                          {p.title}
+                        </span>
+                        <DeadlineChip targetDate={p.target_date} deadlineType={p.deadline_type} done={phaseDone} className="shrink-0" />
+                        {p.weight_pct != null && (
+                          <span className="text-[9px] font-bold tabular-nums stitch-text-secondary opacity-70 shrink-0">
+                            {p.weight_pct}%
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDeadlineOpenFor(deadlineOpenFor === p.id ? null : p.id)}
+                          className="flex-shrink-0 w-5 h-5 rounded-full grid place-items-center stitch-text-secondary hover:stitch-text-primary sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                          aria-label="Set phase deadline"
+                          title="Set a deadline for this phase"
+                        >
+                          <Calendar size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePhase(p)}
+                          className="flex-shrink-0 w-5 h-5 rounded-full grid place-items-center stitch-text-secondary sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                          aria-label="Delete phase"
+                          title="Delete phase"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
                             <path
-                              d="M2 6L5 9L10 3"
-                              stroke="white"
-                              strokeWidth="2.5"
+                              d="M3 3L11 11M11 3L3 11"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
                               strokeLinecap="round"
-                              strokeLinejoin="round"
                             />
                           </svg>
-                        )}
-                      </button>
-                      <span
-                        className={`flex-1 text-xs ${
-                          phaseDone
-                            ? 'line-through stitch-text-secondary'
-                            : 'stitch-text-primary'
-                        }`}
-                      >
-                        {p.title}
-                      </span>
-                      {p.weight_pct != null && (
-                        <span className="text-[9px] font-bold tabular-nums stitch-text-secondary opacity-70">
-                          {p.weight_pct}%
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleDeletePhase(p)}
-                        className="flex-shrink-0 w-5 h-5 rounded-full grid place-items-center stitch-text-secondary opacity-0 group-hover:opacity-100 transition-opacity"
-                        aria-label="Delete phase"
-                        title="Delete phase"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
-                          <path
-                            d="M3 3L11 11M11 3L3 11"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
+                        </button>
+                      </div>
+                      {deadlineOpenFor === p.id && (
+                        <div className="mt-1.5 ml-6">
+                          <DeadlineEditor
+                            date={p.target_date}
+                            type={p.deadline_type}
+                            accentHex={colorHex}
+                            onChange={(next) => handleSetPhaseDeadline(p, next)}
                           />
-                        </svg>
-                      </button>
+                        </div>
+                      )}
                     </li>
                   );
                 })}

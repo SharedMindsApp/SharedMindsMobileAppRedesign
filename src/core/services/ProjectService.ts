@@ -483,6 +483,7 @@ export const ProjectService = {
         title: string;
         description?: string | null;
         target_date?: string | null;
+        deadline_type?: 'flexible' | 'hard' | null;
         weight_pct?: number | null;
         sort_order?: number;
         completed_at?: string | null;
@@ -492,14 +493,15 @@ export const ProjectService = {
         const { data, error } = await supabase
             .from('project_milestones')
             .insert({
-                project_id:   input.project_id,
-                title:        input.title.trim(),
-                description:  input.description?.trim() || null,
-                target_date:  input.target_date || null,
-                weight_pct:   input.weight_pct ?? null,
-                sort_order:   input.sort_order ?? 0,
-                completed_at: input.completed_at ?? null,
-                created_by:   user.id,
+                project_id:    input.project_id,
+                title:         input.title.trim(),
+                description:   input.description?.trim() || null,
+                target_date:   input.target_date || null,
+                deadline_type: input.target_date ? (input.deadline_type ?? 'flexible') : null,
+                weight_pct:    input.weight_pct ?? null,
+                sort_order:    input.sort_order ?? 0,
+                completed_at:  input.completed_at ?? null,
+                created_by:    user.id,
             })
             .select()
             .single();
@@ -558,6 +560,8 @@ export const ProjectService = {
         milestone_id?: string | null;
         title: string;
         description?: string | null;
+        target_date?: string | null;
+        deadline_type?: 'flexible' | 'hard' | null;
         weight_pct?: number | null;
         sort_order?: number;
         completed_at?: string | null;
@@ -567,14 +571,16 @@ export const ProjectService = {
         const { data, error } = await supabase
             .from('project_phases')
             .insert({
-                project_id:   input.project_id,
-                milestone_id: input.milestone_id ?? null,
-                title:        input.title.trim(),
-                description:  input.description?.trim() || null,
-                weight_pct:   input.weight_pct ?? null,
-                sort_order:   input.sort_order ?? 0,
-                completed_at: input.completed_at ?? null,
-                created_by:   user.id,
+                project_id:    input.project_id,
+                milestone_id:  input.milestone_id ?? null,
+                title:         input.title.trim(),
+                description:   input.description?.trim() || null,
+                target_date:   input.target_date || null,
+                deadline_type: input.target_date ? (input.deadline_type ?? 'flexible') : null,
+                weight_pct:    input.weight_pct ?? null,
+                sort_order:    input.sort_order ?? 0,
+                completed_at:  input.completed_at ?? null,
+                created_by:    user.id,
             })
             .select()
             .single();
@@ -738,6 +744,8 @@ export interface ProjectMilestone {
     title: string;
     description: string | null;
     target_date: string | null;
+    /** 'flexible' = soft aim, 'hard' = firm date. Null when no target_date. */
+    deadline_type: 'flexible' | 'hard' | null;
     /** % of the project this milestone represents. Sum across all
      *  milestones in a project should be ~100. */
     weight_pct: number | null;
@@ -757,6 +765,10 @@ export interface ProjectPhase {
     milestone_id: string | null;
     title: string;
     description: string | null;
+    /** Optional deadline for this phase. Null = no date. */
+    target_date: string | null;
+    /** 'flexible' = soft aim, 'hard' = firm date. Null when no target_date. */
+    deadline_type: 'flexible' | 'hard' | null;
     weight_pct: number | null;
     completed_at: string | null;
     sort_order: number;
