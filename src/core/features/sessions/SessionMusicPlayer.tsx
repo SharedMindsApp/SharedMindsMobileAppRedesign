@@ -227,9 +227,22 @@ export function SessionMusicPlayer({ category, sessionId, isGroupSession, isHost
         setEnabled(true);
       }
     }
+    // Session teardown (end / leave / find-new-match / debrief finalized)
+    // dispatches this to fully stop playback. NOT fired on minimize, so
+    // music survives the FloatingTimerWidget hand-off.
+    function onStop() {
+      audioRef.current?.pause();
+      setPlaying(false);
+      musicAudioBus.setPlaying(false);
+      setEnabled(false);
+    }
     window.addEventListener('sm:music-set-category', onSet);
-    return () => window.removeEventListener('sm:music-set-category', onSet);
-    // setOverrideCategory + setEnabled are stable; safe to omit
+    window.addEventListener('sm:music-stop', onStop);
+    return () => {
+      window.removeEventListener('sm:music-set-category', onSet);
+      window.removeEventListener('sm:music-stop', onStop);
+    };
+    // setOverrideCategory + setEnabled + setPlaying are stable; safe to omit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
