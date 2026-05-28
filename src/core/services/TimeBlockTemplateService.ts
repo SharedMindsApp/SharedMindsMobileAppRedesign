@@ -163,9 +163,13 @@ export const TimeBlockTemplateService = {
    * beginning `weekStart` (a Monday). Additive + idempotent: an item is
    * skipped when a block with the same date + start_time + title already
    * exists, so re-applying never duplicates and never clobbers manual blocks.
+   *
+   * Mid-week, days that have already passed are skipped by default (so
+   * applying on a Wednesday won't litter Mon/Tue with blocks you can't do).
+   * Pass `{ includePast: true }` to fill the whole Mon–Sun week regardless.
    * Returns the number of blocks created.
    */
-  async applyToWeek(templateId: string, weekStart: Date): Promise<number> {
+  async applyToWeek(templateId: string, weekStart: Date, opts?: { includePast?: boolean }): Promise<number> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -178,6 +182,9 @@ export const TimeBlockTemplateService = {
       d.setDate(d.getDate() + i);
       return localISO(d);
     });
+    // Default: skip days before today (only this-day-onward gets blocks).
+    const todayStr = localISO(new Date());
+    const allowDate = (iso: string) => opts?.includePast || iso >= todayStr;
 
     // Existing blocks in the week, for dedup.
     const { data: existingRows } = await supabase
@@ -199,6 +206,7 @@ export const TimeBlockTemplateService = {
         block_type:    it.block_type,
         project_id:    it.project_id,
       }))
+      .filter((r) => allowDate(r.block_date))
       .filter((r) => {
         // start_time may come back as HH:MM:SS — normalise the dedup key.
         const t = r.start_time.slice(0, 5);
