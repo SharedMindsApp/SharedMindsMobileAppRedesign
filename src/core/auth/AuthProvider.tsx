@@ -101,6 +101,11 @@ function profileHasPantryAccess(profile: Profile | null): boolean {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Module-level guard so personal-space bootstrap runs at most once per user
+// per app session, even across the multiple fetchProfile calls a cold load
+// triggers. Cleared implicitly on full page reload.
+const bootstrappedUsers = new Set<string>();
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<Profile | null>(null);
@@ -266,12 +271,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }).catch(() => { /* dynamic import failed — ignore */ });
             }
 
-            // Only bootstrap space if we got a real DB profile (not a fallback)
-            try {
-                console.log('[AuthContext] Bootstrapping personal space...');
-                await SpaceService.bootstrapPersonalSpace(userId);
-            } catch (spaceErr) {
-                console.warn('[AuthContext] Space bootstrap failed (non-fatal):', spaceErr);
+            // Only bootstrap space if we got a real DB profile (not a fallback).
+            // Guard: run AT MOST ONCE per user per app session. fetchProfile can
+            // be called several times on a cold load (initAuth + onAuthStateChange
+            // INITIAL_SESSION/SIGNED_IN), and each bootstrap was firing space
+            // queries — piling onto the request storm. The module-level set
+            // survives across those concurrent calls.
+            if (!bootstrappedUsers.has(userId)) {
+                bootstrappedUsers.add(userId);
+                try {
+                    console.log('[AuthContext] Bootstrapping personal space...');
+                    await SpaceService.bootstrapPersonalSpace(userId);
+                } catch (spaceErr) {
+                    bootstrappedUsers.delete(userId); // allow a retry next time
+                    console.warn('[AuthContext] Space bootstrap failed (non-fatal):', spaceErr);
+                }
             }
         } catch (error) {
             console.error('[AuthContext] Failed to fetch profile', error);

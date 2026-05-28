@@ -110,7 +110,12 @@ export const ProjectService = {
         // fetch:
         //   • own projects   → created_by = me      (projects_created_by_idx)
         //   • shared projects → id IN (my memberships) (PK lookups)
-        const { data: { user } } = await supabase.auth.getUser();
+        // Use the LOCAL session (no network) to get the uid. getUser() hits
+        // the auth server over the network and, under the cold-load request
+        // storm, was hanging for many seconds — getSession() reads from
+        // storage and is instant.
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) return [];
 
         const [ownRes, memRes] = await Promise.all([
