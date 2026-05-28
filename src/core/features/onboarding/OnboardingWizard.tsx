@@ -667,6 +667,23 @@ const INTENTION_DAYS = [
 
 // ── Types ──────────────────────────────────────────────────────────
 
+/** A task row in the wizard: the title plus its cognitive-load tag. */
+type WizardTaskLoad = 'deep' | 'medium' | 'light';
+type WizardTaskDraft = { title: string; load: WizardTaskLoad };
+
+/** Load tag → display label + dot colour, for the per-row picker. */
+const TASK_LOAD_META: Record<WizardTaskLoad, { label: string; hex: string }> = {
+  deep:   { label: 'Deep',   hex: '#8b5cf6' },
+  medium: { label: 'Medium', hex: '#3b82f6' },
+  light:  { label: 'Light',  hex: '#10b981' },
+};
+const TASK_LOAD_ORDER: WizardTaskLoad[] = ['light', 'medium', 'deep'];
+
+/** Map a wizard load tag to the DB's energy_level enum. */
+function loadToEnergyLevel(load: WizardTaskLoad): 'high' | 'medium' | 'low' {
+  return load === 'deep' ? 'high' : load === 'light' ? 'low' : 'medium';
+}
+
 type Step =
   | 'welcome'
   | 'profile'
@@ -980,7 +997,15 @@ export function OnboardingWizard({
   ]);
 
   // ── Tasks ──────────────────────────────────────────────────────
-  const [taskInputs, setTaskInputs] = useState<string[]>(['', '', '']);
+  // Each task carries a cognitive-load tag (deep/medium/light) — the same
+  // signal as a task's `energy` field. This makes load a *considered*
+  // attribute from creation (not a silent default), which is what powers
+  // the re-entry wizard's mood-matched shortlist.
+  const [taskInputs, setTaskInputs] = useState<WizardTaskDraft[]>([
+    { title: '', load: 'medium' },
+    { title: '', load: 'medium' },
+    { title: '', load: 'medium' },
+  ]);
 
   // ── Draft persistence (newProject mode only) ───────────────────
   // Autosaves the wizard to localStorage so a refresh / lost connection /
@@ -1002,7 +1027,13 @@ export function OnboardingWizard({
       if (d.targetDate) setProjectTargetDate(d.targetDate);
       if (d.deadlineFlex) setProjectDeadlineFlex(d.deadlineFlex);
       if (Array.isArray(d.milestones) && d.milestones.length) setMilestoneInputs(d.milestones);
-      if (Array.isArray(d.tasks) && d.tasks.length) setTaskInputs(d.tasks);
+      if (Array.isArray(d.tasks) && d.tasks.length) {
+        // Backward-compat: older drafts stored tasks as plain strings.
+        setTaskInputs(d.tasks.map((t: unknown): WizardTaskDraft =>
+          typeof t === 'string'
+            ? { title: t, load: 'medium' }
+            : { title: (t as any)?.title ?? '', load: (t as any)?.load ?? 'medium' }));
+      }
       const hadContent = !!d.title?.trim?.() || !!d.brainDump?.trim?.()
         || (Array.isArray(d.milestones) && d.milestones.some((m: { title?: string }) => m.title?.trim?.()));
       if (hadContent) setDraftRestored(true);
@@ -1014,7 +1045,7 @@ export function OnboardingWizard({
   useEffect(() => {
     if (mode !== 'newProject') return;
     const hasContent = projectTitle.trim() || projectBrainDump.trim()
-      || milestoneInputs.some((m) => m.title.trim()) || taskInputs.some((t) => t.trim());
+      || milestoneInputs.some((m) => m.title.trim()) || taskInputs.some((t) => t.title.trim());
     const id = window.setTimeout(() => {
       try {
         if (!hasContent) { window.localStorage.removeItem(NEW_PROJECT_DRAFT_KEY); return; }
@@ -1053,7 +1084,11 @@ export function OnboardingWizard({
     setProjectType(null);
     setProjectTargetDate('');
     setProjectDeadlineFlex('flexible');
-    setTaskInputs(['', '', '']);
+    setTaskInputs([
+      { title: '', load: 'medium' },
+      { title: '', load: 'medium' },
+      { title: '', load: 'medium' },
+    ]);
     setMilestoneInputs([
       { title: '', weight_pct: 50, already_done: false, phases: [
         { title: '', weight_pct: 50, already_done: false },
@@ -1152,7 +1187,7 @@ export function OnboardingWizard({
       setTasksApplyMsg("Couldn't read any tasks — paste the AI's reply with one task per line.");
       return;
     }
-    setTaskInputs(parsed);
+    setTaskInputs(parsed.map((p) => ({ title: p.title, load: p.load })));
     setTasksApplyMsg(`Added ${parsed.length} task${parsed.length === 1 ? '' : 's'}.`);
     setTasksReply('');
     setShowTasksHelper(false);
@@ -1263,11 +1298,15 @@ export function OnboardingWizard({
   }
 
   function updateTask(i: number, val: string) {
-    setTaskInputs((cur) => cur.map((t, idx) => (idx === i ? val : t)));
+    setTaskInputs((cur) => cur.map((t, idx) => (idx === i ? { ...t, title: val } : t)));
+  }
+
+  function updateTaskLoad(i: number, load: WizardTaskLoad) {
+    setTaskInputs((cur) => cur.map((t, idx) => (idx === i ? { ...t, load } : t)));
   }
 
   function addTaskRow() {
-    if (taskInputs.length < 6) setTaskInputs((cur) => [...cur, '']);
+    if (taskInputs.length < 6) setTaskInputs((cur) => [...cur, { title: '', load: 'medium' }]);
   }
 
   function updateIntention(i: number, val: string) {
@@ -1502,9 +1541,24 @@ export function OnboardingWizard({
         },
       });
       if (error) throw error;
-      const tasks: string[] = (data?.tasks ?? []).map((t: any) => t.title).filter(Boolean);
+      // Map the edge fn's tasks → {title, load}. It may return an
+      // energy_level/load hint per task; otherwise default to 'medium'.
+      const tasks: WizardTaskDraft[] = (data?.tasks ?? [])
+        .filter((t: any) => t?.title)
+        .map((t: any): WizardTaskDraft => {
+          const raw = String(t.load ?? t.energy_level ?? t.energy ?? '').toLowerCase();
+          const load: WizardTaskLoad =
+            /deep|hard|heavy|high/.test(raw) ? 'deep'
+            : /light|easy|quick|low/.test(raw) ? 'light'
+            : 'medium';
+          return { title: String(t.title), load };
+        });
       if (tasks.length > 0) {
-        const padded = [...tasks, ...Array(Math.max(0, taskInputs.length - tasks.length)).fill('')];
+        const padCount = Math.max(0, taskInputs.length - tasks.length);
+        const padded: WizardTaskDraft[] = [
+          ...tasks,
+          ...Array.from({ length: padCount }, (): WizardTaskDraft => ({ title: '', load: 'medium' })),
+        ];
         setTaskInputs(padded.slice(0, Math.max(tasks.length, 3)));
       } else {
         setAiError('No suggestions returned — try adding tasks manually.');
@@ -1586,13 +1640,14 @@ export function OnboardingWizard({
 
     // 3. Create tasks. Schema uses created_by (not user_id) and requires
     //    space_id (NOT NULL) inherited from the project's space.
-    const filledTasks = taskInputs.filter((t) => t.trim());
-    for (const title of filledTasks) {
+    const filledTasks = taskInputs.filter((t) => t.title.trim());
+    for (const t of filledTasks) {
       await TaskService.createTask({
-        title:      title.trim(),
-        space_id:   personalSpace.id,
-        project_id: project.id,
-        created_by: user.id,
+        title:        t.title.trim(),
+        space_id:     personalSpace.id,
+        project_id:   project.id,
+        created_by:   user.id,
+        energy_level: loadToEnergyLevel(t.load),
       } as any);
     }
 
@@ -3271,7 +3326,7 @@ export function OnboardingWizard({
 
   // ── 8. First tasks ────────────────────────────────────────────
   if (step === 'tasks') {
-    const filledTasks = taskInputs.filter((t) => t.trim());
+    const filledTasks = taskInputs.filter((t) => t.title.trim());
     return (
       <StepShell step="tasks" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
         <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center mb-4">
@@ -3391,8 +3446,12 @@ export function OnboardingWizard({
           </p>
         )}
 
+        <p className="text-[11px] stitch-text-secondary mb-2 leading-snug">
+          Tag each task by the focus it needs — it helps us suggest the right
+          task for your energy when you come back to work.
+        </p>
         <div className="space-y-2.5">
-          {taskInputs.map((val, i) => (
+          {taskInputs.map((row, i) => (
             <div
               key={i}
               className="flex items-center gap-2"
@@ -3401,7 +3460,7 @@ export function OnboardingWizard({
               <div className="w-4 h-4 rounded border-2 border-surface-container-high shrink-0" />
               <input
                 type="text"
-                value={val}
+                value={row.title}
                 onChange={(e) => updateTask(i, e.target.value)}
                 placeholder={[
                   'e.g. Write the problem statement',
@@ -3410,8 +3469,31 @@ export function OnboardingWizard({
                   'e.g. Book 30-min review call',
                 ][i] ?? `Task ${i + 1}`}
                 maxLength={120}
-                className="flex-1 px-3.5 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                className="flex-1 min-w-0 px-3.5 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
               />
+              {/* Cognitive-load picker: light / medium / deep */}
+              <div className="flex items-center gap-0.5 shrink-0 rounded-lg bg-surface-container-low p-0.5">
+                {TASK_LOAD_ORDER.map((load) => {
+                  const active = row.load === load;
+                  const meta = TASK_LOAD_META[load];
+                  return (
+                    <button
+                      key={load}
+                      type="button"
+                      onClick={() => updateTaskLoad(i, load)}
+                      title={`${meta.label} focus`}
+                      aria-label={`${meta.label} focus`}
+                      aria-pressed={active}
+                      className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all ${
+                        active ? 'text-white shadow-sm' : 'stitch-text-secondary hover:bg-surface-container'
+                      }`}
+                      style={active ? { backgroundColor: meta.hex } : undefined}
+                    >
+                      {meta.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>

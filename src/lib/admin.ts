@@ -457,3 +457,166 @@ export async function setAppConfig(
     );
   if (error) throw error;
 }
+
+// ---------------------------------------------------------------------------
+// Heatmap analytics
+// ---------------------------------------------------------------------------
+
+/** Numeric score for any mood code (1 = lowest, 6 = highest). */
+export const MOOD_SCORES: Record<string, number> = {
+  // energy axis (do sessions)
+  brainfog: 1, low: 2, distracted: 3, steady: 4, energised: 5, hyperfocus: 6,
+  // clarity axis (plan / reflect sessions)
+  foggy: 1, scattered: 2, unsure: 3, okay: 4, clear: 5, motivated: 6,
+};
+
+export interface MoodTimeCell {
+  /** 0 = Sunday … 6 = Saturday */
+  day: number;
+  /** Time bucket index 0-7, each spanning 3 hours */
+  bucket: number;
+  count: number;
+  avgScore: number;
+}
+
+export interface MoodShift {
+  sessionKind: 'do' | 'plan' | 'reflect';
+  avgStart: number;
+  avgEnd: number;
+  delta: number;
+  count: number;
+}
+
+export interface DailyActivity {
+  date: string;       // YYYY-MM-DD
+  sessions: number;
+  tasksCompleted: number;
+}
+
+export interface HeatmapAnalytics {
+  moodCells: MoodTimeCell[];
+  moodShifts: MoodShift[];
+  dailyActivity: DailyActivity[];
+  /** 0-23: which hour had the most sessions */
+  peakHour: number;
+  avgMoodScore: number | null;
+}
+
+export async function getHeatmapAnalytics(
+  range: 'week' | 'month' | 'quarter' | 'all' = 'month',
+): Promise<HeatmapAnalytics> {
+  const since = range === 'all' ? null
+    : range === 'week'    ? new Date(Date.now() - 7  * 86400_000).toISOString()
+    : range === 'month'   ? new Date(Date.now() - 30 * 86400_000).toISOString()
+    :                       new Date(Date.now() - 90 * 86400_000).toISOString();
+
+  // ── Fetch sessions ───────────────────────────────────────────────────────
+  let sessionsQuery = supabase
+    .from('focus_sessions')
+    .select('start_mood, end_mood, start_time, session_kind')
+    .not('start_time', 'is', null);
+  if (since) sessionsQuery = sessionsQuery.gte('start_time', since);
+  const { data: sessions } = await sessionsQuery;
+
+  // ── Fetch completed tasks ────────────────────────────────────────────────
+  let tasksQuery = supabase
+    .from('tasks')
+    .select('completed_at')
+    .eq('status', 'done')
+    .not('completed_at', 'is', null);
+  if (since) tasksQuery = tasksQuery.gte('completed_at', since);
+  const { data: tasks } = await tasksQuery;
+
+  // ── Build mood heatmap cells (day × 3-hour bucket) ───────────────────────
+  // bucket = Math.floor(hour / 3), giving buckets 0-7 (3h each)
+  const cellMap = new Map<string, { sum: number; count: number }>();
+  let globalMoodSum = 0, globalMoodCount = 0;
+
+  for (const s of sessions ?? []) {
+    if (!s.start_mood || !s.start_time) continue;
+    const score = MOOD_SCORES[s.start_mood];
+    if (!score) continue;
+    const d = new Date(s.start_time);
+    const day = d.getUTCDay();
+    const bucket = Math.floor(d.getUTCHours() / 3);
+    const key = `${day}-${bucket}`;
+    const cell = cellMap.get(key) ?? { sum: 0, count: 0 };
+    cell.sum += score;
+    cell.count += 1;
+    cellMap.set(key, cell);
+    globalMoodSum += score;
+    globalMoodCount += 1;
+  }
+
+  const moodCells: MoodTimeCell[] = Array.from(cellMap.entries()).map(([key, { sum, count }]) => {
+    const [day, bucket] = key.split('-').map(Number);
+    return { day, bucket, count, avgScore: sum / count };
+  });
+
+  // ── Mood before/after shifts ──────────────────────────────────────────────
+  const shiftMap = new Map<string, { startSum: number; endSum: number; count: number }>();
+  for (const s of sessions ?? []) {
+    if (!s.start_mood || !s.end_mood || !s.session_kind) continue;
+    const startScore = MOOD_SCORES[s.start_mood];
+    const endScore   = MOOD_SCORES[s.end_mood];
+    if (!startScore || !endScore) continue;
+    const kind = s.session_kind as string;
+    const entry = shiftMap.get(kind) ?? { startSum: 0, endSum: 0, count: 0 };
+    entry.startSum += startScore;
+    entry.endSum   += endScore;
+    entry.count    += 1;
+    shiftMap.set(kind, entry);
+  }
+
+  const moodShifts: MoodShift[] = Array.from(shiftMap.entries())
+    .filter(([k]) => ['do', 'plan', 'reflect'].includes(k))
+    .map(([kind, { startSum, endSum, count }]) => {
+      const avgStart = startSum / count;
+      const avgEnd   = endSum   / count;
+      return {
+        sessionKind: kind as 'do' | 'plan' | 'reflect',
+        avgStart,
+        avgEnd,
+        delta: avgEnd - avgStart,
+        count,
+      };
+    });
+
+  // ── Daily activity (sessions + tasks per day) ─────────────────────────────
+  const dayMap = new Map<string, DailyActivity>();
+
+  const dateKey = (iso: string) => iso.slice(0, 10);
+
+  for (const s of sessions ?? []) {
+    if (!s.start_time) continue;
+    const dk = dateKey(s.start_time);
+    const entry = dayMap.get(dk) ?? { date: dk, sessions: 0, tasksCompleted: 0 };
+    entry.sessions += 1;
+    dayMap.set(dk, entry);
+  }
+  for (const t of tasks ?? []) {
+    if (!t.completed_at) continue;
+    const dk = dateKey(t.completed_at);
+    const entry = dayMap.get(dk) ?? { date: dk, sessions: 0, tasksCompleted: 0 };
+    entry.tasksCompleted += 1;
+    dayMap.set(dk, entry);
+  }
+
+  const dailyActivity = Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  // ── Peak hour (0-23) ──────────────────────────────────────────────────────
+  const hourCounts = new Array(24).fill(0);
+  for (const s of sessions ?? []) {
+    if (!s.start_time) continue;
+    hourCounts[new Date(s.start_time).getUTCHours()] += 1;
+  }
+  const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
+
+  return {
+    moodCells,
+    moodShifts,
+    dailyActivity,
+    peakHour,
+    avgMoodScore: globalMoodCount > 0 ? globalMoodSum / globalMoodCount : null,
+  };
+}

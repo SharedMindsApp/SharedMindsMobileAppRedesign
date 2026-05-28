@@ -129,28 +129,52 @@ export function buildTasksPrompt(args: {
 
 Suggest the first 4-5 tasks I should do next — the smallest concrete next steps that move this forward, each finishable in a single focus session. Skip anything I've already marked done. Make them specific and actionable (start with a verb).
 
-Return ONLY the tasks, one per line, nothing else — no numbering, no commentary:
+For each task, also estimate the cognitive load — how much focus/mental energy it takes:
+- [deep]   = demanding, needs a clear head and sustained concentration
+- [medium] = moderate effort
+- [light]  = easy, low-energy, good for a foggy or tired day
 
-T: <task>
-T: <task>
-T: <task>`;
+Return ONLY the tasks, one per line, nothing else — no numbering, no commentary. Put the load tag in square brackets right after "T:":
+
+T: [medium] <task>
+T: [deep] <task>
+T: [light] <task>`;
 }
 
-/** Parse a tasks reply into clean titles. Forgiving: strips "T:", bullets,
- *  numbering, markdown; drops blanks + duplicates; caps at 6. */
-export function parseTasksReply(text: string): string[] {
-  const out: string[] = [];
+/** A parsed task line: the title plus its estimated cognitive load. */
+export interface ParsedTask { title: string; load: 'deep' | 'medium' | 'light'; }
+
+/** Pull a leading [deep|medium|light] (or hard/heavy, easy/quick synonyms)
+ *  tag off a line. Returns the matched load (default 'medium') + the rest. */
+function extractLoad(line: string): { load: ParsedTask['load']; rest: string } {
+  const m = line.match(/^\s*\[\s*([a-z]+)\s*\]\s*/i);
+  if (!m) return { load: 'medium', rest: line };
+  const word = m[1].toLowerCase();
+  const rest = line.slice(m[0].length);
+  if (/^(deep|hard|heavy|high|big)$/.test(word)) return { load: 'deep', rest };
+  if (/^(light|easy|quick|low|small)$/.test(word)) return { load: 'light', rest };
+  if (/^(med|medium|mid|moderate)$/.test(word)) return { load: 'medium', rest };
+  // Unknown bracket content — leave it on the title, default load.
+  return { load: 'medium', rest: line };
+}
+
+/** Parse a tasks reply into {title, load}. Forgiving: strips "T:", bullets,
+ *  numbering, markdown, and a leading [load] tag; drops blanks + dupes; caps at 6. */
+export function parseTasksReply(text: string): ParsedTask[] {
+  const out: ParsedTask[] = [];
   const seen = new Set<string>();
   for (const raw of text.split('\n')) {
     let line = raw.replace(/\*\*/g, '').trim();
     line = line.replace(/^T:\s*/i, '');               // explicit T: prefix
     line = line.replace(/^[\s>`]*(?:[-*•]\s*|\d+[.)]\s*)/, ''); // bullets / numbering
     line = line.replace(/`/g, '').trim();
-    if (!line) continue;
-    const key = line.toLowerCase();
+    const { load, rest } = extractLoad(line);
+    const title = rest.trim();
+    if (!title) continue;
+    const key = title.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(line.slice(0, 120));
+    out.push({ title: title.slice(0, 120), load });
     if (out.length >= 6) break;
   }
   return out;
