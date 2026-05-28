@@ -849,6 +849,16 @@ export function DashboardPage() {
             stats={<StatsTab />}
             pulse={<PulsePeopleTab />}
           />
+
+          {/* Community surfaces for returning users too — these used to
+              only render on the day-zero home, so established accounts
+              (incl. admins) lost sight of upcoming sessions + the feed.
+              Mirrors the day-zero ordering: calendar → community feed. */}
+          <UpcomingPublicSessionsStrip
+            sessions={upcomingScheduled}
+            myUserId={user?.id}
+          />
+          <CommunityFeedStrip />
         </>
       )}
         </>
