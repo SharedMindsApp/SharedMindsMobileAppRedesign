@@ -10,6 +10,7 @@ import { startCommunitySession, createScheduledSession, fetchConflictingSessions
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
 import { InputWell } from '../../ui/CorePage';
+import { taskUrgency } from '../../../lib/taskUrgency';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConductGateModal } from '../moderation/ConductGateModal';
 import { useSessionLimits } from '../../../hooks/useSessionLimits';
@@ -1365,9 +1366,18 @@ function TaskRow({
           <span className="block text-sm font-medium stitch-text-primary leading-snug truncate">
             {task.title}
           </span>
-          {/* Chip row: intention badge + session count */}
-          {(task.weeklyIntentionId || sessions > 0) && (
+          {/* Chip row: urgency + intention badge + session count */}
+          {(() => {
+            const u = taskUrgency(task);
+            const showUrgency = u.kind === 'overdue' || u.kind === 'due-today' || u.kind === 'due-soon' || u.kind === 'today';
+            if (!showUrgency && !task.weeklyIntentionId && sessions === 0) return null;
+            return (
             <div className="flex items-center gap-1 mt-0.5">
+              {showUrgency && (
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${u.tone}`}>
+                  {u.label}
+                </span>
+              )}
               {task.weeklyIntentionId && (
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[9px] font-bold">
                   ✦ Intention
@@ -1383,7 +1393,8 @@ function TaskRow({
                 </span>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
         <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
           isSelected ? 'bg-primary' : 'border-2 border-surface-container'

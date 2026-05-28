@@ -37,6 +37,7 @@ import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { projectColorMeta } from './ProjectsPage';
 import { NextActionControl } from './NextActionControl';
+import { taskUrgency } from '../../../lib/taskUrgency';
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
@@ -1720,6 +1721,19 @@ function KanbanCard({
           {task.title}
         </p>
       )}
+
+      {/* Deadline urgency — only the pressing states (overdue / due soon),
+          since the board is already organised by scheduled day. Matches the
+          urgency chip on the home Today view + shared TaskCard. */}
+      {columnKey !== 'done' && (() => {
+        const u = taskUrgency({ status: task.status, scheduledFor: task.scheduled_for, dueOn: task.due_on });
+        if (u.kind !== 'overdue' && u.kind !== 'due-today' && u.kind !== 'due-soon') return null;
+        return (
+          <span className={`inline-block mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.tone}`}>
+            {u.label}
+          </span>
+        );
+      })()}
 
       <div className="flex items-center justify-between mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
         <button
