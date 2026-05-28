@@ -667,9 +667,11 @@ const INTENTION_DAYS = [
 
 // ── Types ──────────────────────────────────────────────────────────
 
-/** A task row in the wizard: the title plus its cognitive-load tag. */
+/** A task row in the wizard: title + cognitive-load tag + when to start it. */
 type WizardTaskLoad = 'deep' | 'medium' | 'light';
-type WizardTaskDraft = { title: string; load: WizardTaskLoad };
+/** When the task should land. 'backlog' = unscheduled (no start date). */
+type WizardTaskWhen = 'today' | 'tomorrow' | 'week' | 'backlog';
+type WizardTaskDraft = { title: string; load: WizardTaskLoad; when: WizardTaskWhen };
 
 /** Load tag → display label + dot colour, for the per-row picker. */
 const TASK_LOAD_META: Record<WizardTaskLoad, { label: string; hex: string }> = {
@@ -679,9 +681,32 @@ const TASK_LOAD_META: Record<WizardTaskLoad, { label: string; hex: string }> = {
 };
 const TASK_LOAD_ORDER: WizardTaskLoad[] = ['light', 'medium', 'deep'];
 
+/** When tag → short label, for the per-row "start when" picker. */
+const TASK_WHEN_META: Record<WizardTaskWhen, { label: string; hint: string }> = {
+  today:    { label: 'Today',    hint: 'Start today' },
+  tomorrow: { label: 'Tomorrow', hint: 'Start tomorrow' },
+  week:     { label: 'This week', hint: 'Sometime in the next few days' },
+  backlog:  { label: 'Backlog',  hint: 'No date — pull it in later' },
+};
+const TASK_WHEN_ORDER: WizardTaskWhen[] = ['today', 'tomorrow', 'week', 'backlog'];
+
 /** Map a wizard load tag to the DB's energy_level enum. */
 function loadToEnergyLevel(load: WizardTaskLoad): 'high' | 'medium' | 'low' {
   return load === 'deep' ? 'high' : load === 'light' ? 'low' : 'medium';
+}
+
+/** Local (not UTC) yyyy-mm-dd — avoids the BST off-by-one of toISOString(). */
+function wizardLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Resolve a "when" tag to a scheduled_for date (or null for backlog). */
+function whenToScheduledISO(when: WizardTaskWhen): string | null {
+  if (when === 'backlog') return null;
+  const d = new Date();
+  if (when === 'tomorrow') d.setDate(d.getDate() + 1);
+  else if (when === 'week') d.setDate(d.getDate() + 3);
+  return wizardLocalISO(d);
 }
 
 type Step =
@@ -1003,9 +1028,9 @@ export function OnboardingWizard({
   // attribute from creation (not a silent default), which is what powers
   // the re-entry wizard's mood-matched shortlist.
   const [taskInputs, setTaskInputs] = useState<WizardTaskDraft[]>([
-    { title: '', load: 'medium' },
-    { title: '', load: 'medium' },
-    { title: '', load: 'medium' },
+    { title: '', load: 'medium', when: 'today' },
+    { title: '', load: 'medium', when: 'backlog' },
+    { title: '', load: 'medium', when: 'backlog' },
   ]);
 
   // ── Cover image (newProject mode only) ─────────────────────────
@@ -1061,11 +1086,16 @@ export function OnboardingWizard({
       if (d.deadlineFlex) setProjectDeadlineFlex(d.deadlineFlex);
       if (Array.isArray(d.milestones) && d.milestones.length) setMilestoneInputs(d.milestones);
       if (Array.isArray(d.tasks) && d.tasks.length) {
-        // Backward-compat: older drafts stored tasks as plain strings.
-        setTaskInputs(d.tasks.map((t: unknown): WizardTaskDraft =>
+        // Backward-compat: older drafts stored tasks as plain strings, and
+        // pre-scheduling drafts had no `when`.
+        setTaskInputs(d.tasks.map((t: unknown, i: number): WizardTaskDraft =>
           typeof t === 'string'
-            ? { title: t, load: 'medium' }
-            : { title: (t as any)?.title ?? '', load: (t as any)?.load ?? 'medium' }));
+            ? { title: t, load: 'medium', when: i === 0 ? 'today' : 'backlog' }
+            : {
+                title: (t as any)?.title ?? '',
+                load: (t as any)?.load ?? 'medium',
+                when: (t as any)?.when ?? (i === 0 ? 'today' : 'backlog'),
+              }));
       }
       const hadContent = !!d.title?.trim?.() || !!d.brainDump?.trim?.()
         || (Array.isArray(d.milestones) && d.milestones.some((m: { title?: string }) => m.title?.trim?.()));
@@ -1118,9 +1148,9 @@ export function OnboardingWizard({
     setProjectTargetDate('');
     setProjectDeadlineFlex('flexible');
     setTaskInputs([
-      { title: '', load: 'medium' },
-      { title: '', load: 'medium' },
-      { title: '', load: 'medium' },
+      { title: '', load: 'medium', when: 'today' },
+      { title: '', load: 'medium', when: 'backlog' },
+      { title: '', load: 'medium', when: 'backlog' },
     ]);
     setMilestoneInputs([
       { title: '', weight_pct: 50, already_done: false, phases: [
@@ -1220,7 +1250,7 @@ export function OnboardingWizard({
       setTasksApplyMsg("Couldn't read any tasks — paste the AI's reply with one task per line.");
       return;
     }
-    setTaskInputs(parsed.map((p) => ({ title: p.title, load: p.load })));
+    setTaskInputs(parsed.map((p, i) => ({ title: p.title, load: p.load, when: i === 0 ? 'today' : 'backlog' })));
     setTasksApplyMsg(`Added ${parsed.length} task${parsed.length === 1 ? '' : 's'}.`);
     setTasksReply('');
     setShowTasksHelper(false);
@@ -1338,8 +1368,12 @@ export function OnboardingWizard({
     setTaskInputs((cur) => cur.map((t, idx) => (idx === i ? { ...t, load } : t)));
   }
 
+  function updateTaskWhen(i: number, when: WizardTaskWhen) {
+    setTaskInputs((cur) => cur.map((t, idx) => (idx === i ? { ...t, when } : t)));
+  }
+
   function addTaskRow() {
-    if (taskInputs.length < 6) setTaskInputs((cur) => [...cur, { title: '', load: 'medium' }]);
+    if (taskInputs.length < 6) setTaskInputs((cur) => [...cur, { title: '', load: 'medium', when: 'backlog' }]);
   }
 
   function updateIntention(i: number, val: string) {
@@ -1578,19 +1612,19 @@ export function OnboardingWizard({
       // energy_level/load hint per task; otherwise default to 'medium'.
       const tasks: WizardTaskDraft[] = (data?.tasks ?? [])
         .filter((t: any) => t?.title)
-        .map((t: any): WizardTaskDraft => {
+        .map((t: any, i: number): WizardTaskDraft => {
           const raw = String(t.load ?? t.energy_level ?? t.energy ?? '').toLowerCase();
           const load: WizardTaskLoad =
             /deep|hard|heavy|high/.test(raw) ? 'deep'
             : /light|easy|quick|low/.test(raw) ? 'light'
             : 'medium';
-          return { title: String(t.title), load };
+          return { title: String(t.title), load, when: i === 0 ? 'today' : 'backlog' };
         });
       if (tasks.length > 0) {
         const padCount = Math.max(0, taskInputs.length - tasks.length);
         const padded: WizardTaskDraft[] = [
           ...tasks,
-          ...Array.from({ length: padCount }, (): WizardTaskDraft => ({ title: '', load: 'medium' })),
+          ...Array.from({ length: padCount }, (): WizardTaskDraft => ({ title: '', load: 'medium', when: 'backlog' })),
         ];
         setTaskInputs(padded.slice(0, Math.max(tasks.length, 3)));
       } else {
@@ -1676,11 +1710,12 @@ export function OnboardingWizard({
     const filledTasks = taskInputs.filter((t) => t.title.trim());
     for (const t of filledTasks) {
       await TaskService.createTask({
-        title:        t.title.trim(),
-        space_id:     personalSpace.id,
-        project_id:   project.id,
-        created_by:   user.id,
-        energy_level: loadToEnergyLevel(t.load),
+        title:         t.title.trim(),
+        space_id:      personalSpace.id,
+        project_id:    project.id,
+        created_by:    user.id,
+        energy_level:  loadToEnergyLevel(t.load),
+        scheduled_for: whenToScheduledISO(t.when),
       } as any);
     }
 
@@ -3490,53 +3525,86 @@ export function OnboardingWizard({
           </p>
         )}
 
-        <p className="text-[11px] stitch-text-secondary mb-2 leading-snug">
-          Tag each task by the focus it needs — it helps us suggest the right
-          task for your energy when you come back to work.
+        <p className="text-[11px] stitch-text-secondary mb-2.5 leading-snug">
+          For each task, tag the <span className="font-semibold stitch-text-primary">focus</span> it
+          needs and <span className="font-semibold stitch-text-primary">when</span> you'll start it —
+          so your first steps land on a day, not in a void.
         </p>
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {taskInputs.map((row, i) => (
             <div
               key={i}
-              className="flex items-center gap-2"
+              className="rounded-xl bg-surface-container-low p-2.5 space-y-2"
               style={{ animation: `wizFadeUp 350ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 70}ms both` }}
             >
-              <div className="w-4 h-4 rounded border-2 border-surface-container-high shrink-0" />
-              <input
-                type="text"
-                value={row.title}
-                onChange={(e) => updateTask(i, e.target.value)}
-                placeholder={[
-                  'e.g. Write the problem statement',
-                  'e.g. Collect 5 competitor examples',
-                  'e.g. Draft slide 1–3',
-                  'e.g. Book 30-min review call',
-                ][i] ?? `Task ${i + 1}`}
-                maxLength={120}
-                className="flex-1 min-w-0 px-3.5 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-              />
-              {/* Cognitive-load picker: light / medium / deep */}
-              <div className="flex items-center gap-0.5 shrink-0 rounded-lg bg-surface-container-low p-0.5">
-                {TASK_LOAD_ORDER.map((load) => {
-                  const active = row.load === load;
-                  const meta = TASK_LOAD_META[load];
-                  return (
-                    <button
-                      key={load}
-                      type="button"
-                      onClick={() => updateTaskLoad(i, load)}
-                      title={`${meta.label} focus`}
-                      aria-label={`${meta.label} focus`}
-                      aria-pressed={active}
-                      className={`px-2 py-1.5 rounded-md text-[10px] font-bold transition-all ${
-                        active ? 'text-white shadow-sm' : 'stitch-text-secondary hover:bg-surface-container'
-                      }`}
-                      style={active ? { backgroundColor: meta.hex } : undefined}
-                    >
-                      {meta.label}
-                    </button>
-                  );
-                })}
+              {/* Title */}
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded border-2 border-surface-container-high shrink-0" />
+                <input
+                  type="text"
+                  value={row.title}
+                  onChange={(e) => updateTask(i, e.target.value)}
+                  placeholder={[
+                    'e.g. Write the problem statement',
+                    'e.g. Collect 5 competitor examples',
+                    'e.g. Draft slide 1–3',
+                    'e.g. Book 30-min review call',
+                  ][i] ?? `Task ${i + 1}`}
+                  maxLength={120}
+                  className="flex-1 min-w-0 bg-transparent stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none"
+                />
+              </div>
+              {/* Focus + when pickers */}
+              <div className="flex items-center gap-2 flex-wrap pl-6">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wide stitch-text-secondary mr-0.5">Focus</span>
+                  <div className="flex items-center gap-0.5 rounded-lg bg-surface p-0.5">
+                    {TASK_LOAD_ORDER.map((load) => {
+                      const active = row.load === load;
+                      const meta = TASK_LOAD_META[load];
+                      return (
+                        <button
+                          key={load}
+                          type="button"
+                          onClick={() => updateTaskLoad(i, load)}
+                          title={`${meta.label} focus`}
+                          aria-label={`${meta.label} focus`}
+                          aria-pressed={active}
+                          className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                            active ? 'text-white shadow-sm' : 'stitch-text-secondary hover:bg-surface-container'
+                          }`}
+                          style={active ? { backgroundColor: meta.hex } : undefined}
+                        >
+                          {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wide stitch-text-secondary mr-0.5">Start</span>
+                  <div className="flex items-center gap-0.5 rounded-lg bg-surface p-0.5">
+                    {TASK_WHEN_ORDER.map((when) => {
+                      const active = row.when === when;
+                      const meta = TASK_WHEN_META[when];
+                      return (
+                        <button
+                          key={when}
+                          type="button"
+                          onClick={() => updateTaskWhen(i, when)}
+                          title={meta.hint}
+                          aria-label={meta.hint}
+                          aria-pressed={active}
+                          className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                            active ? 'bg-primary text-white shadow-sm' : 'stitch-text-secondary hover:bg-surface-container'
+                          }`}
+                        >
+                          {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           ))}
