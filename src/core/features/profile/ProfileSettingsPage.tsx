@@ -40,7 +40,17 @@ import {
   isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush, isSubscribed,
 } from '../../services/PushNotificationService';
 import { useUIPreferences } from '../../../contexts/UIPreferencesContext';
+import { useCoreData } from '../../data/CoreDataContext';
+import { PlannerSettingsSheet } from '../dashboard/PlannerSettingsSheet';
 import { ProfilePage } from './ProfilePage';
+
+/** "7am" / "12pm" / "10pm" for an hour 0–23. */
+function fmtHour(h: number): string {
+  if (h === 0) return '12am';
+  if (h < 12) return `${h}am`;
+  if (h === 12) return '12pm';
+  return `${h - 12}pm`;
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -481,7 +491,15 @@ function AccountTab() {
   const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const { config, updatePreferences } = useUIPreferences();
+  const { state: { projects } } = useCoreData();
   const [signingOut, setSigningOut] = useState(false);
+  const [showPlanner, setShowPlanner] = useState(false);
+
+  const plannerActiveProjects = projects
+    .filter((p) => p.status === 'active')
+    .map((p) => ({ id: p.id, name: p.name }));
+  const plannerStart = Math.max(0, Math.min(22, profile?.planner_start_hour ?? 7));
+  const plannerEnd   = Math.max(plannerStart + 1, Math.min(23, profile?.planner_end_hour ?? 22));
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -534,6 +552,24 @@ function AccountTab() {
         </div>
       </SurfaceCard>
 
+      {/* ── Planner & calendar ───────────────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Planner & calendar</p>
+        <button
+          type="button"
+          onClick={() => setShowPlanner(true)}
+          className="w-full flex items-center justify-between gap-3 rounded-xl bg-surface-container-low ring-1 ring-surface-container px-3 py-3 text-left hover:bg-surface-container active:scale-[0.99] transition-all"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-bold stitch-text-primary">Day window & templates</p>
+            <p className="text-[11px] stitch-text-secondary mt-0.5">
+              Showing <span className="font-semibold tabular-nums">{fmtHour(plannerStart)}–{fmtHour(plannerEnd)}</span> on every calendar · manage weekly templates
+            </p>
+          </div>
+          <SettingsIcon size={16} className="shrink-0 text-violet-600" />
+        </button>
+      </SurfaceCard>
+
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Directory privacy</p>
         <PrivacyToggle
@@ -572,6 +608,14 @@ function AccountTab() {
 
       {/* ── Your data (GDPR) ─────────────────────────────── */}
       <DataRightsCard />
+
+      {showPlanner && (
+        <PlannerSettingsSheet
+          projects={plannerActiveProjects}
+          onApplied={() => {}}
+          onClose={() => setShowPlanner(false)}
+        />
+      )}
     </div>
   );
 }

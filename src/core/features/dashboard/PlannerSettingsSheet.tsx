@@ -1,20 +1,37 @@
 /**
- * TimeBlockTemplatesSheet — manage weekly time-block templates from the home
- * planner. Two things:
- *   1. Your saved templates — apply one to this week or next (materialises
+ * PlannerSettingsSheet — one place to configure how the planner & calendars
+ * behave (popup on web, bottom-sheet on mobile). Three sections:
+ *   1. Day window — the visible hour range (start/end) shown on EVERY
+ *      calendar surface (home planner + /sessions). Stored on the profile so
+ *      it's universal: no contradiction between views. Saving re-fetches the
+ *      profile so all grids re-render.
+ *   2. Your saved templates — apply one to this week or next (materialises
  *      its blocks into the live calendar; today-onward, idempotent).
- *   2. Start from a preset — adopt a curated starter: map its project slots
+ *   3. Start from a preset — adopt a curated starter: map its project slots
  *      (Project 1–4) to your real projects, name it, and it becomes a new
  *      editable template.
  */
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, CalendarCheck, Trash2, Loader2, Check, ChevronLeft, Sparkles } from 'lucide-react';
+import { X, Plus, CalendarCheck, Trash2, Loader2, Check, ChevronLeft, Sparkles, Clock } from 'lucide-react';
 import {
   TimeBlockTemplateService, type TimeBlockTemplate,
 } from '../../services/TimeBlockTemplateService';
 import { TIME_BLOCK_STARTERS, type TimeBlockStarter } from '../../../lib/timeBlockStarters';
+import { useAuth } from '../../auth/AuthProvider';
+import { supabase } from '../../../lib/supabase';
+
+const DEFAULT_PLANNER_START = 7;
+const DEFAULT_PLANNER_END   = 22;
+
+/** "7am" / "12pm" / "10pm" for an hour 0–23. */
+function formatHour(h: number): string {
+  if (h === 0) return '12am';
+  if (h < 12) return `${h}am`;
+  if (h === 12) return '12pm';
+  return `${h - 12}pm`;
+}
 
 function localISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -33,7 +50,7 @@ function weekLabel(monday: Date): string {
   return `${fmt(monday)} – ${fmt(sun)}`;
 }
 
-export function TimeBlockTemplatesSheet({
+export function PlannerSettingsSheet({
   projects, onApplied, onClose,
 }: {
   projects: { id: string; name: string }[];
@@ -41,6 +58,29 @@ export function TimeBlockTemplatesSheet({
   onApplied: () => void;
   onClose: () => void;
 }) {
+  const { user, profile, refreshProfile } = useAuth();
+
+  // ── Day window (universal, profile-backed) ───────────────────────
+  const dayStart = Math.max(0, Math.min(22, profile?.planner_start_hour ?? DEFAULT_PLANNER_START));
+  const dayEnd   = Math.max(dayStart + 1, Math.min(23, profile?.planner_end_hour ?? DEFAULT_PLANNER_END));
+  const [savingWindow, setSavingWindow] = useState(false);
+
+  async function saveDayWindow(nextStart: number, nextEnd: number) {
+    if (!user || savingWindow) return;
+    const s = Math.max(0, Math.min(22, nextStart));
+    const e = Math.max(s + 1, Math.min(23, nextEnd));
+    if (s === dayStart && e === dayEnd) return;
+    setSavingWindow(true);
+    try {
+      await supabase.from('profiles').update({ planner_start_hour: s, planner_end_hour: e }).eq('id', user.id);
+      await refreshProfile();
+    } catch (err) {
+      console.warn('[PlannerSettings] saveDayWindow failed:', err);
+    } finally {
+      setSavingWindow(false);
+    }
+  }
+
   const [templates, setTemplates] = useState<TimeBlockTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -122,7 +162,7 @@ export function TimeBlockTemplatesSheet({
               </button>
             )}
             <h2 className="text-lg font-extrabold stitch-text-primary leading-tight truncate">
-              {adopt ? 'Set up template' : 'Weekly templates'}
+              {adopt ? 'Set up template' : 'Planner settings'}
             </h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 w-8 h-8 rounded-full grid place-items-center stitch-text-secondary hover:bg-surface-container-low">
@@ -186,6 +226,45 @@ export function TimeBlockTemplatesSheet({
             {msg && (
               <p className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>
             )}
+
+            {/* Day window — applies to every calendar surface */}
+            <section>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Clock size={12} className="text-violet-600" />
+                <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">Day window</p>
+                {savingWindow && <Loader2 size={11} className="animate-spin stitch-text-secondary ml-1" />}
+              </div>
+              <div className="rounded-xl bg-surface-container-low ring-1 ring-surface-container p-3">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={dayStart}
+                    onChange={(e) => saveDayWindow(Number(e.target.value), dayEnd)}
+                    disabled={savingWindow}
+                    aria-label="Day starts at"
+                    className="flex-1 text-sm font-semibold stitch-text-primary bg-surface rounded-lg px-2.5 py-2 outline-none ring-1 ring-surface-container disabled:opacity-50"
+                  >
+                    {Array.from({ length: 23 }, (_, i) => i).map((h) => (
+                      <option key={h} value={h}>{formatHour(h)}</option>
+                    ))}
+                  </select>
+                  <span className="text-xs font-bold stitch-text-secondary">to</span>
+                  <select
+                    value={dayEnd}
+                    onChange={(e) => saveDayWindow(dayStart, Number(e.target.value))}
+                    disabled={savingWindow}
+                    aria-label="Day ends at"
+                    className="flex-1 text-sm font-semibold stitch-text-primary bg-surface rounded-lg px-2.5 py-2 outline-none ring-1 ring-surface-container disabled:opacity-50"
+                  >
+                    {Array.from({ length: 23 }, (_, i) => i + 1).filter((h) => h > dayStart).map((h) => (
+                      <option key={h} value={h}>{formatHour(h)}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[10px] stitch-text-secondary/80 mt-2 leading-snug">
+                  The hours shown on your home planner and the sessions calendar. Set it once — it applies everywhere.
+                </p>
+              </div>
+            </section>
 
             {/* Your templates */}
             <section>

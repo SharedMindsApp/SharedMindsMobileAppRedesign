@@ -25,10 +25,10 @@ import {
   Mail, Zap, PenLine, Layers, Target, Phone,
   Play, CheckCircle2, Circle, X, Loader2, Check,
   Calendar as CalendarIcon, Search, ChevronLeft, ChevronRight,
-  Trash2, LayoutTemplate,
+  Trash2, Settings,
 } from 'lucide-react';
 import { FindSessionsSheet } from './FindSessionsSheet';
-import { TimeBlockTemplatesSheet } from './TimeBlockTemplatesSheet';
+import { PlannerSettingsSheet } from './PlannerSettingsSheet';
 import { TimeBlockService, type TimeBlock, type BlockType } from '../../services/TimeBlockService';
 import {
   ReflectionService, mondayOf, estimateSessions,
@@ -957,27 +957,11 @@ export function TodayPlannerCard({
 }: {
   onStartSession: (goal: string, duration: 25 | 50 | 90) => void;
 }) {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile } = useAuth();
   // User-defined visible day window (same-day range), stored on the profile.
   const dayStart = Math.max(0, Math.min(23, profile?.planner_start_hour ?? DEFAULT_PLANNER_START));
   const dayEnd   = Math.max(dayStart + 1, Math.min(23, profile?.planner_end_hour ?? DEFAULT_PLANNER_END));
   const hours    = useMemo(() => hoursRange(dayStart, dayEnd), [dayStart, dayEnd]);
-  const [savingWindow, setSavingWindow] = useState(false);
-
-  async function saveDayWindow(nextStart: number, nextEnd: number) {
-    if (!user || savingWindow) return;
-    const s = Math.max(0, Math.min(22, nextStart));
-    const e = Math.max(s + 1, Math.min(23, nextEnd));
-    setSavingWindow(true);
-    try {
-      await supabase.from('profiles').update({ planner_start_hour: s, planner_end_hour: e }).eq('id', user.id);
-      await refreshProfile();
-    } catch (err) {
-      console.warn('[TodayPlannerCard] saveDayWindow failed:', err);
-    } finally {
-      setSavingWindow(false);
-    }
-  }
   const { state: { spaces, projects } } = useCoreData();
   const personalSpace = spaces.find((s) => s.type === 'personal');
   // Active projects, for dedicating a block to one.
@@ -1058,7 +1042,7 @@ export function TodayPlannerCard({
   const [weeklyLoaded,  setWeeklyLoaded]  = useState(false);
   const [showWizard,    setShowWizard]    = useState(false);
   const [showFindSessions, setShowFindSessions] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [showPlannerSettings, setShowPlannerSettings] = useState(false);
 
   /** Re-fetch the selected day + the whole week's blocks. Used after a
    *  template is applied so the grid reflects the freshly-created blocks. */
@@ -1354,44 +1338,18 @@ export function TodayPlannerCard({
                 Find sessions
               </button>
 
-              {/* Templates — apply a reusable weekly time-block template, or
-                  adopt a starter preset. */}
+              {/* Planner settings — the day window (hours shown on every
+                  calendar) + weekly templates live behind this gear. The
+                  current window is shown inline as the button label. */}
               <button
                 type="button"
-                onClick={() => setShowTemplates(true)}
-                className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-white/85 backdrop-blur ring-1 ring-violet-200/50 text-violet-700 hover:bg-white hover:shadow-sm hover:-translate-y-px transition-all"
+                onClick={() => setShowPlannerSettings(true)}
+                title="Planner settings — day window & templates"
+                className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap text-[10px] font-bold px-2.5 py-1.5 rounded-full bg-white/70 backdrop-blur ring-1 ring-violet-200/40 stitch-text-secondary hover:bg-white hover:text-violet-700 hover:shadow-sm transition-all"
               >
-                <LayoutTemplate size={11} strokeWidth={2.5} />
-                Templates
+                <span className="tabular-nums">{formatHour(dayStart)}–{formatHour(dayEnd)}</span>
+                <Settings size={12} className="text-violet-600" />
               </button>
-
-              {/* Day window — set the hours your planner shows (night owls,
-                  early birds, evening workers). Persists to the profile. */}
-              <div className="inline-flex items-center gap-1 shrink-0 text-[10px] font-bold stitch-text-secondary bg-white/70 backdrop-blur px-1.5 py-1 rounded-full ring-1 ring-violet-200/40">
-                <select
-                  value={dayStart}
-                  onChange={(e) => saveDayWindow(Number(e.target.value), dayEnd)}
-                  disabled={savingWindow}
-                  aria-label="Day starts at"
-                  className="bg-transparent outline-none cursor-pointer disabled:opacity-50"
-                >
-                  {Array.from({ length: 23 }, (_, i) => i).map((h) => (
-                    <option key={h} value={h}>{formatHour(h)}</option>
-                  ))}
-                </select>
-                <span>–</span>
-                <select
-                  value={dayEnd}
-                  onChange={(e) => saveDayWindow(dayStart, Number(e.target.value))}
-                  disabled={savingWindow}
-                  aria-label="Day ends at"
-                  className="bg-transparent outline-none cursor-pointer disabled:opacity-50"
-                >
-                  {Array.from({ length: 23 }, (_, i) => i + 1).filter((h) => h > dayStart).map((h) => (
-                    <option key={h} value={h}>{formatHour(h)}</option>
-                  ))}
-                </select>
-              </div>
             </div>
           </div>
 
@@ -1722,12 +1680,12 @@ export function TodayPlannerCard({
         <FindSessionsSheet onClose={() => setShowFindSessions(false)} />
       )}
 
-      {/* Weekly templates — apply to this/next week, or adopt a starter */}
-      {showTemplates && (
-        <TimeBlockTemplatesSheet
+      {/* Planner settings — day window (universal) + weekly templates */}
+      {showPlannerSettings && (
+        <PlannerSettingsSheet
           projects={activeProjects}
           onApplied={() => { void reloadBlocks(); }}
-          onClose={() => setShowTemplates(false)}
+          onClose={() => setShowPlannerSettings(false)}
         />
       )}
 

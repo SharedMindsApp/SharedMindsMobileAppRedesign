@@ -20,13 +20,20 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 ## [Unreleased]
 
 ### Added
-- **Weekly time-block templates, from the planner** — a new "Templates"
-  button on the home planner opens a sheet to apply a saved template to
-  this week or next (additive + idempotent, today-onward by default), or
-  adopt a curated starter preset by mapping its project slots to your real
-  projects and naming it. Applying reloads the grid in place.
+- **Planner settings** — a single gear (showing your current hours, e.g.
+  "7am–10pm") on the home planner opens a settings sheet (popup on web,
+  bottom-sheet on mobile) with the **day window** and **weekly templates**
+  in one place. Also reachable from Settings → Account → "Planner & calendar".
+- **Weekly time-block templates** — apply a saved template to this week or
+  next (additive + idempotent, today-onward by default), or adopt a curated
+  starter preset by mapping its project slots to your real projects and
+  naming it. Applying reloads the planner grid in place.
 
 ### Changed
+- **Day window is now universal** — the visible hour range you set applies to
+  both the home planner *and* the sessions calendar, so the two views no
+  longer contradict each other. (Previously the sessions calendar was a fixed
+  6am–11pm regardless of your planner setting.)
 - **Task detail sheet** — moved the Edit action down beside Delete in the
   footer, and Delete now arms an "are you sure?" confirm (matching "Let it
   go") instead of deleting on the first tap.
