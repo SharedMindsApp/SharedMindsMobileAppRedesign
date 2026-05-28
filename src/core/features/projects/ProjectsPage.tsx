@@ -63,12 +63,8 @@ export function ProjectsPage() {
       return;
     }
     let cancelled = false;
-    const _t = performance.now();
     ProjectService.getProjectStats(projects.map((p) => p.id))
-      .then((m) => {
-        console.log(`[perf] getProjectStats: ${(performance.now() - _t).toFixed(0)}ms (${projects.length} projects)`);
-        if (!cancelled) setStats(m);
-      })
+      .then((m) => { if (!cancelled) setStats(m); })
       .catch((e) => console.warn('[ProjectsPage] getProjectStats failed', e));
     return () => { cancelled = true; };
   }, [projects]);
