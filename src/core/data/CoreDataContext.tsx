@@ -165,7 +165,7 @@ type CoreDataContextValue = {
   toggleTask: (taskId: string) => void;
   addTask: (title: string, projectId?: string | null) => void;
   /** Same as addTask, but awaits the DB insert and returns the real task id. */
-  addTaskAsync: (title: string, projectId?: string | null) => Promise<string>;
+  addTaskAsync: (title: string, projectId?: string | null, opts?: { scheduledFor?: string | null }) => Promise<string>;
   /** Permanently deletes a task from the DB and removes it from local state. */
   deleteTaskAsync: (taskId: string) => Promise<void>;
   /**
@@ -600,7 +600,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           }).catch(console.error);
         }
       },
-      addTaskAsync: async (title, projectIdOverride) => {
+      addTaskAsync: async (title, projectIdOverride, opts) => {
         const cleanedTitle = title.trim();
         if (!cleanedTitle) throw new Error('Task title required');
 
@@ -613,6 +613,8 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
 
         if (!targetSpaceId || !user) throw new Error('Personal space not ready');
 
+        const scheduledFor = opts?.scheduledFor ?? null;
+
         const realTask = await TaskService.createTask({
           space_id: targetSpaceId,
           created_by: user.id,
@@ -621,6 +623,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           status: 'inbox',
           priority: 'medium',
           energy_level: 'medium',
+          scheduled_for: scheduledFor,
           sort_order: 0,
         });
 
@@ -637,7 +640,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
               dueLabel: 'Inbox',
               dueOn: null,
               done: false,
-              scheduledFor: null,
+              scheduledFor,
               status: 'inbox',
             },
             ...current.tasks,
