@@ -30,7 +30,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowRight, ArrowLeft, Loader2, Camera, Target, Flag, CheckSquare,
   Calendar, Sparkles, Check, Plus, X, Search, Wand2, Briefcase, Clock,
-  Brain, Users, Coffee, Headphones,
+  Brain, Users, Coffee, Headphones, Image as ImageIcon, Upload,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
@@ -695,6 +695,7 @@ type Step =
   | 'project_shape'
   | 'goals'
   | 'tasks'
+  | 'cover'
   | 'done';
 
 // Steps that are always visible (used for progress bar denominator).
@@ -1006,6 +1007,38 @@ export function OnboardingWizard({
     { title: '', load: 'medium' },
     { title: '', load: 'medium' },
   ]);
+
+  // ── Cover image (newProject mode only) ─────────────────────────
+  // The bucket's RLS keys on <project_id>/…, so a cover can only be
+  // uploaded once the project row exists. We hold the chosen File +
+  // a local preview here, then upload right after the project is
+  // created in saveProjectAndComplete(). Optional — the colour
+  // gradient is the default cover, so skipping is fine.
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  function handleCoverPick(file: File | null) {
+    setCoverError(null);
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { setCoverError('Image too large — keep it under 4 MB.'); return; }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setCoverError('Use a JPEG, PNG, or WebP image.'); return;
+    }
+    // Revoke any prior preview URL before replacing it.
+    setCoverPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
+    setCoverFile(file);
+  }
+
+  function clearCover() {
+    setCoverPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    setCoverFile(null);
+    setCoverError(null);
+  }
+
+  // Release the object URL when the wizard unmounts.
+  useEffect(() => () => { if (coverPreview) URL.revokeObjectURL(coverPreview); }, [coverPreview]);
 
   // ── Draft persistence (newProject mode only) ───────────────────
   // Autosaves the wizard to localStorage so a refresh / lost connection /
@@ -1651,6 +1684,17 @@ export function OnboardingWizard({
       } as any);
     }
 
+    // 3.5 Upload the cover image, if one was chosen. Best-effort: the
+    //     project already exists, so a failed upload must not abort the
+    //     whole flow — the project just keeps its colour-gradient cover.
+    if (coverFile) {
+      try {
+        await ProjectService.uploadProjectCover(project.id, coverFile);
+      } catch (e) {
+        console.warn('[OnboardingWizard] cover upload failed (non-fatal):', e);
+      }
+    }
+
     // 4. Stamp wizard complete — onboarding only. A standalone new-project
     //    run from /projects must not toggle the user's onboarding state.
     if (mode === 'onboarding') {
@@ -1661,7 +1705,7 @@ export function OnboardingWizard({
     return project;
   }, [mode, projectTitle, projectBrainDump, projectColour, projectStartedStatus,
       projectCompletionPct, projectType, projectTargetDate, projectDeadlineFlex,
-      milestoneInputs, taskInputs]);
+      milestoneInputs, taskInputs, coverFile]);
 
   // ── Step transitions ───────────────────────────────────────────
 
@@ -3510,8 +3554,85 @@ export function OnboardingWizard({
 
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 mt-4">{error}</p>}
 
+        {/* In newProject mode there's one more (optional) step — the cover
+            image — before we save. Onboarding never reaches this step, but
+            guard anyway so it still finishes cleanly if it ever does. */}
         <PrimaryBtn
-          label={filledTasks.length > 0 ? `Save ${filledTasks.length} task${filledTasks.length !== 1 ? 's' : ''} and finish` : 'Skip tasks — finish setup'}
+          label={mode === 'newProject'
+            ? (filledTasks.length > 0 ? `Continue with ${filledTasks.length} task${filledTasks.length !== 1 ? 's' : ''}` : 'Skip tasks — continue')
+            : (filledTasks.length > 0 ? `Save ${filledTasks.length} task${filledTasks.length !== 1 ? 's' : ''} and finish` : 'Skip tasks — finish setup')}
+          onClick={mode === 'newProject' ? () => navigateForward('cover') : handleComplete}
+        />
+      </StepShell>
+    );
+  }
+
+  // ── 9. Cover image (optional, newProject only) ────────────────
+  if (step === 'cover') {
+    const grad = PROJECT_COLORS[projectColour]?.gradient ?? 'from-violet-500 to-fuchsia-500';
+    return (
+      <StepShell step="cover" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
+        <div className="mb-5" style={{ animation: 'wizFadeUp 350ms cubic-bezier(0.16, 1, 0.3, 1) both' }}>
+          <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+            <ImageIcon size={20} className="text-primary" />
+          </div>
+          <h2 className="text-2xl font-extrabold stitch-text-primary leading-tight mb-1.5">
+            Give it a cover
+          </h2>
+          <p className="text-sm stitch-text-secondary leading-relaxed">
+            A photo makes <span className="font-semibold stitch-text-primary">{projectTitle.trim() || 'your project'}</span> easier
+            to spot — and a little more yours. Totally optional; your colour works great on its own.
+          </p>
+        </div>
+
+        {/* Preview: uploaded image, else the colour-gradient fallback */}
+        <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden ring-1 ring-surface-container mb-3">
+          {coverPreview ? (
+            <img src={coverPreview} alt="Project cover preview" className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className={`absolute inset-0 bg-gradient-to-br ${grad}`} />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
+          <div className="absolute bottom-3 left-4 right-4">
+            <p className="text-white text-lg font-extrabold leading-tight drop-shadow truncate">
+              {projectTitle.trim() || 'Your project'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mb-1">
+          <button
+            type="button"
+            onClick={() => coverInputRef.current?.click()}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.98] transition-all"
+          >
+            <Upload size={13} /> {coverPreview ? 'Replace image' : 'Upload image'}
+          </button>
+          {coverPreview && (
+            <button
+              type="button"
+              onClick={clearCover}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-700 bg-white ring-1 ring-rose-200 hover:bg-rose-50 active:scale-[0.98] transition-all"
+            >
+              <X size={13} /> Remove
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] stitch-text-secondary mb-3">JPEG/PNG/WebP · up to 4 MB. You can fine-tune the framing later in the project editor.</p>
+
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => { handleCoverPick(e.target.files?.[0] ?? null); e.target.value = ''; }}
+          className="hidden"
+        />
+
+        {coverError && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-2">{coverError}</p>}
+        {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 mb-2">{error}</p>}
+
+        <PrimaryBtn
+          label={coverFile ? 'Create project' : 'Create project — skip cover'}
           onClick={handleComplete}
         />
       </StepShell>
