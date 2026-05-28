@@ -1075,9 +1075,9 @@ export type { Task, ShippedSession, ScheduledSessionWithProfile };
 // inbox — renamed to "To do" so users see a task list, not a queue of
 // captured-but-unread items. DB value stays 'inbox' for back-compat.
 const KANBAN_COLUMNS = [
-  { key: 'inbox' as const,  label: 'To do',  desc: 'Not started yet.',  tint: 'bg-surface-container-low' },
-  { key: 'active' as const, label: 'Active', desc: 'In progress.',      tint: 'bg-blue-50/60' },
-  { key: 'done' as const,   label: 'Done',   desc: 'Finished.',         tint: 'bg-emerald-50/60' },
+  { key: 'inbox' as const,  label: 'To do',  desc: 'Not started yet.',  tint: 'bg-surface-container-low', dot: '#94a3b8' },
+  { key: 'active' as const, label: 'Active', desc: 'In progress.',      tint: 'bg-blue-50/60',           dot: '#3b82f6' },
+  { key: 'done' as const,   label: 'Done',   desc: 'Finished.',         tint: 'bg-emerald-50/60',        dot: '#10b981' },
 ];
 
 type KanbanStatus = 'inbox' | 'active' | 'done';
@@ -1453,11 +1453,18 @@ function WeekGrid({
   // void unused warnings for handlers we don't yet expose from this view
   void onSchedule; void colorHex;
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2 items-start">
       {days.map((d, i) => {
         const iso = isoDate(d);
         const dayTasks = tasks.filter((t) => t.scheduled_for === iso);
         const isToday = iso === todayIso;
+        // Group this day's tasks into the same To do → Active → Done lanes
+        // as the Day view, but stacked vertically inside the column.
+        const grouped: Record<KanbanStatus, Task[]> = { inbox: [], active: [], done: [] };
+        for (const t of dayTasks) {
+          const s = (t.status as KanbanStatus) || 'inbox';
+          (s === 'active' || s === 'done' ? grouped[s] : grouped.inbox).push(t);
+        }
         return (
           <div
             key={iso}
@@ -1467,7 +1474,7 @@ function WeekGrid({
                 : 'bg-surface-container-low/60'
             }`}
           >
-            <div className="flex items-baseline justify-between mb-1.5 px-0.5">
+            <div className="flex items-baseline justify-between mb-2 px-0.5">
               <div>
                 <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest leading-none">
                   {DAY_NAMES_SHORT[i]}
@@ -1482,26 +1489,48 @@ function WeekGrid({
                 </span>
               )}
             </div>
-            <div className="space-y-1">
-              {dayTasks.map((t) => (
-                <WeekTaskRow
-                  key={t.id}
-                  task={t}
-                  onCycleStatus={() => {
-                    const next: KanbanStatus = t.status === 'done'
-                      ? 'inbox' : t.status === 'active' ? 'done' : 'active';
-                    onSetStatus(t.id, next);
-                  }}
-                  onDelete={() => onDelete(t.id)}
-                  onOpen={() => onOpenTask(t.id)}
-                />
-              ))}
-              {dayTasks.length === 0 && (
-                <p className="text-[10px] italic stitch-text-secondary/70 px-1 py-1">
-                  Nothing yet
-                </p>
-              )}
-            </div>
+            {dayTasks.length === 0 ? (
+              <p className="text-[10px] italic stitch-text-secondary/70 px-1 py-1">
+                Nothing yet
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {KANBAN_COLUMNS.map((col) => {
+                  const laneTasks = grouped[col.key];
+                  return (
+                    <div key={col.key}>
+                      <div className="flex items-center gap-1 mb-1 px-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: col.dot }} />
+                        <span className="text-[9px] font-bold stitch-text-secondary uppercase tracking-wider">
+                          {col.label}
+                        </span>
+                        {laneTasks.length > 0 && (
+                          <span className="text-[9px] font-bold stitch-text-secondary/60 tabular-nums">
+                            {laneTasks.length}
+                          </span>
+                        )}
+                      </div>
+                      {laneTasks.length === 0 ? (
+                        <div className="h-4 rounded border border-dashed border-surface-container-high/60" />
+                      ) : (
+                        <div className="space-y-1">
+                          {laneTasks.map((t) => (
+                            <WeekTaskCard
+                              key={t.id}
+                              task={t}
+                              status={col.key}
+                              onMove={(next) => onSetStatus(t.id, next)}
+                              onDelete={() => onDelete(t.id)}
+                              onOpen={() => onOpenTask(t.id)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
@@ -1509,45 +1538,61 @@ function WeekGrid({
   );
 }
 
-// Compact task row for the week grid — a status dot, the title, and a
-// hover-revealed delete. Click the dot to cycle to-do → active → done → to-do.
-function WeekTaskRow({
-  task, onCycleStatus, onDelete, onOpen,
+// Compact task card for the week grid's vertical lanes. Instead of dragging
+// a task across columns, you nudge it DOWN (To do → Active → Done) or back
+// UP with the chevrons — same status flow as the Day-view Kanban, just
+// rotated 90°. Tap the title to open the "work on this" sheet.
+function WeekTaskCard({
+  task, status, onMove, onDelete, onOpen,
 }: {
   task: Task;
-  onCycleStatus: () => void;
+  status: KanbanStatus;
+  onMove: (next: KanbanStatus) => void;
   onDelete: () => void;
   onOpen: () => void;
 }) {
-  const status = (task.status as KanbanStatus) || 'inbox';
   const isDone = status === 'done';
-  const isActive = status === 'active';
+  const canUp = status !== 'inbox';
+  const canDown = status !== 'done';
+  const upTarget: KanbanStatus = status === 'done' ? 'active' : 'inbox';
+  const downTarget: KanbanStatus = status === 'inbox' ? 'active' : 'done';
+  const labelFor = (s: KanbanStatus) => (s === 'inbox' ? 'To do' : s === 'active' ? 'Active' : 'Done');
   return (
-    <div className="group flex items-center gap-1.5 bg-white rounded-md ring-1 ring-surface-container/60 px-2 py-1.5">
-      <button
-        type="button"
-        onClick={onCycleStatus}
-        className={`shrink-0 w-3 h-3 rounded-full border-2 grid place-items-center transition-colors ${
-          isDone ? 'bg-emerald-500 border-emerald-500'
-            : isActive ? 'bg-blue-500 border-blue-500'
-            : 'border-stitch-text-secondary/40 bg-white'
-        }`}
-        aria-label="Cycle status"
-        title={`Status: ${status}`}
-      >
-        {isDone && <Check size={7} className="text-white" strokeWidth={3} />}
-      </button>
+    <div className="group flex items-start gap-1 bg-white rounded-md ring-1 ring-surface-container/60 px-1.5 py-1">
+      {/* Vertical move controls: ↑ = back a stage, ↓ = forward a stage */}
+      <div className="flex flex-col shrink-0 -my-0.5">
+        <button
+          type="button"
+          onClick={() => canUp && onMove(upTarget)}
+          disabled={!canUp}
+          aria-label={canUp ? `Move to ${labelFor(upTarget)}` : 'Already in first stage'}
+          title={canUp ? `Move to ${labelFor(upTarget)}` : ''}
+          className="h-3 leading-none text-[10px] stitch-text-secondary hover:stitch-text-primary disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          onClick={() => canDown && onMove(downTarget)}
+          disabled={!canDown}
+          aria-label={canDown ? `Move to ${labelFor(downTarget)}` : 'Already done'}
+          title={canDown ? `Move to ${labelFor(downTarget)}` : ''}
+          className="h-3 leading-none text-[10px] stitch-text-secondary hover:stitch-text-primary disabled:opacity-25 disabled:cursor-not-allowed"
+        >
+          ↓
+        </button>
+      </div>
       <button
         type="button"
         onClick={onOpen}
-        className={`flex-1 min-w-0 text-left text-[11px] leading-snug truncate hover:opacity-80 transition-opacity ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
+        className={`flex-1 min-w-0 text-left text-[11px] leading-snug break-words hover:opacity-80 transition-opacity ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
       >
         {task.title}
       </button>
       <button
         type="button"
         onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded grid place-items-center text-rose-600/70 hover:bg-rose-50 transition-opacity"
+        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded grid place-items-center text-rose-600/70 hover:bg-rose-50 transition-opacity shrink-0"
         aria-label="Delete"
       >
         <Trash2 size={9} />
