@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, ArrowLeft, ArrowRight, Sparkles, Check, Loader2,
   Target, ChevronRight, Pencil,
@@ -186,12 +187,17 @@ export function IntentionWizard({
   const totalSteps = STEP_TITLES.length;
   const filledCount = drafts.filter((d) => d.title.trim().length > 0).length;
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface">
+  return createPortal(
+    // Portal to <body> so a transformed/positioned Layout ancestor can't
+    // become the containing block for `fixed` (which was confining the
+    // wizard to the scrolling content area on mobile and pushing the footer
+    // below the fold). h-[100dvh] pins it to the real viewport height in
+    // both browser + installed PWA.
+    <div className="fixed inset-0 z-[100] flex flex-col bg-surface h-[100dvh]">
       <div className="relative w-full h-full flex flex-col max-w-2xl mx-auto">
 
         {/* ── Header ─────────────────────────────────────────── */}
-        <div className="shrink-0 px-5 pt-4 pb-3 border-b border-surface-container/60">
+        <div className="shrink-0 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3 border-b border-surface-container/60">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-xl stitch-card--accent flex items-center justify-center shrink-0">
@@ -286,7 +292,7 @@ export function IntentionWizard({
 
         {/* ── Footer ─────────────────────────────────────────── */}
         {!error && !loading && (
-        <div className="shrink-0 px-5 py-4 border-t border-surface-container/60 flex items-center justify-between gap-2">
+        <div className="shrink-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-container/60 flex items-center justify-between gap-2">
           {step > 0 && step < 5 ? (
             <button
               type="button"
@@ -326,7 +332,8 @@ export function IntentionWizard({
         </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
