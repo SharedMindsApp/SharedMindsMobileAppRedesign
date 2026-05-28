@@ -104,6 +104,8 @@ function plannerToGrid(s: ScheduledSessionWithProfile): GridSession {
     intended_duration_minutes: s.intended_duration_minutes ?? 50,
     startsAt: new Date((a.scheduled_at as string) ?? s.start_time),
     status: 'scheduled',
+    session_kind: (a.session_kind as GridSession['session_kind']) ?? null,
+    start_mood: (a.start_mood as string) ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,

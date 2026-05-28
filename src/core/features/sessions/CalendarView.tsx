@@ -43,6 +43,7 @@ import {
   deleteScheduledSession,
   type ScheduledSessionWithProfile,
 } from '../../services/SessionService';
+import { lookupMood, kindMeta, type SessionKind } from '../../../lib/sessionMood';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 
 // ── Grid constants ──────────────────────────────────────────────
@@ -215,6 +216,8 @@ export type GridSession = {
   intended_duration_minutes: number;
   startsAt: Date;
   status: 'active' | 'scheduled' | 'completed';
+  session_kind?: 'do' | 'plan' | 'reflect' | null;
+  start_mood?: string | null;
   project_id?: string | null;
   project_title?: string | null;
   project_color?: string | null;
@@ -243,6 +246,8 @@ function toGridSession(s: CommunitySession): GridSession {
     intended_duration_minutes: s.intended_duration_minutes ?? 50,
     startsAt: new Date(s.start_time),
     status: 'active',
+    session_kind: (s as any).session_kind ?? null,
+    start_mood: (s as any).start_mood ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
@@ -265,6 +270,8 @@ export function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     intended_duration_minutes: s.intended_duration_minutes ?? 50,
     startsAt: new Date(s.scheduled_at ?? s.start_time),
     status: ((s as any).status === 'completed' ? 'completed' : 'scheduled'),
+    session_kind: (s as any).session_kind ?? null,
+    start_mood: (s as any).start_mood ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
@@ -1511,6 +1518,7 @@ export function SessionDetailSheet({
   const isPast = session.startsAt.getTime() + session.intended_duration_minutes * 60_000 < Date.now();
   const isRecap = !isActive && (session.status === 'completed' || isPast);
   const [recapOutcome, setRecapOutcome] = useState<string | null>(null);
+  const [recapEndMood, setRecapEndMood] = useState<string | null>(null);
   // Privacy: we keep only the COUNT of participants, never the list of who.
   const [participantCount, setParticipantCount] = useState(0);
   const [recapLoaded, setRecapLoaded] = useState(false);
@@ -1522,6 +1530,7 @@ export function SessionDetailSheet({
         if (cancelled) return;
         const mine = rows.find((r) => r.user_id === user?.id) ?? rows[0];
         setRecapOutcome(mine?.outcome ?? null);
+        setRecapEndMood(mine?.end_mood ?? null);
         setParticipantCount(rows.length);
       })
       .catch(() => {})
@@ -1860,11 +1869,29 @@ export function SessionDetailSheet({
               </div>
             )}
 
-            {/* Mood — not captured yet; honest placeholder rather than a fake value */}
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">State of mind</p>
-              <p className="text-xs stitch-text-secondary italic">Mood check-in (start &amp; end) isn't tracked yet — coming soon.</p>
-            </div>
+            {/* State of mind — before → after, adaptive to the session kind */}
+            {(() => {
+              const startM = lookupMood(session.start_mood);
+              const endM = lookupMood(recapEndMood);
+              if (!startM && !endM) return null;
+              const axisLabel = kindMeta(session.session_kind as SessionKind).axis === 'clarity' ? 'Clarity' : 'Energy';
+              return (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-1">
+                    State of mind · {axisLabel}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm font-semibold stitch-text-primary">
+                    <span className="inline-flex items-center gap-1">
+                      <span>{startM?.emoji ?? '–'}</span>{startM?.label ?? 'Not set'}
+                    </span>
+                    <span className="stitch-text-secondary">→</span>
+                    <span className="inline-flex items-center gap-1">
+                      <span>{endM?.emoji ?? '–'}</span>{endM?.label ?? 'Not set'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <p className="text-sm stitch-text-primary leading-snug mb-4">

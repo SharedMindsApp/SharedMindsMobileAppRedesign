@@ -120,6 +120,11 @@ export interface FocusSession {
    *  • presence → connections see "focusing now" (status only, no goal)
    *  • public   → fully discoverable + goal text shared */
   visibility?: 'private' | 'presence' | 'public';
+  /** What the session is FOR — drives the context-aware mood axis.
+   *  'do' → energy/focus; 'plan'/'reflect' → clarity/confidence. */
+  session_kind?: 'do' | 'plan' | 'reflect' | null;
+  /** Mood code captured at session start (interpreted via session_kind). */
+  start_mood?: string | null;
 }
 
 export interface CommunitySession extends FocusSession {

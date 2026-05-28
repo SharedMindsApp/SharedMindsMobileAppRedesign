@@ -21,6 +21,8 @@ import {
   type SessionOutcomeRow,
 } from '../../services/SessionService';
 import { TaskService } from '../../services/TaskService';
+import { MoodPicker } from './MoodPicker';
+import type { SessionKind } from '../../../lib/sessionMood';
 
 const DEBRIEF_DURATION_S = 60;
 
@@ -42,6 +44,8 @@ interface DebriefOverlayProps {
    *  immediately after the user picks an outcome. Used for solo
    *  sessions where there is no "everyone else" to wait for. */
   skipWait?: boolean;
+  /** What the session was for — drives the end-of-session mood axis. */
+  sessionKind?: SessionKind;
 }
 
 type OutcomeWithProfile = SessionOutcomeRow & {
@@ -49,10 +53,11 @@ type OutcomeWithProfile = SessionOutcomeRow & {
 };
 
 export function DebriefOverlay({
-  sessionId, declaredGoal, currentUserId, taskId, onFinalized, skipWait = false,
+  sessionId, declaredGoal, currentUserId, taskId, onFinalized, skipWait = false, sessionKind = 'do',
 }: DebriefOverlayProps) {
   const [outcomes, setOutcomes] = useState<OutcomeWithProfile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [endMood, setEndMood] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(DEBRIEF_DURATION_S);
   const finalizedRef = useRef(false);
 
@@ -133,7 +138,7 @@ export function DebriefOverlay({
     if (submitting) return;
     setSubmitting(true);
     try {
-      await submitSessionOutcome({ sessionId, outcome, declaredGoal });
+      await submitSessionOutcome({ sessionId, outcome, declaredGoal, endMood });
       // Propagate the outcome to the linked task — drives the auto-tick
       // and the "continue from where you left off" badge next session.
       if (taskId) {
@@ -181,6 +186,13 @@ export function DebriefOverlay({
             <p className="text-sm font-bold text-white leading-snug">
               {declaredGoal}
             </p>
+          </div>
+        )}
+
+        {/* ── End-of-session mood (adaptive to session kind) ────────── */}
+        {!myOutcome && (
+          <div className="mb-4">
+            <MoodPicker kind={sessionKind} value={endMood} onChange={setEndMood} when="after" tone="dark" />
           </div>
         )}
 

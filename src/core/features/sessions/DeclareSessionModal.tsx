@@ -11,6 +11,8 @@ import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
 import { InputWell } from '../../ui/CorePage';
 import { taskUrgency } from '../../../lib/taskUrgency';
+import { SESSION_KINDS, type SessionKind } from '../../../lib/sessionMood';
+import { MoodPicker } from './MoodPicker';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConductGateModal } from '../moderation/ConductGateModal';
 import { useSessionLimits } from '../../../hooks/useSessionLimits';
@@ -157,6 +159,11 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
    *  typed goal = one-off. Toggle on for goals worth keeping. */
   const [saveAsTask, setSaveAsTask] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  /** What this session is FOR — drives the mood axis. Defaults to 'do'. */
+  const [sessionKind, setSessionKind] = useState<SessionKind>('do');
+  /** Optional "before" mood, captured for immediate sessions only (a
+   *  scheduled session's start mood is captured when it actually begins). */
+  const [startMood, setStartMood] = useState<string | null>(null);
 
   // ── Conflict detection ─────────────────────────────────────────
   // Checks the proposed time window against the user's existing
@@ -341,6 +348,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           scheduledAt: resolvedScheduledAt,
           durationMinutes: Math.min(duration, limits.maxMinutes),
           projectId: selectedProjectId ?? undefined,
+          sessionKind,
         });
         setScheduledConfirm(true);
         setTimeout(onClose, 2500);
@@ -360,6 +368,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         // sessions don't accept joiners because there's no screen to share.
         openToMatch: sessionMode === 'solo' && !isOffline && openToMatch,
         vibe: openToMatch ? vibe : undefined,
+        sessionKind,
+        startMood,
       });
       // Bump the linked task to 'active' + increment sessions_count.
       // Fire-and-forget — the DB write isn't worth blocking navigation on.
@@ -766,6 +776,33 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           </div>
         )}
 
+        {/* ── What's this session for? — drives the mood axis ── */}
+        <div className="shrink-0 px-5 pb-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary mb-2">
+            What's this for?
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {SESSION_KINDS.map((k) => {
+              const active = sessionKind === k.kind;
+              return (
+                <button
+                  key={k.kind}
+                  type="button"
+                  // Changing kind switches the mood axis, so clear any prior pick.
+                  onClick={() => { setSessionKind(k.kind); setStartMood(null); }}
+                  title={k.hint}
+                  className={`flex flex-col items-center gap-0.5 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                    active ? 'bg-primary text-white shadow-sm' : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                  }`}
+                >
+                  <span className="text-base leading-none">{k.emoji}</span>
+                  {k.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ── Step 1 footer: Next button ─────────────────────── */}
         <div className="shrink-0 px-5 pt-3 pb-6">
           <button
@@ -1037,6 +1074,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </p>
           )}
         </div>
+
+        {/* ── Start-of-session mood check-in (immediate sessions only) ── */}
+        {!isScheduling && (
+          <div className="shrink-0 px-5 pt-3">
+            <MoodPicker kind={sessionKind} value={startMood} onChange={setStartMood} when="before" />
+          </div>
+        )}
 
         {/* ── Session mode (hidden when locked to Solo or when scheduling) ── */}
         {!forceSoloMode && !isScheduling && (

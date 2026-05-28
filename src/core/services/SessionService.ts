@@ -15,6 +15,8 @@ export interface CreateScheduledSessionInput {
    *  list view shows the activity label (e.g. "Cold calling") rather
    *  than just the title. */
   goalText?: string;
+  /** What the session is FOR — drives the mood axis. Defaults 'do'. */
+  sessionKind?: 'do' | 'plan' | 'reflect';
   /** Three-level visibility — see migration 20260527000009. */
   visibility?: 'private' | 'presence' | 'public';
   /** Marker for Quick Timer scheduled blocks — see
@@ -87,6 +89,10 @@ export interface StartCommunitySessionInput {
    *  if/when a joiner arrives. See FocusSession.vibe for semantics.
    *  Defaults server-side to brief_hi (the "balanced" option). */
   vibe?: 'silent' | 'brief_hi' | 'chatty';
+  /** What the session is FOR — drives the mood axis. Defaults 'do'. */
+  sessionKind?: 'do' | 'plan' | 'reflect';
+  /** Mood code captured at the moment of starting (interpreted via kind). */
+  startMood?: string | null;
 }
 
 /** Pick a sensible default visibility given the mode + quick-timer flag.
@@ -134,6 +140,8 @@ export async function startCommunitySession(
       // picked even on non-solo sessions so reports can read it back.
       open_to_match: input.sessionMode === 'solo' && !!input.openToMatch,
       vibe: input.vibe ?? null,
+      session_kind: input.sessionKind ?? 'do',
+      start_mood: input.startMood ?? null,
       drift_count: 0,
       distraction_count: 0,
     })
@@ -403,6 +411,8 @@ export interface SessionOutcomeRow {
   user_id: string;
   outcome: DebriefOutcome;
   declared_goal: string | null;
+  /** Mood code at session end (interpreted via the session's kind axis). */
+  end_mood?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -529,6 +539,8 @@ export async function submitSessionOutcome(input: {
   sessionId: string;
   outcome: DebriefOutcome;
   declaredGoal: string | null;
+  /** Mood code captured at the end of the session (interpreted via kind). */
+  endMood?: string | null;
 }): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -541,6 +553,7 @@ export async function submitSessionOutcome(input: {
         user_id: user.id,
         outcome: input.outcome,
         declared_goal: input.declaredGoal,
+        end_mood: input.endMood ?? null,
       },
       { onConflict: 'session_id,user_id' },
     );
@@ -638,6 +651,7 @@ export async function createScheduledSession(
       is_quick_timer: !!input.isQuickTimer,
       segments: input.segments ?? null,
       visibility: input.visibility ?? defaultVisibilityFor(input.sessionMode, !!input.isQuickTimer),
+      session_kind: input.sessionKind ?? 'do',
       drift_count: 0,
       distraction_count: 0,
     })

@@ -757,6 +757,7 @@ export function ActiveSessionPage() {
               taskId={session.session_task_id ?? null}
               onFinalized={handleDebriefFinalized}
               skipWait
+              sessionKind={session.session_kind ?? undefined}
             />
           )}
         </div>
@@ -789,6 +790,7 @@ export function ActiveSessionPage() {
               currentUserId={user.id}
               taskId={session.session_task_id ?? null}
               onFinalized={handleDebriefFinalized}
+              sessionKind={session.session_kind ?? undefined}
             />
           )}
         </div>
