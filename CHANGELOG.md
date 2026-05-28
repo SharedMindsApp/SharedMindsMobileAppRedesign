@@ -35,6 +35,10 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   naming it. Applying reloads the planner grid in place.
 
 ### Changed
+- **Fewer auth round-trips on load** — globally-mounted shells (chat dock, layout,
+  regulation context) each fired a network `auth.getUser()` (a `/auth/v1/user`
+  request) on every page load. They now read the cached local session instead,
+  cutting redundant calls — easier on the backend and faster to paint.
 - **Day window is now universal** — the visible hour range you set applies to
   both the home planner *and* the sessions calendar, so the two views no
   longer contradict each other. (Previously the sessions calendar was a fixed

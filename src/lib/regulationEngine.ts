@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getAuthedUser } from './authUser';
 import { logError, logWarning, logInfo } from './errorLogger';
 import type {
   RegulationState,
@@ -148,35 +149,9 @@ export async function getRegulationState(
   projectId?: string | null
 ): Promise<RegulationState | null> {
   try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError) {
-      // Missing auth session is expected during initial load - log as info, not error
-      const isMissingSession = authError.message.includes('Auth session missing') || 
-                               authError.message.includes('JWT expired') ||
-                               authError.message.includes('session');
-      
-      if (isMissingSession) {
-        // Expected scenario - user not authenticated yet, just return null
-        return null;
-      }
-      
-      // Other auth errors are actual errors
-      logError(
-        'Failed to get user for regulation state',
-        new Error(`Auth error: ${authError.message}`),
-        {
-          component: 'RegulationEngine',
-          action: 'getRegulationState',
-          userId,
-          projectId: projectId || null,
-          authError: authError.message,
-        }
-      );
-      throw new Error(`Auth error: ${authError.message}`);
-    }
-    
-    const targetUserId = userId || user?.id;
+    // Prefer the id the caller already has; otherwise fall back to the cached
+    // local session (no network round-trip to /auth/v1/user).
+    const targetUserId = userId || (await getAuthedUser())?.id;
 
     if (!targetUserId) {
       // No user ID is expected when user is not authenticated - just return null

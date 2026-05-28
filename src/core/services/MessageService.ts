@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { getAuthedUser } from '../../lib/authUser';
 
 export interface DmConversation {
   id: string;
@@ -193,7 +194,7 @@ export async function markConversationRead(conversationId: string): Promise<void
  * move it into a single RPC.
  */
 export async function fetchTotalUnreadDms(): Promise<number> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
   if (!user) return 0;
 
   const { data: rows } = await supabase
