@@ -1,11 +1,22 @@
 /**
  * Static legal pages — Terms of Service and Privacy Policy.
  *
- * Intentionally MVP-grade. The copy here is a placeholder anchored on
- * SharedMinds' actual data practices (Supabase, Daily.co, OpenAI for
- * moderation). Before public launch this MUST be reviewed by a lawyer
- * in the appropriate jurisdiction — search for "TODO LAWYER" below for
- * the sections most likely to need real legal language.
+ * Full operator-drafted documents reflecting SharedMinds' actual data
+ * practices (Supabase, Daily.co, OpenAI moderation, Resend, Vercel),
+ * UK/EU GDPR disclosures, and self-serve data rights. Kept in sync with
+ * the landing-site versions (SharedMindsApp-LandingPage). Version is
+ * LEGAL_DOCUMENT_VERSION below.
+ *
+ * Before public launch, two BUSINESS inputs must be filled in (they are
+ * not legal placeholders but facts only the operator can supply):
+ *   1. The legal entity identity — registered company name + number, or
+ *      "operated by <name> as a sole trader" — plus a registered/postal
+ *      address (CAN-SPAM requires a postal address in marketing email).
+ *   2. The EU representative decision (appoint one, geo-restrict the EU,
+ *      or accept the risk) — see the EU representative note in the
+ *      Privacy section.
+ * A solicitor pass is still recommended, but there is no placeholder
+ * copy left in the rendered text.
  */
 
 import { Link } from 'react-router-dom';
