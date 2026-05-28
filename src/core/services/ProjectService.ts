@@ -110,17 +110,49 @@ export const ProjectService = {
         // fetch:
         //   • own projects   → created_by = me      (projects_created_by_idx)
         //   • shared projects → id IN (my memberships) (PK lookups)
-        // Single SECURITY DEFINER RPC: does the own/shared/space visibility
-        // decision in ONE indexed query, bypassing the slow per-row RLS
-        // policy-function evaluation that was stalling under cold-load pool
-        // pressure (a 1-row fetch was taking 11–16s). See migration
-        // 20260528000008_get_my_projects_rpc.
+        // Fast path: single SECURITY DEFINER RPC that does the own/shared/
+        // space visibility decision in ONE indexed query, bypassing the slow
+        // per-row RLS policy-function evaluation that was stalling under
+        // cold-load pool pressure (a 1-row fetch was taking 11–16s). See
+        // migration 20260528000008_get_my_projects_rpc.
         const { data, error } = await supabase.rpc('get_my_projects');
-        if (error) {
-            console.error('[ProjectService] get_my_projects failed:', error);
-            throw error;
+        if (!error) {
+            return (data ?? []) as Project[];
         }
-        return (data ?? []) as Project[];
+
+        // Graceful fallback: if the RPC isn't deployed yet (PGRST202 — not in
+        // schema cache), fall back to the direct RLS-gated queries so the app
+        // still works before the migration is applied. Once the migration is
+        // live, the fast path above is used.
+        if (error.code !== 'PGRST202') {
+            console.error('[ProjectService] get_my_projects failed:', error);
+        } else {
+            console.warn('[ProjectService] get_my_projects RPC not found — apply migration 20260528000008 for the fast path. Falling back to direct query.');
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return [];
+
+        const [ownRes, memRes] = await Promise.all([
+            supabase.from('projects').select('*').eq('created_by', user.id).neq('status', 'archived'),
+            supabase.from('project_members').select('project_id').eq('user_id', user.id),
+        ]);
+        if (ownRes.error) throw ownRes.error;
+
+        const own = (ownRes.data ?? []) as Project[];
+        const ownIds = new Set(own.map((p) => p.id));
+        const sharedIds = (memRes.data ?? [])
+            .map((m: { project_id: string }) => m.project_id)
+            .filter((id) => !ownIds.has(id));
+
+        let shared: Project[] = [];
+        if (sharedIds.length > 0) {
+            const { data: sd } = await supabase
+                .from('projects').select('*').in('id', sharedIds).neq('status', 'archived');
+            shared = (sd ?? []) as Project[];
+        }
+        return [...own, ...shared].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     },
 
     async getProjectById(projectId: string): Promise<Project | null> {
