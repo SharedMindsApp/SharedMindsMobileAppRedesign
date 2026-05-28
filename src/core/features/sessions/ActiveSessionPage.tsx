@@ -396,8 +396,16 @@ export function ActiveSessionPage() {
     if (!session || showDebrief || ending || session.debrief_started_at) return;
     if (timerSecondsRemaining !== 0) return;
     const startMs = session.start_time ? new Date(session.start_time).getTime() : null;
-    if (!startMs || startMs > Date.now()) return;        // hasn't started
-    if ((session.intended_duration_minutes ?? 0) <= 0) return; // unknown duration
+    const durationMin = session.intended_duration_minutes ?? 0;
+    if (!startMs || startMs > Date.now()) return;  // hasn't started
+    if (durationMin <= 0) return;                  // unknown duration
+    // CRITICAL: `timerSecondsRemaining` is 0 on the very first render — before
+    // the countdown initialises — which would pop the debrief at the START of
+    // a session. Only fire when wall-clock has actually reached the planned
+    // end (small 1.5s tolerance for the floor() tick race), so the 0 has to be
+    // a real "time's up", not an uninitialised value.
+    const endMs = startMs + durationMin * 60_000;
+    if (Date.now() < endMs - 1500) return;
     setShowDebrief(true);
     triggerDebriefForSession(session.id).catch(() => { /* idempotent — safe */ });
   }, [timerSecondsRemaining, session, showDebrief, ending]);
