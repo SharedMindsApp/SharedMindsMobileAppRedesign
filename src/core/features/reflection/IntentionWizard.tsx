@@ -239,11 +239,7 @@ export function IntentionWizard({
         {/* Vertically centred + compact so each step fits without scrolling;
             overflow-y-auto stays only as a safety net for very short screens. */}
         <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0 flex flex-col justify-center">
-          {loading ? (
-            <div className="flex items-center justify-center py-12 stitch-text-secondary">
-              <Loader2 size={20} className="animate-spin" />
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="max-w-md mx-auto text-center py-10">
               <h3 className="stitch-headline text-xl font-extrabold mb-2">Couldn't load your week</h3>
               <p className="text-sm stitch-text-secondary leading-relaxed mb-5">{error}</p>
@@ -256,7 +252,13 @@ export function IntentionWizard({
               </button>
             </div>
           ) : step === 0 ? (
+            // Welcome needs no data — render instantly while the reflection
+            // bootstraps in the background (the user reads this for a beat).
             <WelcomeStep filledCount={filledCount} weekStart={targetWeek} />
+          ) : loading ? (
+            <div className="flex items-center justify-center py-12 stitch-text-secondary">
+              <Loader2 size={20} className="animate-spin" />
+            </div>
           ) : step === 1 ? (
             <IntentionStep
               slot={0}
@@ -291,7 +293,7 @@ export function IntentionWizard({
         </div>
 
         {/* ── Footer ─────────────────────────────────────────── */}
-        {!error && !loading && (
+        {!error && (step === 0 || !loading) && (
         <div className="shrink-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-container/60 flex items-center justify-between gap-2">
           {step > 0 && step < 5 ? (
             <button
