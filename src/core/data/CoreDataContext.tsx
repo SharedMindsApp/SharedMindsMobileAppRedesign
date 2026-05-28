@@ -66,6 +66,8 @@ export type CoreTask = {
   energy: 'deep' | 'medium' | 'light';
   priority: 'high' | 'medium' | 'low';
   dueLabel: string;
+  /** Hard deadline, ISO date string (YYYY-MM-DD) or null. Drives urgency chips. */
+  dueOn: string | null;
   done: boolean;
   /** Set when this task is tracking a weekly intention — drives the picker badge. */
   weeklyIntentionId?: string | null;
@@ -468,6 +470,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           energy: t.energy_level === 'high' ? 'deep' : t.energy_level === 'medium' ? 'medium' : 'light',
           priority: t.priority,
           dueLabel: t.due_on ? new Date(t.due_on).toLocaleDateString() : 'Inbox',
+          dueOn: t.due_on ?? null,
           done: t.status === 'done' || t.status === 'dropped',
           weeklyIntentionId: t.weekly_intention_id ?? null,
           lastSessionOutcome: t.last_session_outcome ?? null,
@@ -570,6 +573,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
               energy: 'medium',
               priority: 'medium',
               dueLabel: 'Inbox',
+              dueOn: null,
               done: false,
               scheduledFor: null,
               status: 'inbox',
@@ -631,6 +635,7 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
               energy: 'medium',
               priority: 'medium',
               dueLabel: 'Inbox',
+              dueOn: null,
               done: false,
               scheduledFor: null,
               status: 'inbox',
