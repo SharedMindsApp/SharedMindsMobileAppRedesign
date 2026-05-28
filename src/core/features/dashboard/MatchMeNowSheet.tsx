@@ -186,19 +186,41 @@ export function MatchMeNowSheet({
             )}
           </section>
 
-          {/* Open your own door */}
+          {/* Open your own door — primary when there's no one to match with,
+              demoted to a secondary action when matches are available so
+              joining (the cheaper path: only one person hosts) wins. */}
           <section className="pt-1">
-            <button
-              type="button"
-              onClick={onOpenOwnDoor}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 text-white text-sm font-bold shadow-md shadow-violet-500/25 active:scale-[0.98] transition-transform"
-            >
-              <DoorOpen size={15} />
-              Open my own door
-            </button>
-            <p className="text-[10px] stitch-text-secondary/80 text-center mt-2 leading-snug">
-              Start a focus session with the door open — anyone can drop in to body-double with you.
-            </p>
+            {loading ? null : sessions.length > 0 ? (
+              <>
+                <div className="flex items-center gap-2 my-1">
+                  <span className="flex-1 h-px bg-surface-container" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">or</span>
+                  <span className="flex-1 h-px bg-surface-container" />
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenOwnDoor}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl ring-1 ring-surface-container stitch-text-primary text-sm font-bold hover:bg-surface-container-low active:scale-[0.98] transition-all"
+                >
+                  <DoorOpen size={14} />
+                  Open my own door instead
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onOpenOwnDoor}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 text-white text-sm font-bold shadow-md shadow-violet-500/25 active:scale-[0.98] transition-transform"
+                >
+                  <DoorOpen size={15} />
+                  Open my own door
+                </button>
+                <p className="text-[10px] stitch-text-secondary/80 text-center mt-2 leading-snug">
+                  Start a 1-on-1 with the door open — the next person looking to match drops straight in. Only one of you needs to start it.
+                </p>
+              </>
+            )}
           </section>
         </div>
       </div>
