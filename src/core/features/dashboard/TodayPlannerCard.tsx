@@ -721,7 +721,7 @@ function WeekGoalsSidebar({
 function WeekTimeline({
   weekDays, weekBlocks, weekSessions, todayKey, currentHour, currentMin,
   nowLabel, showNowLine, nowYpx, hours, dayStart,
-  onToggle, onStart, onDelete, onSwitchToDay, onSelectSession, onHoverSession,
+  onToggle, onStart, onDelete, onSwitchToDay, onSelectSession, onHoverSession, onAddAt,
 }: {
   weekDays: WeekDay[];
   weekBlocks: TimeBlock[];
@@ -741,6 +741,8 @@ function WeekTimeline({
   onStart:  (b: TimeBlock) => void;
   onDelete: (id: string) => void;
   onSwitchToDay: (dateStr: string) => void;
+  /** Click an empty hour cell → block time on that day/hour. */
+  onAddAt: (dateStr: string, hour: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayIdx = weekDays.findIndex((d) => d.dateStr === todayKey);
@@ -829,13 +831,19 @@ function WeekTimeline({
                 }`}
                 style={{ paddingTop: `${GRID_TOP_PADDING}px` }}
               >
-                {/* Hour grid lines */}
+                {/* Hour grid lines — each is a click target to block time
+                    on that day + hour (opens the composer in the day view). */}
                 {hours.map((hour) => (
-                  <div
+                  <button
                     key={hour}
-                    className="border-t border-surface-container/30"
+                    type="button"
+                    onClick={() => onAddAt(d.dateStr, hour)}
+                    title={`Block out ${formatHour(hour)} · ${d.letter} ${d.dayNum}`}
+                    className="group/cell w-full border-t border-surface-container/30 flex items-start justify-center pt-0.5 hover:bg-primary/5 transition-colors"
                     style={{ height: `${HOUR_PX}px` }}
-                  />
+                  >
+                    <Plus size={11} className="text-primary/50 opacity-0 group-hover/cell:opacity-100 transition-opacity" />
+                  </button>
                 ))}
 
                 {/* Blocks (absolutely positioned within column) */}
@@ -1650,6 +1658,7 @@ export function TodayPlannerCard({
               onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
               onDelete={handleDelete}
               onSwitchToDay={(d) => { setSelectedDateStr(d); setViewMode('day'); }}
+              onAddAt={(d, hour) => { setSelectedDateStr(d); setViewMode('day'); setAddingAtHour(hour); }}
               onSelectSession={(ps) => setSelectedGridSession(plannerToGrid(ps.raw))}
               onHoverSession={(ps, rect) =>
                 setHoveredSession(ps && rect ? { session: plannerToGrid(ps.raw), rect } : null)}
