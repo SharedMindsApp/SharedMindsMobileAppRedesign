@@ -7,8 +7,14 @@
 // The service worker will cache these automatically when they are requested.
 // We don't need to pre-cache specific filenames since they change with each build.
 
-// Phase 3C: Cache versioning for clean updates
-const CACHE_NAME = 'shared-minds-shell-v4-pwa-gesture-fix';
+// Phase 3C: Cache versioning for clean updates.
+// IMPORTANT: bump this whenever the caching logic changes — the activate
+// handler purges every cache whose name != CACHE_NAME, so a bump force-
+// clears stale/poisoned entries for all existing users on next load.
+// v5: purge caches poisoned by the old vercel.json bug, where a missing
+// hashed chunk returned index.html with HTTP 200 and got cached as if it
+// were JS. Also adds a content-type guard below so that can't recur.
+const CACHE_NAME = 'shared-minds-shell-v5-chunk-poison-fix';
 // Note: Cache name is static - service worker updates handle cache invalidation
 // Shell files to pre-cache (static assets that don't change)
 const SHELL_FILES = [
@@ -147,12 +153,28 @@ self.addEventListener('fetch', (event) => {
             }
             return response;
           }
-          // If network succeeds, cache the response for future use
+          // If network succeeds, cache the response for future use —
+          // BUT only when the content-type matches the request kind.
+          // This prevents the SPA-rewrite poisoning where a missing
+          // hashed chunk returns index.html (text/html) with HTTP 200:
+          // caching that as a .js file makes the chunk permanently fail
+          // to load until the cache is cleared. A script/style whose
+          // body is HTML is never cached.
           if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
+            const contentType = response.headers.get('content-type') || '';
+            const isHtml = contentType.includes('text/html');
+            const wantsScriptOrStyle =
+              request.destination === 'script' || request.destination === 'style';
+            const mismatched = wantsScriptOrStyle && isHtml;
+
+            if (!mismatched) {
+              const responseClone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, responseClone);
+              });
+            } else {
+              console.warn('[Service Worker] Refusing to cache HTML served for a script/style request:', request.url);
+            }
           }
           return response;
         })

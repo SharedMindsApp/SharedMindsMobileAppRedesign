@@ -11,32 +11,32 @@ interface ServiceWorkerRecoveryState {
 }
 
 const RECOVERY_STORAGE_KEY = 'sw_recovery_attempted';
-const RECOVERY_SESSION_KEY = 'sw_recovery_session';
 
 /**
- * Phase 8: Check if service worker recovery has been attempted this session
+ * Has recovery already run since this tab was opened?
+ *
+ * Uses a single sessionStorage flag (cleared when the tab closes). The
+ * old implementation compared a stored timestamp against a freshly
+ * computed `Date.now()` on every call — those almost never match, so it
+ * effectively never remembered an attempt and could loop. Now it's a
+ * plain per-tab flag: recover once, and if the reload didn't fix it,
+ * don't thrash the page. A fresh tab (new sessionStorage) gets a new
+ * attempt, which is what we want after the user closes and reopens.
  */
 function hasRecoveryBeenAttempted(): boolean {
   if (typeof window === 'undefined') return false;
-  
-  const sessionId = sessionStorage.getItem(RECOVERY_SESSION_KEY);
-  const currentSessionId = Date.now().toString();
-  
-  // If no session ID or different session, reset
-  if (!sessionId || sessionId !== currentSessionId) {
-    sessionStorage.setItem(RECOVERY_SESSION_KEY, currentSessionId);
+  try {
+    return sessionStorage.getItem(RECOVERY_STORAGE_KEY) === 'true';
+  } catch {
     return false;
   }
-  
-  return sessionStorage.getItem(RECOVERY_STORAGE_KEY) === 'true';
 }
 
-/**
- * Phase 8: Mark that recovery has been attempted
- */
 function markRecoveryAttempted(): void {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(RECOVERY_STORAGE_KEY, 'true');
+  try {
+    sessionStorage.setItem(RECOVERY_STORAGE_KEY, 'true');
+  } catch { /* private mode */ }
 }
 
 /**
