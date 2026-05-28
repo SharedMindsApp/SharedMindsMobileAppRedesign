@@ -37,14 +37,27 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { IntentionWizard } from '../reflection/IntentionWizard';
 import { fetchUpcomingScheduledSessions, type ScheduledSessionWithProfile } from '../../services/SessionService';
 
+/** Project colour tokens → hex, matching the widgets used elsewhere. */
+const PROJECT_HEX: Record<string, string> = {
+  cyan: '#06b6d4', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+function resolveProjectHex(token: string | null | undefined): string | null {
+  if (!token) return null;
+  return PROJECT_HEX[token] ?? (token.startsWith('#') ? token : null);
+}
+
 /** A focus session reduced to what the planner grid needs. Read-only —
- *  these are a record of work done/booked, laid over the editable blocks. */
+ *  these are a record of work done/booked, laid over the editable blocks.
+ *  Colour-coded by the pinned project (falls back to a status colour). */
 interface PlannerSession {
   id: string;
   startsAt: Date;
   durationMins: number;
   title: string;
   status: 'scheduled' | 'completed';
+  /** Resolved hex for the pinned project, or null when unscoped. */
+  projectHex: string | null;
 }
 
 function toPlannerSession(s: ScheduledSessionWithProfile): PlannerSession {
@@ -54,6 +67,20 @@ function toPlannerSession(s: ScheduledSessionWithProfile): PlannerSession {
     durationMins: s.intended_duration_minutes ?? 50,
     title: s.session_title ?? s.session_goal ?? 'Focus session',
     status: ((s as { status?: string }).status === 'completed' ? 'completed' : 'scheduled'),
+    projectHex: resolveProjectHex(s.project?.color),
+  };
+}
+
+/** Inline style for a session block, tinted by its colour (project or status
+ *  fallback). Completed = filled tint; scheduled = lighter + dashed ring. */
+function sessionBlockStyle(ps: PlannerSession): { hex: string; style: React.CSSProperties } {
+  const hex = ps.projectHex ?? (ps.status === 'completed' ? '#10b981' : '#6366f1');
+  return {
+    hex,
+    style: {
+      backgroundColor: `${hex}14`,            // ~8% tint
+      boxShadow: `inset 0 0 0 1px ${hex}59`,  // ~35% ring (works for any hex)
+    },
   };
 }
 
@@ -115,6 +142,14 @@ interface WeekDay {
   dayNum: number;
 }
 
+/** YYYY-MM-DD from a date's LOCAL calendar components. Using toISOString()
+ *  here is a bug in any timezone ahead of UTC (e.g. BST): local midnight maps
+ *  to the previous UTC day, so the date string drifts one day behind the day
+ *  the user actually sees. Always format from local parts. */
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getWeekDays(now: Date, weekOffset = 0): WeekDay[] {
   const dow = now.getDay();
   const dayOffset = dow === 0 ? -6 : 1 - dow;
@@ -127,7 +162,7 @@ function getWeekDays(now: Date, weekOffset = 0): WeekDay[] {
     d.setDate(monday.getDate() + i);
     return {
       date: d,
-      dateStr: d.toISOString().slice(0, 10),
+      dateStr: localISO(d),
       letter: LETTERS[i],
       dayNum: d.getDate(),
     };
@@ -141,7 +176,7 @@ function formatHour(h: number): string {
 }
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localISO(new Date());
 }
 
 function formatWeekRange(days: WeekDay[]): string {
@@ -613,27 +648,25 @@ function WeekTimeline({
                   );
                 })}
 
-                {/* Logged + booked sessions (read-only overlay) */}
+                {/* Logged + booked sessions (read-only overlay), tinted by project */}
                 {weekSessions.filter((ps) => sameLocalDay(ps.startsAt, d.date)).map((ps) => {
                   const completed = ps.status === 'completed';
+                  const { hex, style } = sessionBlockStyle(ps);
                   return (
                     <div
                       key={ps.id}
-                      className={`absolute left-1 right-1 rounded-lg px-1.5 py-1 overflow-hidden ring-1 ${
-                        completed ? 'bg-emerald-50 ring-emerald-200' : 'bg-indigo-50 ring-indigo-200'
-                      }`}
-                      style={{ top: `${sessionTopPx(ps.startsAt)}px`, height: `${sessionHeightPx(ps.durationMins)}px` }}
+                      className={`absolute left-1 right-1 rounded-lg pl-2 pr-1.5 py-1 overflow-hidden ${completed ? '' : 'opacity-90'}`}
+                      style={{ ...style, top: `${sessionTopPx(ps.startsAt)}px`, height: `${sessionHeightPx(ps.durationMins)}px` }}
                       title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
                     >
-                      <p className={`text-[10px] font-bold leading-tight truncate flex items-center gap-0.5 ${
-                        completed ? 'text-emerald-800' : 'text-indigo-800'
-                      }`}>
+                      <span className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg" style={{ backgroundColor: hex }} />
+                      <p className="text-[10px] font-bold leading-tight truncate flex items-center gap-0.5" style={{ color: hex }}>
                         {completed
                           ? <Check size={9} strokeWidth={3} className="shrink-0" />
                           : <CalendarIcon size={8} className="shrink-0" />}
                         {ps.title}
                       </p>
-                      <p className={`text-[9px] font-semibold ${completed ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                      <p className="text-[9px] font-semibold opacity-80" style={{ color: hex }}>
                         {ps.durationMins}m
                       </p>
                     </div>
@@ -1186,24 +1219,25 @@ export function TodayPlannerCard({
                             onDelete={handleDelete}
                           />
                         ))}
-                        {/* Logged + booked sessions for this hour (read-only) */}
+                        {/* Logged + booked sessions for this hour (read-only), tinted by project */}
                         {sessHere.map((ps) => {
                           const completed = ps.status === 'completed';
+                          const { hex, style } = sessionBlockStyle(ps);
                           return (
                             <div
                               key={ps.id}
-                              className={`flex items-center gap-1.5 rounded-lg px-2 py-1 mb-1 ring-1 ${
-                                completed ? 'bg-emerald-50 ring-emerald-200' : 'bg-indigo-50 ring-indigo-200'
-                              }`}
+                              className={`relative flex items-center gap-1.5 rounded-lg pl-3 pr-2 py-1.5 mb-1 ${completed ? '' : 'opacity-90'}`}
+                              style={style}
                               title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
                             >
+                              <span className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg" style={{ backgroundColor: hex }} />
                               {completed
-                                ? <Check size={11} strokeWidth={3} className={`shrink-0 ${completed ? 'text-emerald-600' : 'text-indigo-600'}`} />
-                                : <CalendarIcon size={10} className="shrink-0 text-indigo-600" />}
-                              <span className={`flex-1 min-w-0 text-[11px] font-bold truncate ${completed ? 'text-emerald-800' : 'text-indigo-800'}`}>
+                                ? <Check size={11} strokeWidth={3} className="shrink-0" style={{ color: hex }} />
+                                : <CalendarIcon size={10} className="shrink-0" style={{ color: hex }} />}
+                              <span className="flex-1 min-w-0 text-[11px] font-bold truncate" style={{ color: hex }}>
                                 {ps.title}
                               </span>
-                              <span className={`text-[10px] font-semibold shrink-0 ${completed ? 'text-emerald-600' : 'text-indigo-600'}`}>
+                              <span className="text-[10px] font-semibold shrink-0 opacity-80" style={{ color: hex }}>
                                 {ps.durationMins}m
                               </span>
                             </div>
