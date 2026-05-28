@@ -5,7 +5,7 @@
  * task-completion ring, member avatars. Tabs: Tasks / Sessions / Members.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Loader2, Pencil, Play, Target, Calendar, ArrowLeft, Link2,
@@ -38,7 +38,11 @@ import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { projectColorMeta } from './ProjectsPage';
 import { NextActionControl } from './NextActionControl';
 import { taskUrgency } from '../../../lib/taskUrgency';
-import { TaskDetailSheet } from '../../ui/TaskDetailSheet';
+
+// Lazy — interaction-gated modal (opens on board task tap). Keeping it out of
+// the route's static import graph means it's not fetched before first paint.
+const TaskDetailSheet = lazy(() =>
+  import('../../ui/TaskDetailSheet').then((m) => ({ default: m.TaskDetailSheet })));
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
@@ -828,6 +832,7 @@ export function ProjectDetailPage() {
         const t = openTaskId ? tasks.find((x) => x.id === openTaskId) : null;
         if (!t) return null;
         return (
+          <Suspense fallback={null}>
           <TaskDetailSheet
             task={{
               id: t.id,
@@ -845,6 +850,7 @@ export function ProjectDetailPage() {
             onDelete={() => deleteTask(t.id)}
             onStartSession={() => setDeclareOpen(true)}
           />
+          </Suspense>
         );
       })()}
     </div>

@@ -13,13 +13,17 @@
  * captures a new task (scheduled for today).
  */
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Loader2 } from 'lucide-react';
 import { useCoreData, type CoreTask, type CoreProject } from '../../data/CoreDataContext';
 import { TaskCard } from '../../ui/TaskCard';
-import { TaskDetailSheet } from '../../ui/TaskDetailSheet';
 import { taskUrgency, isTodayOrOverdue } from '../../../lib/taskUrgency';
+
+// Lazy — the "work on this" sheet is interaction-gated (opens on task tap),
+// so keep it off the home page's first-paint chunk graph.
+const TaskDetailSheet = lazy(() =>
+  import('../../ui/TaskDetailSheet').then((m) => ({ default: m.TaskDetailSheet })));
 
 const PROJECT_HEX: Record<string, string> = {
   cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
@@ -209,6 +213,7 @@ export function PlanTasksCard({
 
     {/* "Work on this" sheet — tapping a task opens here, NOT a session. */}
     {openTask && (
+      <Suspense fallback={null}>
       <TaskDetailSheet
         task={{
           id: openTask.id,
@@ -227,6 +232,7 @@ export function PlanTasksCard({
         onDelete={() => deleteTaskAsync(openTask.id)}
         onStartSession={() => onSelectTask(openTask.title)}
       />
+      </Suspense>
     )}
     </>
   );
