@@ -830,6 +830,11 @@ function StepShell({
 
 // ── Main component ─────────────────────────────────────────────────
 
+/** localStorage key for the in-progress New Project wizard (newProject mode
+ *  only). Lets a refresh / dropped connection / accidental close resume where
+ *  the user left off. Cleared on create or "Start fresh". */
+const NEW_PROJECT_DRAFT_KEY = 'sm.newProjectDraft.v1';
+
 export function OnboardingWizard({
   onComplete,
   mode = 'onboarding',
@@ -974,6 +979,82 @@ export function OnboardingWizard({
 
   // ── Tasks ──────────────────────────────────────────────────────
   const [taskInputs, setTaskInputs] = useState<string[]>(['', '', '']);
+
+  // ── Draft persistence (newProject mode only) ───────────────────
+  // Autosaves the wizard to localStorage so a refresh / lost connection /
+  // accidental close doesn't wipe everything. Restored on reopen.
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  useEffect(() => {
+    if (mode !== 'newProject') return;
+    try {
+      const raw = window.localStorage.getItem(NEW_PROJECT_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.title) setProjectTitle(d.title);
+      if (d.brainDump) setProjectBrainDump(d.brainDump);
+      if (d.colour) setProjectColour(d.colour);
+      if (d.startedStatus) setProjectStartedStatus(d.startedStatus);
+      if (typeof d.completionPct === 'number') setProjectCompletionPct(d.completionPct);
+      if (d.projectType !== undefined) setProjectType(d.projectType);
+      if (d.targetDate) setProjectTargetDate(d.targetDate);
+      if (d.deadlineFlex) setProjectDeadlineFlex(d.deadlineFlex);
+      if (Array.isArray(d.milestones) && d.milestones.length) setMilestoneInputs(d.milestones);
+      if (Array.isArray(d.tasks) && d.tasks.length) setTaskInputs(d.tasks);
+      const hadContent = !!d.title?.trim?.() || !!d.brainDump?.trim?.()
+        || (Array.isArray(d.milestones) && d.milestones.some((m: { title?: string }) => m.title?.trim?.()));
+      if (hadContent) setDraftRestored(true);
+    } catch { /* corrupt draft — ignore */ }
+    // Mount-only hydrate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'newProject') return;
+    const hasContent = projectTitle.trim() || projectBrainDump.trim()
+      || milestoneInputs.some((m) => m.title.trim()) || taskInputs.some((t) => t.trim());
+    const id = window.setTimeout(() => {
+      try {
+        if (!hasContent) { window.localStorage.removeItem(NEW_PROJECT_DRAFT_KEY); return; }
+        window.localStorage.setItem(NEW_PROJECT_DRAFT_KEY, JSON.stringify({
+          title: projectTitle, brainDump: projectBrainDump, colour: projectColour,
+          startedStatus: projectStartedStatus, completionPct: projectCompletionPct,
+          projectType, targetDate: projectTargetDate, deadlineFlex: projectDeadlineFlex,
+          milestones: milestoneInputs, tasks: taskInputs, savedAt: Date.now(),
+        }));
+      } catch { /* quota / private mode — non-fatal */ }
+    }, 600);
+    return () => window.clearTimeout(id);
+  }, [mode, projectTitle, projectBrainDump, projectColour, projectStartedStatus,
+      projectCompletionPct, projectType, projectTargetDate, projectDeadlineFlex,
+      milestoneInputs, taskInputs]);
+
+  function clearNewProjectDraft() {
+    try { window.localStorage.removeItem(NEW_PROJECT_DRAFT_KEY); } catch { /* ignore */ }
+  }
+
+  function startFresh() {
+    clearNewProjectDraft();
+    setDraftRestored(false);
+    setProjectTitle('');
+    setProjectBrainDump('');
+    setProjectColour('violet');
+    setProjectStartedStatus('new');
+    setProjectCompletionPct(0);
+    setProjectType(null);
+    setProjectTargetDate('');
+    setProjectDeadlineFlex('flexible');
+    setTaskInputs(['', '', '']);
+    setMilestoneInputs([
+      { title: '', weight_pct: 50, already_done: false, phases: [
+        { title: '', weight_pct: 50, already_done: false },
+        { title: '', weight_pct: 50, already_done: false },
+      ] },
+      { title: '', weight_pct: 50, already_done: false, phases: [
+        { title: '', weight_pct: 100, already_done: false },
+      ] },
+    ]);
+  }
 
   // ── UI state ───────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -1565,6 +1646,7 @@ export function OnboardingWizard({
       // no app navigation — the parent closes the wizard + routes.
       if (mode === 'newProject') {
         const project = await saveProjectAndComplete();
+        clearNewProjectDraft(); // created — the draft's job is done
         if (project) onProjectCreated?.(project.id);
         return;
       }
@@ -2346,6 +2428,21 @@ export function OnboardingWizard({
   if (step === 'project') {
     return (
       <StepShell step="project" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
+        {draftRestored && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2">
+            <Check size={13} className="text-emerald-600 shrink-0" strokeWidth={3} />
+            <p className="flex-1 text-[11px] font-semibold text-emerald-900 leading-snug">
+              Picked up from where you left off — your draft was saved.
+            </p>
+            <button
+              type="button"
+              onClick={startFresh}
+              className="shrink-0 text-[11px] font-bold text-emerald-700 hover:opacity-70 transition-opacity"
+            >
+              Start fresh
+            </button>
+          </div>
+        )}
         <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center mb-4">
           <Target size={18} className="text-amber-600" />
         </div>
