@@ -19,10 +19,22 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 
 ## [Unreleased]
 
+### Added
+- **Weekly time-block templates, from the planner** — a new "Templates"
+  button on the home planner opens a sheet to apply a saved template to
+  this week or next (additive + idempotent, today-onward by default), or
+  adopt a curated starter preset by mapping its project slots to your real
+  projects and naming it. Applying reloads the grid in place.
+
 ### Changed
 - **Task detail sheet** — moved the Edit action down beside Delete in the
   footer, and Delete now arms an "are you sure?" confirm (matching "Let it
   go") instead of deleting on the first tap.
+
+### Fixed
+- **Week planner project tags** — fixed a scope bug where the week grid
+  couldn't resolve project names for time blocks (the lookup map is now
+  threaded into the week timeline).
 
 
 ## [v0.6.0] — 2026-05-28

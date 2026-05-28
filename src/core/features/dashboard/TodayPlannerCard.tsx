@@ -25,8 +25,10 @@ import {
   Mail, Zap, PenLine, Layers, Target, Phone,
   Play, CheckCircle2, Circle, X, Loader2, Check,
   Calendar as CalendarIcon, Search, ChevronLeft, ChevronRight,
+  Trash2, LayoutTemplate,
 } from 'lucide-react';
 import { FindSessionsSheet } from './FindSessionsSheet';
+import { TimeBlockTemplatesSheet } from './TimeBlockTemplatesSheet';
 import { TimeBlockService, type TimeBlock, type BlockType } from '../../services/TimeBlockService';
 import {
   ReflectionService, mondayOf, estimateSessions,
@@ -720,7 +722,7 @@ function WeekGoalsSidebar({
 
 function WeekTimeline({
   weekDays, weekBlocks, weekSessions, todayKey, currentHour, currentMin,
-  nowLabel, showNowLine, nowYpx, hours, dayStart,
+  nowLabel, showNowLine, nowYpx, hours, dayStart, projectNameById,
   onToggle, onStart, onDelete, onSwitchToDay, onSelectSession, onHoverSession, onAddAt,
 }: {
   weekDays: WeekDay[];
@@ -737,6 +739,8 @@ function WeekTimeline({
   /** Visible hour rows + the first hour (grid origin). */
   hours: number[];
   dayStart: number;
+  /** Project id → display name, for the block project tag. */
+  projectNameById: Map<string, string>;
   onToggle: (b: TimeBlock) => void;
   onStart:  (b: TimeBlock) => void;
   onDelete: (id: string) => void;
@@ -1054,6 +1058,30 @@ export function TodayPlannerCard({
   const [weeklyLoaded,  setWeeklyLoaded]  = useState(false);
   const [showWizard,    setShowWizard]    = useState(false);
   const [showFindSessions, setShowFindSessions] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  /** Re-fetch the selected day + the whole week's blocks. Used after a
+   *  template is applied so the grid reflects the freshly-created blocks. */
+  const reloadBlocks = useCallback(async () => {
+    try {
+      const [dayRows, weekRows] = await Promise.all([
+        TimeBlockService.getBlocksForDate(selectedDateStr),
+        TimeBlockService.getBlocksForDateRange(weekDays[0].dateStr, weekDays[6].dateStr),
+      ]);
+      setBlocks(dayRows);
+      setWeekBlocks(weekRows);
+      const counts: Record<string, { done: number; total: number }> = {};
+      for (const b of weekRows) {
+        const c = counts[b.block_date] ?? { done: 0, total: 0 };
+        c.total += 1;
+        if (b.completed_at) c.done += 1;
+        counts[b.block_date] = c;
+      }
+      setWeekBlockCounts(counts);
+    } catch (e) {
+      console.warn('[TodayPlannerCard] reloadBlocks failed:', e);
+    }
+  }, [selectedDateStr, weekDays]);
 
   async function reloadWeekly(weekMondayStr?: string) {
     const d = await ReflectionService.getReflectionByWeek(weekMondayStr ?? weekDays[0]?.dateStr ?? mondayOf());
@@ -1324,6 +1352,17 @@ export function TodayPlannerCard({
               >
                 <Search size={11} strokeWidth={2.5} />
                 Find sessions
+              </button>
+
+              {/* Templates — apply a reusable weekly time-block template, or
+                  adopt a starter preset. */}
+              <button
+                type="button"
+                onClick={() => setShowTemplates(true)}
+                className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1.5 rounded-full bg-white/85 backdrop-blur ring-1 ring-violet-200/50 text-violet-700 hover:bg-white hover:shadow-sm hover:-translate-y-px transition-all"
+              >
+                <LayoutTemplate size={11} strokeWidth={2.5} />
+                Templates
               </button>
 
               {/* Day window — set the hours your planner shows (night owls,
@@ -1654,6 +1693,7 @@ export function TodayPlannerCard({
               nowYpx={nowYpx}
               hours={hours}
               dayStart={dayStart}
+              projectNameById={projectNameById}
               onToggle={handleToggle}
               onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
               onDelete={handleDelete}
@@ -1680,6 +1720,15 @@ export function TodayPlannerCard({
       {/* Find sessions sheet (modal on desktop, bottom-sheet on mobile) */}
       {showFindSessions && (
         <FindSessionsSheet onClose={() => setShowFindSessions(false)} />
+      )}
+
+      {/* Weekly templates — apply to this/next week, or adopt a starter */}
+      {showTemplates && (
+        <TimeBlockTemplatesSheet
+          projects={activeProjects}
+          onApplied={() => { void reloadBlocks(); }}
+          onClose={() => setShowTemplates(false)}
+        />
       )}
 
       {/* Block edit popover — tap a block to edit title/length/type/project */}
