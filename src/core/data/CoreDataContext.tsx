@@ -49,6 +49,12 @@ export type CoreProject = {
   coverBgColor: string | null;
   /** 'light' = white title text + dark overlay, 'dark' = near-black + light overlay. */
   coverTextColor: 'light' | 'dark';
+  /** The single pre-decided next step. null = none set. */
+  nextAction: string | null;
+  /** ISO timestamp the next action was last set/changed. */
+  nextActionUpdatedAt: string | null;
+  /** ISO timestamp of last meaningful activity — drives re-entry/idle copy + momentum sort. */
+  lastActivityAt: string | null;
 };
 
 export type CoreTask = {
@@ -399,6 +405,9 @@ export function CoreDataProvider({ children }: { children: ReactNode }) {
           coverFit: (p.cover_fit ?? 'cover') as 'cover' | 'contain',
           coverBgColor: p.cover_bg_color ?? null,
           coverTextColor: (p.cover_text_color ?? 'light') as 'light' | 'dark',
+          nextAction: p.next_action ?? null,
+          nextActionUpdatedAt: p.next_action_updated_at ?? null,
+          lastActivityAt: p.last_activity_at ?? null,
         };
       });
 

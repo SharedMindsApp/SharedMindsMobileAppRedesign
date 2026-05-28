@@ -36,6 +36,7 @@ import { CoverImage } from './CoverImage';
 import { DeclareSessionModal } from '../sessions/DeclareSessionModal';
 import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { projectColorMeta } from './ProjectsPage';
+import { NextActionControl } from './NextActionControl';
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
@@ -613,6 +614,22 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* ── Next step — the execution anchor for this project ──── */}
+      {!isArchived && (
+        <SurfaceCard className="mt-4">
+          <NextActionControl
+            projectId={project.id}
+            nextAction={project.next_action}
+            variant="detail"
+            onChanged={() => {
+              ProjectService.getProjectById(project.id).then((p) => { if (p) setProject(p); });
+              refreshProjects();
+            }}
+            onStartSession={() => setActionChooserOpen(true)}
+          />
+        </SurfaceCard>
+      )}
 
       {/* Breathing room before the tab strip */}
       <div className="h-4" />

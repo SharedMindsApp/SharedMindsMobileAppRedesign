@@ -30,6 +30,11 @@ export interface Project {
     /** Title/description colour on top of the cover. 'light' = white text
      *  + dark overlay, 'dark' = near-black text + light overlay. Default 'light'. */
     cover_text_color: 'light' | 'dark';
+    /** The single pre-decided next step (free text). NULL = none set. */
+    next_action: string | null;
+    next_action_updated_at: string | null;
+    /** Last meaningful activity — drives re-entry/idle copy + momentum sort. */
+    last_activity_at: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -169,6 +174,38 @@ export const ProjectService = {
             throw error;
         }
         return data as Project;
+    },
+
+    /**
+     * Set (or replace) a project's single next action. Bumps both the
+     * next-action timestamp and last_activity_at so the project counts as
+     * "touched" and re-entry copy stays accurate. Pass null/empty to clear.
+     */
+    async setNextAction(projectId: string, text: string | null): Promise<Project> {
+        const now = new Date().toISOString();
+        const trimmed = text?.trim() || null;
+        return this.updateProject(projectId, {
+            next_action: trimmed,
+            next_action_updated_at: trimmed ? now : null,
+            last_activity_at: now,
+        });
+    },
+
+    /**
+     * Mark the current next action done: clears it and records activity.
+     * Returns the updated project so the UI can immediately prompt
+     * "what's the next tiny step?". The completed text is returned too so
+     * callers can show a transient confirmation.
+     */
+    async completeNextAction(projectId: string): Promise<{ project: Project; completed: string | null }> {
+        const current = await this.getProjectById(projectId);
+        const completed = current?.next_action ?? null;
+        const project = await this.updateProject(projectId, {
+            next_action: null,
+            next_action_updated_at: null,
+            last_activity_at: new Date().toISOString(),
+        });
+        return { project, completed };
     },
 
     async archiveProject(projectId: string): Promise<void> {

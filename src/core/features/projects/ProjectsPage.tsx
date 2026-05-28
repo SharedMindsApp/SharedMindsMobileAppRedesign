@@ -15,6 +15,7 @@ import { PageGreeting, GradientButton } from '../../ui/CorePage';
 import { ProjectEditorModal } from './ProjectEditorModal';
 import { CoverImage } from './CoverImage';
 import { DeleteProjectConfirm } from './DeleteProjectConfirm';
+import { NextActionControl } from './NextActionControl';
 
 // ── Color tokens (match the editor modal swatches) ───────────────
 
@@ -121,6 +122,7 @@ export function ProjectsPage() {
                 onOpen={() => navigate(`/projects/${project.id}`)}
                 onArchive={() => handleArchive(project)}
                 onDelete={() => handleDelete(project)}
+                onChanged={refreshProjects}
               />
             ))}
           </div>
@@ -197,12 +199,14 @@ function ProjectCard({
   onOpen,
   onArchive,
   onDelete,
+  onChanged,
 }: {
   project: CoreProject;
   stats: ProjectStats;
   onOpen: () => void;
   onArchive?: () => void;
   onDelete?: () => void;
+  onChanged?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -346,6 +350,17 @@ function ProjectCard({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Next action — the single pre-decided next step. The execution
+            anchor: collapses "what do I do?" into one tap. */}
+        <div className="rounded-xl bg-surface-container-low/60 px-3 py-2.5">
+          <NextActionControl
+            projectId={project.id}
+            nextAction={project.nextAction}
+            variant="card"
+            onChanged={() => onChanged?.()}
+          />
         </div>
 
         {/* Progress bar — reflects the strongest signal available

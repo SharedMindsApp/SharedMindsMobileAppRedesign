@@ -56,6 +56,7 @@ import { LiveNowDropInStrip } from './LiveNowDropInStrip';
 import { OnboardingNudges } from './OnboardingNudges';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
 import { SkillsPromptModal } from './SkillsPromptModal';
+import { PickUpCard } from './PickUpCard';
 import { shouldShowSkillsPrompt, markSkillsPromptShown } from '../../../lib/skillsPrompt';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
 import { ShippedFeedStrip } from './ShippedFeedStrip';
@@ -410,12 +411,16 @@ export function DashboardPage() {
   const {
     state: { tasks, projects, activeProjectId },
     setActiveProject,
+    refreshProjects,
   } = useCoreData();
   const { sessions: liveSessions } = useCommunitySessionsSubscription();
   const navigate = useNavigate();
 
   const [showDeclare, setShowDeclare] = useState(false);
   const [declareGoal, setDeclareGoal] = useState<string | undefined>(undefined);
+  /** When opening Declare from a project context (e.g. PickUpCard), pin
+   *  the session to that project. */
+  const [declareProjectId, setDeclareProjectId] = useState<string | undefined>(undefined);
   /** Pre-flips the modal's "Open the door" toggle on. Set true when
    *  opening from the Match-me-now CTA so the user lands on a solo
    *  session that's discoverable for drop-ins. */
@@ -675,6 +680,20 @@ export function DashboardPage() {
         sessionsCompleted={stats?.totalSessions ?? 0}
       />
 
+      {/* Re-entry hook: the one project + next step to pick back up,
+          one tap to start a session on it. Renders nothing until a
+          project has a next action set. */}
+      <PickUpCard
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onChanged={refreshProjects}
+        onStartSession={(projectId) => {
+          setActiveProject(projectId);
+          setDeclareProjectId(projectId);
+          setShowDeclare(true);
+        }}
+      />
+
       {/* Progressive render — sections paint as their data arrives. The
           hero above is always-on, and the day-zero branch waits only for
           the cheap count query (not the full stats aggregation). */}
@@ -868,9 +887,11 @@ export function DashboardPage() {
             setTemplateDuration(undefined);
             setDeclareSmallerHint(false);
             setDeclareOpenToMatch(false);
+            setDeclareProjectId(undefined);
           }}
           initialGoal={declareGoal}
           initialDuration={templateDuration}
+          initialProjectId={declareProjectId}
           startWithSmallerHint={declareSmallerHint}
           startOpenToMatch={declareOpenToMatch}
         />
