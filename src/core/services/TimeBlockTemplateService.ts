@@ -8,6 +8,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type { BlockType } from './TimeBlockService';
+import type { TimeBlockStarter } from '../../lib/timeBlockStarters';
 
 export interface TimeBlockTemplate {
   id: string;
@@ -126,6 +127,35 @@ export const TimeBlockTemplateService = {
   async deleteItem(id: string): Promise<void> {
     const { error } = await supabase.from('time_block_template_items').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  /**
+   * Adopt a starter preset into a new, fully-editable user template. The
+   * starter's project *slots* (1–4) are resolved to real project ids via
+   * `slotMap`; slots with no mapping (and break/general items) become
+   * project-less. Returns the new template.
+   */
+  async adoptStarter(
+    starter: TimeBlockStarter,
+    name: string,
+    slotMap: Record<number, string | null>,
+  ): Promise<TimeBlockTemplate> {
+    const tpl = await TimeBlockTemplateService.createTemplate(name);
+    const rows = starter.items.map((it, i) => ({
+      template_id:   tpl.id,
+      day_of_week:   it.dayOfWeek,
+      start_time:    it.startTime,
+      duration_mins: it.durationMins,
+      title:         it.title,
+      block_type:    it.blockType,
+      project_id:    it.slot != null ? (slotMap[it.slot] ?? null) : null,
+      sort_order:    i,
+    }));
+    if (rows.length > 0) {
+      const { error } = await supabase.from('time_block_template_items').insert(rows);
+      if (error) throw error;
+    }
+    return tpl;
   },
 
   /**
