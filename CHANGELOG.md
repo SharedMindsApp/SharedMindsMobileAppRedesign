@@ -20,6 +20,13 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 ## [Unreleased]
 
 ### Added
+- **Session agenda — schedule guided wizards** — while hosting (e.g. waiting
+  for a match), you can schedule wizards (breaths, breaks, vibe check) to fire
+  automatically at relative moments — **At the start / 5 min in / Halfway /
+  Last 5 min** — for everyone in the session. Each item can be cancelled or
+  run now; a badge on the sparkles button shows how many are queued. The plan
+  is saved on the session (the partner inherits it; survives refresh).
+  **Migration required:** `20260529000020_session_planned_wizards`.
 - **Leave a match (not "End")** — in a live 1-on-1 the session button now says
   **Leave** (solo still says End) and asks "Are you sure you want to leave
   early?". Leaving doesn't end the session for your partner — they keep going

@@ -2,6 +2,7 @@ import { supabase } from '../../lib/supabase';
 import type { FocusSession, CommunitySession, SessionOutcome } from '../../lib/sessions/focusTypes';
 import { armSkillsPrompt } from '../../lib/skillsPrompt';
 import { getAuthedUser } from '../../lib/authUser';
+import type { PlannedWizard } from '../../lib/sessions/focusTypes';
 
 export interface CreateScheduledSessionInput {
   title: string;
@@ -1022,6 +1023,20 @@ export async function claimOpenSession(sessionId: string): Promise<FocusSession 
   // RPC returns the row (jsonb-like object) or null when the slot was gone.
   if (!data) return null;
   return data as FocusSession;
+}
+
+/** Persist the host's planned-wizard agenda on the session row. RLS lets
+ *  only the session owner (host) write; the partner reads it via the row.
+ *  See migration 20260529000020. */
+export async function updatePlannedWizards(
+  sessionId: string,
+  planned: PlannedWizard[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({ planned_wizards: planned })
+    .eq('id', sessionId);
+  if (error) throw error;
 }
 
 /** When the host abandons a matched session, the remaining partner takes it
