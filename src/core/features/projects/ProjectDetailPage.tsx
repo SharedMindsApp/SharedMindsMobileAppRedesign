@@ -38,6 +38,7 @@ import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 import { projectColorMeta } from './ProjectsPage';
 import { NextActionControl } from './NextActionControl';
 import { taskUrgency } from '../../../lib/taskUrgency';
+import { TaskDetailSheet } from '../../ui/TaskDetailSheet';
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
@@ -100,6 +101,8 @@ export function ProjectDetailPage() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [taskSubmitting, setTaskSubmitting] = useState(false);
+  /** Task whose "work on this" sheet is open (board tap target). null = closed. */
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   // Progressive load — paint the hero as soon as the project row arrives,
   // then fill in tasks / sessions / milestones / phases as each query
@@ -675,6 +678,7 @@ export function ProjectDetailPage() {
           onDelete={deleteTask}
           onSchedule={setTaskSchedule}
           onCarryForward={carryForwardUnfinishedTasks}
+          onOpenTask={setOpenTaskId}
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={handleAddTask}
@@ -817,6 +821,32 @@ export function ProjectDetailPage() {
           onClose={() => setCoworkerInviteOpen(false)}
         />
       )}
+
+      {/* "Work on this" sheet — tapping a board task opens here. Scheduling a
+          session is one optional CTA inside, never the only way in. */}
+      {(() => {
+        const t = openTaskId ? tasks.find((x) => x.id === openTaskId) : null;
+        if (!t) return null;
+        return (
+          <TaskDetailSheet
+            task={{
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              scheduledFor: t.scheduled_for ?? null,
+              dueOn: t.due_on ?? null,
+              projectName: project.title,
+              projectColorHex: color.hex,
+            }}
+            onClose={() => setOpenTaskId(null)}
+            onToggleDone={() => setTaskStatus(t.id, t.status === 'done' ? 'active' : 'done')}
+            onReschedule={(iso) => setTaskSchedule(t.id, iso)}
+            onRename={(title) => renameTask(t.id, title)}
+            onDelete={() => deleteTask(t.id)}
+            onStartSession={() => setDeclareOpen(true)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -1111,7 +1141,7 @@ function formatDayLabel(d: Date): string {
 // scheduled for Wednesday simultaneously.
 
 function TasksTab({
-  tasks, onSetStatus, onRename, onDelete, onSchedule, onCarryForward,
+  tasks, onSetStatus, onRename, onDelete, onSchedule, onCarryForward, onOpenTask,
   newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
 }: {
   tasks: Task[];
@@ -1120,6 +1150,8 @@ function TasksTab({
   onDelete: (taskId: string) => void;
   onSchedule: (taskId: string, date: string | null) => void;
   onCarryForward: (taskIds: string[], toDate: string) => void;
+  /** Open the "work on this" sheet for a task (tap target on the board). */
+  onOpenTask: (taskId: string) => void;
   newTaskTitle: string;
   setNewTaskTitle: (s: string) => void;
   onAdd: () => void;
@@ -1317,6 +1349,7 @@ function TasksTab({
           onRename={onRename}
           onDelete={onDelete}
           onSchedule={onSchedule}
+          onOpenTask={onOpenTask}
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={onAdd}
@@ -1335,6 +1368,7 @@ function TasksTab({
           onSchedule={onSchedule}
           onSetStatus={onSetStatus}
           onDelete={onDelete}
+          onOpenTask={onOpenTask}
           colorHex={colorHex}
           todayIso={todayIso}
         />
@@ -1406,13 +1440,14 @@ function BacklogRow({
 
 // ── Week grid — 7 day columns with task lists + status dots ─────────────
 function WeekGrid({
-  weekStart, tasks, onSchedule, onSetStatus, onDelete, colorHex, todayIso,
+  weekStart, tasks, onSchedule, onSetStatus, onDelete, onOpenTask, colorHex, todayIso,
 }: {
   weekStart: Date;
   tasks: Task[];
   onSchedule: (taskId: string, date: string | null) => void;
   onSetStatus: (taskId: string, next: KanbanStatus) => void;
   onDelete: (taskId: string) => void;
+  onOpenTask: (taskId: string) => void;
   colorHex: string;
   todayIso: string;
 }) {
@@ -1460,6 +1495,7 @@ function WeekGrid({
                     onSetStatus(t.id, next);
                   }}
                   onDelete={() => onDelete(t.id)}
+                  onOpen={() => onOpenTask(t.id)}
                 />
               ))}
               {dayTasks.length === 0 && (
@@ -1478,11 +1514,12 @@ function WeekGrid({
 // Compact task row for the week grid — a status dot, the title, and a
 // hover-revealed delete. Click the dot to cycle to-do → active → done → to-do.
 function WeekTaskRow({
-  task, onCycleStatus, onDelete,
+  task, onCycleStatus, onDelete, onOpen,
 }: {
   task: Task;
   onCycleStatus: () => void;
   onDelete: () => void;
+  onOpen: () => void;
 }) {
   const status = (task.status as KanbanStatus) || 'inbox';
   const isDone = status === 'done';
@@ -1502,9 +1539,13 @@ function WeekTaskRow({
       >
         {isDone && <Check size={7} className="text-white" strokeWidth={3} />}
       </button>
-      <span className={`flex-1 text-[11px] leading-snug truncate ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={`flex-1 min-w-0 text-left text-[11px] leading-snug truncate hover:opacity-80 transition-opacity ${isDone ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
+      >
         {task.title}
-      </span>
+      </button>
       <button
         type="button"
         onClick={onDelete}
@@ -1518,7 +1559,7 @@ function WeekTaskRow({
 }
 
 function KanbanTab({
-  tasks, onSetStatus, onRename, onDelete, onSchedule, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  tasks, onSetStatus, onRename, onDelete, onSchedule, onOpenTask, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
   emptyMessage, addContextLabel, scheduledForOnAdd,
 }: {
   tasks: Task[];
@@ -1633,6 +1674,7 @@ function KanbanTab({
                     onMove={(next) => moveTask(t, next)}
                     onRename={(title) => onRename(t.id, title)}
                     onDelete={() => onDelete(t.id)}
+                    onOpen={() => onOpenTask(t.id)}
                   />
                 ))
               )}
@@ -1646,13 +1688,15 @@ function KanbanTab({
 }
 
 function KanbanCard({
-  task, columnKey, onMove, onRename, onDelete,
+  task, columnKey, onMove, onRename, onDelete, onOpen,
 }: {
   task: Task;
   columnKey: KanbanStatus;
   onMove: (next: KanbanStatus) => void;
   onRename: (newTitle: string) => void;
   onDelete: () => void;
+  /** Tap the card body to open the "work on this" sheet. */
+  onOpen: () => void;
 }) {
   const canPrev = columnKey !== 'inbox';
   const canNext = columnKey !== 'done';
@@ -1715,11 +1759,13 @@ function KanbanCard({
           className="w-full text-xs font-semibold stitch-text-primary leading-snug bg-surface-container-low rounded px-1.5 py-1 outline-none focus:ring-2 ring-primary/30"
         />
       ) : (
-        <p
-          className={`text-xs font-semibold leading-snug pr-12 ${columnKey === 'done' ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
+        <button
+          type="button"
+          onClick={onOpen}
+          className={`block w-full text-left text-xs font-semibold leading-snug pr-12 hover:opacity-80 transition-opacity ${columnKey === 'done' ? 'line-through stitch-text-secondary' : 'stitch-text-primary'}`}
         >
           {task.title}
-        </p>
+        </button>
       )}
 
       {/* Deadline urgency — only the pressing states (overdue / due soon),

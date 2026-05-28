@@ -7,8 +7,10 @@
  * the focus + urgency surface — not the whole list.
  *
  * Each row is the shared TaskCard (consistent everywhere): tap the circle to
- * mark done, tap the title to start a session on it. Urgency chips come from
- * taskUrgency(). Inline "+ Add" captures a new task (scheduled for today).
+ * mark done, tap the title to OPEN it (the "work on this" sheet) — not to
+ * start a session. Scheduling a session is one optional action inside that
+ * sheet, never forced. Urgency chips come from taskUrgency(). Inline "+ Add"
+ * captures a new task (scheduled for today).
  */
 
 import { useState } from 'react';
@@ -16,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Loader2 } from 'lucide-react';
 import { useCoreData, type CoreTask, type CoreProject } from '../../data/CoreDataContext';
 import { TaskCard } from '../../ui/TaskCard';
+import { TaskDetailSheet } from '../../ui/TaskDetailSheet';
 import { taskUrgency, isTodayOrOverdue } from '../../../lib/taskUrgency';
 
 const PROJECT_HEX: Record<string, string> = {
@@ -41,11 +44,16 @@ export function PlanTasksCard({
   onSelectTask: (taskTitle: string) => void;
 }) {
   const navigate = useNavigate();
-  const { addTaskAsync, toggleTask } = useCoreData();
+  const {
+    addTaskAsync, toggleTask,
+    rescheduleTaskAsync, dropTaskAsync, deleteTaskAsync, updateTaskAsync,
+  } = useCoreData();
   const [newTaskText, setNewTaskText] = useState('');
   const [savingTask, setSavingTask] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // The task whose "work on this" sheet is open. null = closed.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   const openTasks = tasks.filter((t) => !t.done);
 
@@ -85,7 +93,13 @@ export function PlanTasksCard({
     finally { setBusyId(null); }
   }
 
+  const openTask = openTaskId ? todayTasks.find((t) => t.id === openTaskId) ?? null : null;
+  const openTaskProject = openTask?.projectId
+    ? projects.find((p) => p.id === openTask.projectId)
+    : null;
+
   return (
+    <>
     <section className="rounded-2xl bg-white ring-1 ring-surface-container p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
@@ -153,7 +167,7 @@ export function PlanTasksCard({
                 projectName={project?.name ?? null}
                 projectColorHex={project ? projectDot(project.color) : null}
                 onToggleDone={() => handleToggle(task.id)}
-                onOpen={() => onSelectTask(task.title)}
+                onOpen={() => setOpenTaskId(task.id)}
                 busy={busyId === task.id}
               />
             );
@@ -192,5 +206,28 @@ export function PlanTasksCard({
         </button>
       )}
     </section>
+
+    {/* "Work on this" sheet — tapping a task opens here, NOT a session. */}
+    {openTask && (
+      <TaskDetailSheet
+        task={{
+          id: openTask.id,
+          title: openTask.title,
+          status: openTask.status,
+          scheduledFor: openTask.scheduledFor,
+          dueOn: openTask.dueOn,
+          projectName: openTaskProject?.name ?? null,
+          projectColorHex: openTaskProject ? projectDot(openTaskProject.color) : null,
+        }}
+        onClose={() => setOpenTaskId(null)}
+        onToggleDone={() => toggleTask(openTask.id)}
+        onReschedule={(iso) => rescheduleTaskAsync(openTask.id, iso)}
+        onRename={(title) => updateTaskAsync(openTask.id, { title })}
+        onDrop={() => dropTaskAsync(openTask.id)}
+        onDelete={() => deleteTaskAsync(openTask.id)}
+        onStartSession={() => onSelectTask(openTask.title)}
+      />
+    )}
+    </>
   );
 }
