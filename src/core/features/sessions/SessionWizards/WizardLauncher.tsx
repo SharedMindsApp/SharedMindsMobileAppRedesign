@@ -5,6 +5,7 @@
 // entry triggers `launchWizard(id)`.
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Sparkles } from 'lucide-react';
 import { WIZARD_REGISTRY } from './registry';
 import type { WizardId } from './types';
@@ -48,11 +49,20 @@ export function WizardLauncher({ onLaunch }: Props) {
         <Sparkles size={15} />
       </button>
 
-      {open && (
-        <div
-          ref={panelRef}
-          className="absolute top-11 right-0 w-[300px] rounded-2xl bg-black/85 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 p-2 z-[70]"
-        >
+      {open && createPortal(
+        // Portaled to <body> so it escapes the session container's
+        // overflow-hidden + the header's backdrop-filter (which would trap a
+        // fixed/absolute child). Mobile = bottom sheet; desktop = top-right
+        // popover. This is what stops the panel overflowing off-screen on phones.
+        <div className="fixed inset-0 z-[120]" onClick={() => setOpen(false)}>
+          <div className="absolute inset-0 bg-black/40 sm:bg-transparent" />
+          <div
+            ref={panelRef}
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}
+            className="absolute left-0 right-0 bottom-0 w-full max-h-[78dvh] overflow-y-auto rounded-t-3xl sm:left-auto sm:right-4 sm:top-16 sm:bottom-auto sm:w-[320px] sm:rounded-2xl sm:max-h-[80vh] bg-black/90 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 p-2"
+          >
+          <div className="sm:hidden flex justify-center pt-1 pb-2"><span className="w-9 h-1 rounded-full bg-white/20" /></div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 px-2 py-1.5">
             Guided wizards · for everyone
           </p>
@@ -93,7 +103,9 @@ export function WizardLauncher({ onLaunch }: Props) {
           <p className="text-[10px] text-white/35 px-2 py-2 leading-snug">
             Everyone in this session sees the wizard. Participants can skip it locally without affecting others.
           </p>
-        </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
