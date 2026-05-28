@@ -32,6 +32,12 @@ const COLOR_LABELS: Record<string, string> = {
   emerald: 'Emerald',
   amber:   'Amber',
   rose:    'Rose',
+  indigo:  'Indigo',
+  sky:     'Sky',
+  teal:    'Teal',
+  lime:    'Lime',
+  orange:  'Orange',
+  fuchsia: 'Fuchsia',
 };
 
 type Props = {
@@ -50,8 +56,12 @@ type Props = {
 
 export function ProjectEditorModal({ project, members = [], onClose, onSaved, onArchived, onDeleted }: Props) {
   const { user } = useAuth();
-  const { state: { spaces }, refreshProjects } = useCoreData();
+  const { state: { spaces, projects }, refreshProjects } = useCoreData();
   const isNew = !project;
+  // Colours used by the user's OTHER active projects — flag duplicates.
+  const takenColours = new Set(
+    projects.filter((p) => p.status === 'active' && p.id !== project?.id && p.color).map((p) => p.color as string),
+  );
 
   const [title, setTitle] = useState(project?.title ?? '');
   const [description, setDescription] = useState(project?.description ?? '');
@@ -365,6 +375,7 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
             <div className="grid grid-cols-6 gap-2 mt-3">
               {Object.entries(PROJECT_COLORS).map(([key, meta]) => {
                 const selected = color === key;
+                const taken = takenColours.has(key);
                 return (
                   <button
                     key={key}
@@ -373,16 +384,22 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
                     className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
                     aria-label={COLOR_LABELS[key] ?? key}
                     aria-pressed={selected}
+                    title={taken ? `${COLOR_LABELS[key] ?? key} · used by another project` : undefined}
                   >
                     <div
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-shadow ${
+                      className={`relative w-11 h-11 rounded-2xl flex items-center justify-center transition-shadow ${
                         selected
                           ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md ' + meta.ring
-                          : 'shadow-sm'
+                          : taken ? 'shadow-sm opacity-55' : 'shadow-sm'
                       }`}
                       style={{ backgroundColor: meta.hex }}
                     >
                       {selected && <Check size={18} className="text-white" strokeWidth={3} />}
+                      {taken && !selected && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white ring-1 ring-slate-300 grid place-items-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        </span>
+                      )}
                     </div>
                     <span className={`text-[10px] font-bold ${
                       selected ? meta.textDark : 'stitch-text-secondary'
@@ -393,6 +410,11 @@ export function ProjectEditorModal({ project, members = [], onClose, onSaved, on
                 );
               })}
             </div>
+            {takenColours.has(color) && (
+              <p className="text-[11px] text-amber-700 mt-2 leading-snug">
+                Another project already uses this colour.
+              </p>
+            )}
           </section>
 
           {/* 3. Members (existing projects only) — preview avatar stack +

@@ -37,6 +37,12 @@ export const PROJECT_COLORS: Record<string, {
   emerald: { hex: '#10b981', soft: 'bg-emerald-50', ring: 'ring-emerald-400/40', gradient: 'from-emerald-500 to-teal-600',   textDark: 'text-emerald-700', bar: 'bg-emerald-500' },
   amber:   { hex: '#f59e0b', soft: 'bg-amber-50',   ring: 'ring-amber-400/40',   gradient: 'from-amber-400 to-orange-500',   textDark: 'text-amber-700',   bar: 'bg-amber-500' },
   rose:    { hex: '#f43f5e', soft: 'bg-rose-50',    ring: 'ring-rose-400/40',    gradient: 'from-rose-500 to-pink-600',      textDark: 'text-rose-700',    bar: 'bg-rose-500' },
+  indigo:  { hex: '#6366f1', soft: 'bg-indigo-50',  ring: 'ring-indigo-400/40',  gradient: 'from-indigo-500 to-blue-600',    textDark: 'text-indigo-700',  bar: 'bg-indigo-500' },
+  sky:     { hex: '#0ea5e9', soft: 'bg-sky-50',     ring: 'ring-sky-400/40',     gradient: 'from-sky-500 to-cyan-600',       textDark: 'text-sky-700',     bar: 'bg-sky-500' },
+  teal:    { hex: '#14b8a6', soft: 'bg-teal-50',    ring: 'ring-teal-400/40',    gradient: 'from-teal-500 to-emerald-600',   textDark: 'text-teal-700',    bar: 'bg-teal-500' },
+  lime:    { hex: '#84cc16', soft: 'bg-lime-50',    ring: 'ring-lime-400/40',    gradient: 'from-lime-500 to-emerald-500',   textDark: 'text-lime-700',    bar: 'bg-lime-500' },
+  orange:  { hex: '#f97316', soft: 'bg-orange-50',  ring: 'ring-orange-400/40',  gradient: 'from-orange-500 to-amber-600',   textDark: 'text-orange-700', bar: 'bg-orange-500' },
+  fuchsia: { hex: '#d946ef', soft: 'bg-fuchsia-50', ring: 'ring-fuchsia-400/40', gradient: 'from-fuchsia-500 to-pink-600',   textDark: 'text-fuchsia-700', bar: 'bg-fuchsia-500' },
 };
 
 export function projectColorMeta(token: string | null) {

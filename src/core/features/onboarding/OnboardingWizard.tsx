@@ -40,6 +40,8 @@ import { SpaceService } from '../../services/SpaceService';
 import { TaskService } from '../../services/TaskService';
 import { ReflectionService, mondayOf } from '../../services/ReflectionService';
 import { buildRoadmapValidationPrompt, parseRoadmapReply, buildTasksPrompt, parseTasksReply } from '../../../lib/roadmapPrompt';
+import { PROJECT_COLORS } from '../projects/ProjectsPage';
+import { useCoreData } from '../../data/CoreDataContext';
 import { AvatarCropper } from './AvatarCropper';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -616,14 +618,14 @@ const ALL_SKILLS: { emoji: string; label: string; category: SkillCategoryId }[] 
   { category: 'soft', emoji: '📖', label: 'Storytelling' },
 ];
 
-const PROJECT_COLOURS = [
-  { token: 'violet', hex: '#8b5cf6', label: 'Violet' },
-  { token: 'blue',   hex: '#3b82f6', label: 'Blue'   },
-  { token: 'cyan',   hex: '#22d3ee', label: 'Cyan'   },
-  { token: 'emerald',hex: '#10b981', label: 'Emerald' },
-  { token: 'amber',  hex: '#f59e0b', label: 'Amber'  },
-  { token: 'rose',   hex: '#f43f5e', label: 'Rose'   },
-];
+// Derived from the canonical PROJECT_COLORS so the wizard + editor + cards
+// never drift. Violet leads (the default), then the rest in palette order.
+const PROJECT_COLOURS: { token: string; hex: string; label: string }[] = (() => {
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const tokens = Object.keys(PROJECT_COLORS);
+  const ordered = ['violet', ...tokens.filter((t) => t !== 'violet')];
+  return ordered.map((token) => ({ token, hex: PROJECT_COLORS[token].hex, label: cap(token) }));
+})();
 
 /**
  * Build the "use your AI's existing context" prompt with the project
@@ -1028,6 +1030,13 @@ export function OnboardingWizard({
   }, [mode, projectTitle, projectBrainDump, projectColour, projectStartedStatus,
       projectCompletionPct, projectType, projectTargetDate, projectDeadlineFlex,
       milestoneInputs, taskInputs]);
+
+  // Colours already used by the user's active projects — so the picker can
+  // flag duplicates and avoid confusing same-coloured projects.
+  const { state: { projects } } = useCoreData();
+  const takenColours = new Set(
+    projects.filter((p) => p.status === 'active' && p.color).map((p) => p.color as string),
+  );
 
   function clearNewProjectDraft() {
     try { window.localStorage.removeItem(NEW_PROJECT_DRAFT_KEY); } catch { /* ignore */ }
@@ -2567,27 +2576,42 @@ export function OnboardingWizard({
           <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase block mb-3">
             Colour
           </label>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             {PROJECT_COLOURS.map(({ token, hex, label }, i) => {
               const selected = projectColour === token;
+              const taken = takenColours.has(token);
               return (
                 <button
                   key={token}
                   type="button"
                   onClick={() => setProjectColour(token)}
-                  title={label}
+                  title={taken ? `${label} · already used by another project` : label}
                   style={{
                     backgroundColor: hex,
                     boxShadow: selected ? `0 0 0 3px var(--surface, white), 0 0 0 6px ${hex}` : undefined,
                     animation: `wizPop 400ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 50}ms both`,
                   }}
-                  className={`w-10 h-10 rounded-full transition-all duration-200 active:scale-90 hover:scale-110 ${
+                  className={`relative w-10 h-10 rounded-full transition-all duration-200 active:scale-90 hover:scale-110 ${
                     selected ? 'scale-110' : ''
-                  }`}
-                />
+                  } ${taken && !selected ? 'opacity-55' : ''}`}
+                >
+                  {taken && (
+                    <span
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white ring-1 ring-slate-300 grid place-items-center"
+                      title="Used by another project"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    </span>
+                  )}
+                </button>
               );
             })}
           </div>
+          {takenColours.has(projectColour) && (
+            <p className="text-[11px] text-amber-700 mt-2 leading-snug">
+              Another project already uses this colour — pick a different one to keep them easy to tell apart.
+            </p>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2.5 mt-4">{error}</p>}
