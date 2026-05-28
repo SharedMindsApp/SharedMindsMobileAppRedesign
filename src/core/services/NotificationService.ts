@@ -174,13 +174,23 @@ export async function markAllRead(): Promise<number> {
  * so users can only delete their own.
  */
 export async function dismissNotification(notificationId: string): Promise<void> {
-  const { error } = await supabase
+  // `.select()` forces RETURNING so we can tell whether a row was actually
+  // deleted. Under RLS a DELETE with no permitting policy resolves without
+  // an error but affects 0 rows — we treat that as a failure so the caller
+  // rolls back its optimistic remove instead of the row silently reappearing.
+  const { data, error } = await supabase
     .from('notifications')
     .delete()
-    .eq('id', notificationId);
+    .eq('id', notificationId)
+    .select('id');
   if (error) {
     console.error('[NotificationService] dismissNotification:', error);
     throw error;
+  }
+  if (!data || data.length === 0) {
+    const msg = 'dismissNotification deleted 0 rows — RLS delete policy missing or row not owned';
+    console.error('[NotificationService]', msg);
+    throw new Error(msg);
   }
 }
 
