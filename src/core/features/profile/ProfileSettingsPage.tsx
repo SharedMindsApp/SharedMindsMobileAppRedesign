@@ -976,6 +976,28 @@ function NotificationPreferencesPanel() {
     }
   }
 
+  // One-tap opt-out of every non-essential email category. Essential
+  // mail (password reset, email confirmation, account/security) is
+  // transactional and isn't governed by these flags, so it keeps
+  // sending regardless — that's by design and legally fine.
+  const ALL_EMAIL_KEYS: (keyof NotificationPreferences)[] = [
+    'email_session_reminders', 'email_messages', 'email_post_replies',
+    'email_connection_requests', 'email_weekly_review', 'email_onboarding',
+    'email_community_sessions', 'email_marketing',
+  ];
+  async function turnOffAllOptionalEmail() {
+    if (!prefs) return;
+    const patch = Object.fromEntries(ALL_EMAIL_KEYS.map((k) => [k, false])) as Partial<NotificationPreferences>;
+    const prev = prefs;
+    setPrefs({ ...prefs, ...patch });
+    try {
+      await updatePreferences(patch);
+    } catch {
+      setPrefs(prev);
+    }
+  }
+  const anyOptionalEmailOn = !!prefs && ALL_EMAIL_KEYS.some((k) => !!prefs[k]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -1224,6 +1246,23 @@ function NotificationPreferencesPanel() {
             );
           })}
         </div>
+      </div>
+
+      {/* ── One-tap opt-out + essential-email explainer ── */}
+      <div className="mt-4 pt-4 border-t border-surface-container/50 px-3">
+        <button
+          type="button"
+          onClick={turnOffAllOptionalEmail}
+          disabled={!anyOptionalEmailOn}
+          className="w-full px-4 py-2.5 rounded-xl bg-surface-container-low hover:bg-surface-container stitch-text-primary text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {anyOptionalEmailOn ? 'Turn off all optional emails' : 'All optional emails are off'}
+        </button>
+        <p className="text-[11px] stitch-text-secondary mt-2.5 leading-relaxed">
+          You'll still receive <span className="font-semibold stitch-text-primary">essential account emails</span> — sign-in
+          confirmation, password resets, security alerts and account-deletion confirmations. These are required to run
+          your account and can't be turned off. Every other email also has a one-click unsubscribe link in its footer.
+        </p>
       </div>
     </div>
   );

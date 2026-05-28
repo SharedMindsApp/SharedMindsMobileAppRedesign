@@ -386,7 +386,7 @@ export function PrivacyPolicyPage() {
         <li><strong>Restriction (Art. 18)</strong> — pause processing while a complaint is resolved</li>
         <li><strong>Portability (Art. 20)</strong> — download all your data as JSON from Settings → Your data → Download my data</li>
         <li><strong>Object (Art. 21)</strong> — object to legitimate-interest processing</li>
-        <li><strong>Withdraw consent (Art. 7(3))</strong> — for any consent-based processing</li>
+        <li><strong>Withdraw consent (Art. 7(3))</strong> — for any consent-based processing. Manage every email category in Settings → Notifications, use the one-click unsubscribe link in any email footer, or tap "Turn off all optional emails". Essential account emails (security, password resets) always send.</li>
         <li><strong>Automated decision-making (Art. 22)</strong> — request human review (see above)</li>
       </ul>
       <p>

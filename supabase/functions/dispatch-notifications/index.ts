@@ -40,6 +40,7 @@ interface NotificationRow {
   display_name: string;
   timezone: string | null;
   last_seen_at: string | null;
+  unsubscribe_token: string | null;
   user_email: string;
   email_session_reminders: boolean | null;
   email_messages: boolean | null;
@@ -137,8 +138,9 @@ function buildEmail(params: {
   displayName: string;
   appUrl: string;
   settingsUrl: string;
+  unsubscribeUrl: string | null;
 }): { subject: string; html: string } {
-  const { notificationType, title, body, deepLink, displayName, appUrl, settingsUrl } = params;
+  const { notificationType, title, body, deepLink, displayName, appUrl, settingsUrl, unsubscribeUrl } = params;
   const accent = accentColor(notificationType);
   const ctaUrl = deepLink ? `${appUrl}${deepLink}` : appUrl;
 
@@ -222,7 +224,9 @@ function buildEmail(params: {
               <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">
                 Hi ${escapeHtml(displayName)} — you're receiving this because you're a SharedMinds member.
                 <br/>
-                <a href="${settingsUrl}" style="color:#64748b;text-decoration:underline;">Manage notification settings</a>
+                <a href="${settingsUrl}" style="color:#64748b;text-decoration:underline;">Manage notification settings</a>${unsubscribeUrl ? `
+                &nbsp;·&nbsp;
+                <a href="${unsubscribeUrl}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a>` : ''}
               </p>
             </td>
           </tr>
@@ -318,7 +322,7 @@ Deno.serve(async (req: Request) => {
     .select(`
       id, user_id, type, title, body, related_id, deep_link,
       read_at, email_sent_at, email_status, scheduled_for, created_at,
-      profiles!inner ( display_name, timezone, last_seen_at )
+      profiles!inner ( display_name, timezone, last_seen_at, email_unsubscribe_token )
     `)
     .is('email_sent_at', null)
     .not('email_status', 'in', '("sent","failed","skipped","digest_queued")')
@@ -366,6 +370,7 @@ Deno.serve(async (req: Request) => {
       display_name: (profile['display_name'] as string) ?? 'there',
       timezone: profile['timezone'] as string | null,
       last_seen_at: profile['last_seen_at'] as string | null,
+      unsubscribe_token: (profile['email_unsubscribe_token'] as string | null) ?? null,
       user_email: '',
       email_session_reminders: prefs['email_session_reminders'] as boolean | null,
       email_messages: prefs['email_messages'] as boolean | null,
@@ -486,6 +491,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Build the login-free unsubscribe URL for this notification's
+    // email category (falls back to 'all' if the type has no mapped
+    // preference key). Requires the user's opaque token.
+    const unsubCategory = TYPE_TO_PREFERENCE[row.type] ?? 'all';
+    const unsubscribeUrl = row.unsubscribe_token
+      ? `${supabaseUrl}/functions/v1/email-unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}&cat=${encodeURIComponent(unsubCategory)}`
+      : null;
+
     // Send via Resend
     const { subject, html } = buildEmail({
       notificationType: row.type,
@@ -495,7 +508,18 @@ Deno.serve(async (req: Request) => {
       displayName: row.display_name,
       appUrl,
       settingsUrl,
+      unsubscribeUrl,
     });
+
+    // RFC 8058 one-click unsubscribe headers (required by Gmail/Yahoo
+    // bulk-sender rules). List-Unsubscribe-Post tells the mail client
+    // it can POST to the URL to unsubscribe without opening a browser.
+    const emailHeaders: Record<string, string> = unsubscribeUrl
+      ? {
+          'List-Unsubscribe': `<${unsubscribeUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }
+      : {};
 
     let sendOk = false;
     try {
@@ -510,6 +534,7 @@ Deno.serve(async (req: Request) => {
           to: [userEmail],
           subject,
           html,
+          headers: emailHeaders,
         }),
       });
 
