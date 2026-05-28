@@ -9,6 +9,7 @@ import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { startCommunitySession, createScheduledSession, fetchConflictingSessions } from '../../services/SessionService';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
+import { TaskLoadBadge } from '../../ui/TaskLoadBadge';
 import { InputWell } from '../../ui/CorePage';
 import { taskUrgency } from '../../../lib/taskUrgency';
 import { SESSION_KINDS, type SessionKind } from '../../../lib/sessionMood';
@@ -1410,13 +1411,13 @@ function TaskRow({
           <span className="block text-sm font-medium stitch-text-primary leading-snug truncate">
             {task.title}
           </span>
-          {/* Chip row: urgency + intention badge + session count */}
+          {/* Chip row: energy level + urgency + intention badge + session count */}
           {(() => {
             const u = taskUrgency(task);
             const showUrgency = u.kind === 'overdue' || u.kind === 'due-today' || u.kind === 'due-soon' || u.kind === 'today';
-            if (!showUrgency && !task.weeklyIntentionId && sessions === 0) return null;
             return (
-            <div className="flex items-center gap-1 mt-0.5">
+            <div className="flex items-center flex-wrap gap-1 mt-1">
+              <TaskLoadBadge load={task.energy} />
               {showUrgency && (
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${u.tone}`}>
                   {u.label}
