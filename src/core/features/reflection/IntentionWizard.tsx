@@ -230,7 +230,9 @@ export function IntentionWizard({
         </div>
 
         {/* ── Body ───────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-5 py-6 min-h-0">
+        {/* Vertically centred + compact so each step fits without scrolling;
+            overflow-y-auto stays only as a safety net for very short screens. */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0 flex flex-col justify-center">
           {loading ? (
             <div className="flex items-center justify-center py-12 stitch-text-secondary">
               <Loader2 size={20} className="animate-spin" />
@@ -332,9 +334,9 @@ export function IntentionWizard({
 
 function WelcomeStep({ filledCount, weekStart }: { filledCount: number; weekStart: string }) {
   return (
-    <div className="max-w-md mx-auto text-center py-6">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-200/40 flex items-center justify-center mx-auto mb-5">
-        <Target size={28} className="text-primary" strokeWidth={1.75} />
+    <div className="max-w-md mx-auto text-center">
+      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-200/40 flex items-center justify-center mx-auto mb-4">
+        <Target size={26} className="text-primary" strokeWidth={1.75} />
       </div>
       <h3 className="stitch-headline text-2xl sm:text-3xl font-extrabold tracking-tight mb-3">
         Three intentions for the week of {formatWeekRange(weekStart)}.
@@ -382,12 +384,12 @@ function IntentionStep({
   const labelContent = labels[slot];
 
   return (
-    <div className="max-w-lg mx-auto py-2 space-y-5">
+    <div className="max-w-lg mx-auto w-full space-y-4">
       <div>
-        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5">
           Intention {slot + 1} of 3 {required ? '· required' : '· optional'}
         </p>
-        <h3 className="stitch-headline text-xl sm:text-2xl font-extrabold tracking-tight leading-tight mb-2">
+        <h3 className="stitch-headline text-xl sm:text-2xl font-extrabold tracking-tight leading-tight mb-1.5">
           {labelContent.heading}
         </h3>
         <p className="text-sm stitch-text-secondary leading-relaxed">
@@ -417,7 +419,7 @@ function IntentionStep({
           onChange={(v) => onChange({ note: v })}
           placeholder="What does done look like? Why this week?"
           multiline
-          rows={3}
+          rows={2}
         />
       </div>
 
@@ -480,7 +482,7 @@ function ReviewStep({
   const filled = drafts.filter((d) => d.title.trim().length > 0);
 
   return (
-    <div className="max-w-lg mx-auto py-2">
+    <div className="max-w-lg mx-auto w-full">
       <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
         Locking in
       </p>
@@ -551,7 +553,7 @@ function ReviewStep({
 
 function DoneStep({ filledCount }: { filledCount: number }) {
   return (
-    <div className="max-w-md mx-auto text-center py-10">
+    <div className="max-w-md mx-auto text-center">
       <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-500/30">
         <Check size={36} className="text-white" strokeWidth={3} />
       </div>
