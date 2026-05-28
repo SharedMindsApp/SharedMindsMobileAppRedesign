@@ -201,7 +201,7 @@ function avatarHashClass(name: string): string {
 
 // ── Unified session row (active OR scheduled) ───────────────────
 
-type GridSession = {
+export type GridSession = {
   id: string;
   user_id: string;
   partner_user_id?: string | null;
@@ -250,7 +250,7 @@ function toGridSession(s: CommunitySession): GridSession {
   };
 }
 
-function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
+export function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
   return {
     id: s.id,
     user_id: s.user_id,
@@ -1473,7 +1473,7 @@ function ActiveSessionBanner({
 
 // ── Session detail sheet ────────────────────────────────────────
 
-function SessionDetailSheet({
+export function SessionDetailSheet({
   session, isMine, onClose, onJoined, onChanged,
 }: {
   session: GridSession;

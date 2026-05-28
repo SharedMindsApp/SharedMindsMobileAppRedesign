@@ -17,7 +17,7 @@
  * scheduled it.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Sun, Sparkles, ArrowRight, Plus,
@@ -36,6 +36,13 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useCoreData } from '../../data/CoreDataContext';
 import { IntentionWizard } from '../reflection/IntentionWizard';
 import { fetchUpcomingScheduledSessions, type ScheduledSessionWithProfile } from '../../services/SessionService';
+import type { GridSession } from '../sessions/CalendarView';
+
+// The session detail sheet lives in CalendarView (the /sessions route chunk).
+// Lazy-load it so opening a session on home pulls that chunk on demand rather
+// than bundling the whole calendar into the home page.
+const SessionDetailSheet = lazy(() =>
+  import('../sessions/CalendarView').then((m) => ({ default: m.SessionDetailSheet })));
 
 /** Project colour tokens → hex, matching the widgets used elsewhere. */
 const PROJECT_HEX: Record<string, string> = {
@@ -58,6 +65,8 @@ interface PlannerSession {
   status: 'scheduled' | 'completed';
   /** Resolved hex for the pinned project, or null when unscoped. */
   projectHex: string | null;
+  /** The source row, so a click can open the shared SessionDetailSheet. */
+  raw: ScheduledSessionWithProfile;
 }
 
 function toPlannerSession(s: ScheduledSessionWithProfile): PlannerSession {
@@ -68,6 +77,33 @@ function toPlannerSession(s: ScheduledSessionWithProfile): PlannerSession {
     title: s.session_title ?? s.session_goal ?? 'Focus session',
     status: ((s as { status?: string }).status === 'completed' ? 'completed' : 'scheduled'),
     projectHex: resolveProjectHex(s.project?.color),
+    raw: s,
+  };
+}
+
+/** Map a planner session's raw row → the GridSession the detail sheet wants.
+ *  Mirrors CalendarView.toGridScheduled (kept local so the home chunk doesn't
+ *  statically import the calendar module). */
+function plannerToGrid(s: ScheduledSessionWithProfile): GridSession {
+  const a = s as Record<string, unknown>;
+  return {
+    id: s.id,
+    user_id: s.user_id,
+    partner_user_id: (a.partner_user_id as string) ?? null,
+    display_name: s.display_name,
+    avatar_url: s.avatar_url ?? null,
+    session_goal: s.session_goal,
+    session_title: s.session_title,
+    session_mode: (a.session_mode as GridSession['session_mode']) ?? 'group',
+    quiet_mode: !!a.quiet_mode,
+    intended_duration_minutes: s.intended_duration_minutes ?? 50,
+    startsAt: new Date((a.scheduled_at as string) ?? s.start_time),
+    status: 'scheduled',
+    project_id: s.project_id ?? null,
+    project_title: s.project?.title ?? null,
+    project_color: s.project?.color ?? null,
+    is_quick_timer: !!a.is_quick_timer,
+    segments: (a.segments as GridSession['segments']) ?? null,
   };
 }
 
@@ -496,11 +532,12 @@ function WeekGoalsSidebar({
 function WeekTimeline({
   weekDays, weekBlocks, weekSessions, todayKey, currentHour, currentMin,
   nowLabel, showNowLine, nowYpx,
-  onToggle, onStart, onDelete, onSwitchToDay,
+  onToggle, onStart, onDelete, onSwitchToDay, onSelectSession,
 }: {
   weekDays: WeekDay[];
   weekBlocks: TimeBlock[];
   weekSessions: PlannerSession[];
+  onSelectSession: (ps: PlannerSession) => void;
   todayKey: string;
   currentHour: number;
   currentMin: number;
@@ -655,7 +692,11 @@ function WeekTimeline({
                   return (
                     <div
                       key={ps.id}
-                      className={`absolute left-1 right-1 rounded-lg pl-2 pr-1.5 py-1 overflow-hidden ${completed ? '' : 'opacity-90'}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectSession(ps)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') onSelectSession(ps); }}
+                      className={`absolute left-1 right-1 rounded-lg pl-2 pr-1.5 py-1 overflow-hidden cursor-pointer hover:brightness-[0.97] hover:z-10 transition ${completed ? '' : 'opacity-90'}`}
                       style={{ ...style, top: `${sessionTopPx(ps.startsAt)}px`, height: `${sessionHeightPx(ps.durationMins)}px` }}
                       title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
                     >
@@ -709,6 +750,7 @@ export function TodayPlannerCard({
   const { user } = useAuth();
   const { state: { spaces } } = useCoreData();
   const personalSpace = spaces.find((s) => s.type === 'personal');
+  const navigate = useNavigate();
 
   const now = useMemo(() => new Date(), []);
   const today = todayKey();
@@ -746,21 +788,22 @@ export function TodayPlannerCard({
   // The planner shows your editable time blocks; this lays your actual
   // sessions on top so the calendar reflects work done, like /sessions.
   const [plannerSessions, setPlannerSessions] = useState<PlannerSession[]>([]);
-  useEffect(() => {
+  // The session whose detail sheet is open (clicked from the grid).
+  const [selectedGridSession, setSelectedGridSession] = useState<GridSession | null>(null);
+
+  const reloadSessions = useCallback(async () => {
     if (!user) return;
-    let cancelled = false;
-    fetchUpcomingScheduledSessions(user.id)
-      .then((rows) => {
-        if (cancelled) return;
-        // Only MY sessions on my personal planner (host or partner).
-        const mine = rows
-          .filter((s) => s.user_id === user.id || (s as { partner_user_id?: string }).partner_user_id === user.id)
-          .map(toPlannerSession);
-        setPlannerSessions(mine);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    try {
+      const rows = await fetchUpcomingScheduledSessions(user.id);
+      // Only MY sessions on my personal planner (host or partner).
+      const mine = rows
+        .filter((s) => s.user_id === user.id || (s as { partner_user_id?: string }).partner_user_id === user.id)
+        .map(toPlannerSession);
+      setPlannerSessions(mine);
+    } catch { /* leave current */ }
   }, [user]);
+
+  useEffect(() => { void reloadSessions(); }, [reloadSessions]);
 
   // Sessions on the day-view's selected day (parse YYYY-MM-DD as local).
   const daySessions = useMemo(() => {
@@ -1226,7 +1269,11 @@ export function TodayPlannerCard({
                           return (
                             <div
                               key={ps.id}
-                              className={`relative flex items-center gap-1.5 rounded-lg pl-3 pr-2 py-1.5 mb-1 ${completed ? '' : 'opacity-90'}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setSelectedGridSession(plannerToGrid(ps.raw))}
+                              onKeyDown={(e) => { if (e.key === 'Enter') setSelectedGridSession(plannerToGrid(ps.raw)); }}
+                              className={`relative flex items-center gap-1.5 rounded-lg pl-3 pr-2 py-1.5 mb-1 cursor-pointer hover:brightness-[0.97] active:scale-[0.99] transition ${completed ? '' : 'opacity-90'}`}
                               style={style}
                               title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
                             >
@@ -1285,6 +1332,7 @@ export function TodayPlannerCard({
               onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
               onDelete={handleDelete}
               onSwitchToDay={(d) => { setSelectedDateStr(d); setViewMode('day'); }}
+              onSelectSession={(ps) => setSelectedGridSession(plannerToGrid(ps.raw))}
             />
           )}
 
@@ -1303,6 +1351,19 @@ export function TodayPlannerCard({
       {/* Find sessions sheet (modal on desktop, bottom-sheet on mobile) */}
       {showFindSessions && (
         <FindSessionsSheet onClose={() => setShowFindSessions(false)} />
+      )}
+
+      {/* Session detail — same sheet as the /sessions calendar, on click */}
+      {selectedGridSession && (
+        <Suspense fallback={null}>
+          <SessionDetailSheet
+            session={selectedGridSession}
+            isMine={selectedGridSession.user_id === user?.id}
+            onClose={() => setSelectedGridSession(null)}
+            onJoined={(id) => { setSelectedGridSession(null); navigate(`/session/${id}`); }}
+            onChanged={() => { void reloadSessions(); }}
+          />
+        </Suspense>
       )}
     </>
   );
