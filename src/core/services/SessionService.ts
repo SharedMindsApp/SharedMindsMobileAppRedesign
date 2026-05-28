@@ -1,6 +1,7 @@
 import { supabase } from '../../lib/supabase';
 import type { FocusSession, CommunitySession, SessionOutcome } from '../../lib/sessions/focusTypes';
 import { armSkillsPrompt } from '../../lib/skillsPrompt';
+import { getAuthedUser } from '../../lib/authUser';
 
 export interface CreateScheduledSessionInput {
   title: string;
@@ -977,7 +978,12 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
  *  first (gives the still-fresh sessions priority; very old ones get
  *  deprioritised because the host is probably deep in flow). */
 export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]> {
-  const { data, error } = await supabase
+  // Never offer the user their OWN open door — you can't drop into your own
+  // session (claim_open_session rejects self-claims), so showing it just
+  // produces a misleading "that session filled up" when tapped.
+  const me = await getAuthedUser();
+
+  let query = supabase
     .from('focus_sessions')
     .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'active')
@@ -985,6 +991,9 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
     .is('partner_user_id', null)
     .order('start_time', { ascending: false })
     .limit(limit);
+  if (me) query = query.neq('user_id', me.id);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('[fetchOpenSessions] query failed:', error);
