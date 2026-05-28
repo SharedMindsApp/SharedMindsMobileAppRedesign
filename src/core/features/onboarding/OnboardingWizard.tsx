@@ -754,11 +754,14 @@ function StepShell({
   step,
   canGoBack,
   onBack,
+  onClose,
   children,
 }: {
   step: Step;
   canGoBack: boolean;
   onBack: () => void;
+  /** When provided (newProject mode), shows an X to exit the wizard. */
+  onClose?: () => void;
   children: React.ReactNode;
 }) {
   const visibleIndex = COUNTED_STEPS.indexOf(step === 'set_intentions' ? 'intentions' : step);
@@ -796,8 +799,18 @@ function StepShell({
           className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest"
           style={{ animation: 'wizFadeIn 300ms ease-out both' }}
         >
-          Step {Math.max(1, visibleIndex + 1)} of {total}
+          {onClose ? 'New project' : `Step ${Math.max(1, visibleIndex + 1)} of ${total}`}
         </span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto w-9 h-9 rounded-full flex items-center justify-center bg-surface-container-low hover:bg-surface-container stitch-text-secondary transition-all active:scale-90"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       {/* Scrollable content — keyed by step so each transition replays the anim */}
@@ -816,11 +829,25 @@ function StepShell({
 
 // ── Main component ─────────────────────────────────────────────────
 
-export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
+export function OnboardingWizard({
+  onComplete,
+  mode = 'onboarding',
+  onProjectCreated,
+}: {
+  /** In onboarding mode: navigate the user into the app. In newProject mode:
+   *  the close/cancel handler (X button). */
+  onComplete: () => void;
+  /** 'onboarding' = full first-run flow. 'newProject' = launched from
+   *  /projects to set up a single project (starts at the project step,
+   *  skips profile/skills, doesn't touch onboarding state). */
+  mode?: 'onboarding' | 'newProject';
+  /** newProject only — fires with the new project's id once created. */
+  onProjectCreated?: (projectId: string) => void;
+}) {
   const { profile, refreshProfile } = useAuth();
 
   // ── Step state ─────────────────────────────────────────────────
-  const [step, setStep] = useState<Step>('welcome');
+  const [step, setStep] = useState<Step>(mode === 'newProject' ? 'project' : 'welcome');
   /** Stack of previous steps for the back button. Pushed on every forward
    *  navigation; popped (and applied) when the user taps Back. Tracking this
    *  explicitly is the cleanest way to handle the conditional `set_intentions`
@@ -1405,11 +1432,15 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       } as any);
     }
 
-    // 4. Stamp wizard complete
-    await supabase.from('profiles').update({
-      wizard_v2_completed_at: new Date().toISOString(),
-    }).eq('id', user.id);
-  }, [projectTitle, projectBrainDump, projectColour, projectStartedStatus,
+    // 4. Stamp wizard complete — onboarding only. A standalone new-project
+    //    run from /projects must not toggle the user's onboarding state.
+    if (mode === 'onboarding') {
+      await supabase.from('profiles').update({
+        wizard_v2_completed_at: new Date().toISOString(),
+      }).eq('id', user.id);
+    }
+    return project;
+  }, [mode, projectTitle, projectBrainDump, projectColour, projectStartedStatus,
       projectCompletionPct, projectType, projectTargetDate, projectDeadlineFlex,
       milestoneInputs, taskInputs]);
 
@@ -1455,6 +1486,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     setError(null);
     setSaving(true);
     try {
+      // newProject mode: just create the project (+ milestones/tasks) and hand
+      // the id back to the caller. No onboarding stamp, no celebration screen,
+      // no app navigation — the parent closes the wizard + routes.
+      if (mode === 'newProject') {
+        const project = await saveProjectAndComplete();
+        if (project) onProjectCreated?.(project.id);
+        return;
+      }
       // Minimum-dwell so the celebration screen is actually visible —
       // the save + profile refresh together run in ~200–400ms which
       // isn't long enough for the pop, fade-ups, and ambient float to
@@ -2232,7 +2271,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   // ── 6. First project ──────────────────────────────────────────
   if (step === 'project') {
     return (
-      <StepShell step="project" canGoBack={stepHistory.length > 0} onBack={goBack}>
+      <StepShell step="project" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
         <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center mb-4">
           <Target size={18} className="text-amber-600" />
         </div>
@@ -2398,7 +2437,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   if (step === 'project_shape') {
     const today = new Date().toISOString().slice(0, 10);
     return (
-      <StepShell step="project_shape" canGoBack={stepHistory.length > 0} onBack={goBack}>
+      <StepShell step="project_shape" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
         <div className="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center mb-4">
           <Briefcase size={18} className="text-cyan-600" />
         </div>
@@ -2587,7 +2626,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     const gutDelta = filledMilestones.length > 0 ? Math.abs(projectDoneRounded - gutEstimate) : 0;
 
     return (
-      <StepShell step="goals" canGoBack={stepHistory.length > 0} onBack={goBack}>
+      <StepShell step="goals" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
         <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center mb-4">
           <Flag size={18} className="text-violet-600" />
         </div>
@@ -2950,7 +2989,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
   if (step === 'tasks') {
     const filledTasks = taskInputs.filter((t) => t.trim());
     return (
-      <StepShell step="tasks" canGoBack={stepHistory.length > 0} onBack={goBack}>
+      <StepShell step="tasks" canGoBack={stepHistory.length > 0} onBack={goBack} onClose={mode === 'newProject' ? onComplete : undefined}>
         <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center mb-4">
           <CheckSquare size={18} className="text-emerald-600" />
         </div>

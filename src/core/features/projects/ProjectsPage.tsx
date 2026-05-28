@@ -5,16 +5,21 @@
  * progress bar, session tally, member avatar stack, active pin badge.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Users, CheckCircle2, Archive, Zap, MoreVertical, Trash2, Pencil, Flag, Layers } from 'lucide-react';
 import { ProjectService, type ProjectStats } from '../../services/ProjectService';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreProject } from '../../data/CoreDataContext';
 import { PageGreeting, GradientButton } from '../../ui/CorePage';
-import { ProjectEditorModal } from './ProjectEditorModal';
 import { CoverImage } from './CoverImage';
 import { DeleteProjectConfirm } from './DeleteProjectConfirm';
+
+// The "New project" flow reuses the full guided wizard (project + AI roadmap)
+// in newProject mode. Lazy so its weight isn't on the Projects list chunk.
+const NewProjectWizard = lazy(() =>
+  import('../onboarding/OnboardingWizard').then((m) => ({ default: m.OnboardingWizard })));
 
 // ── Color tokens (match the editor modal swatches) ───────────────
 
@@ -139,14 +144,18 @@ export function ProjectsPage() {
         </div>
       )}
 
-      {editorOpen && (
-        <ProjectEditorModal
-          onClose={() => setEditorOpen(false)}
-          onSaved={(p) => {
-            setEditorOpen(false);
-            refreshProjects().then(() => navigate(`/projects/${p.id}`));
-          }}
-        />
+      {editorOpen && createPortal(
+        <Suspense fallback={null}>
+          <NewProjectWizard
+            mode="newProject"
+            onComplete={() => setEditorOpen(false)}
+            onProjectCreated={(id) => {
+              setEditorOpen(false);
+              refreshProjects().then(() => navigate(`/projects/${id}`));
+            }}
+          />
+        </Suspense>,
+        document.body,
       )}
 
       {pendingDelete && (
