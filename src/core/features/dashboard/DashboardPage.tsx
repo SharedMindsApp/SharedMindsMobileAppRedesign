@@ -22,7 +22,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Check, Flame, CheckCircle2, Plus, Target, Users, Flag, Layers, RotateCcw,
+  ArrowRight, Check, CheckCircle2, Plus, Target, Users, Flag, Layers, RotateCcw,
 } from 'lucide-react';
 import { isMorning, morningPromptSeenToday, markMorningPromptSeen } from '../../../lib/reentry';
 import { ProjectService, type ProjectStats } from '../../services/ProjectService';
@@ -71,10 +71,9 @@ const ReEntryWizard = lazy(() =>
 import { PulsePeopleTab } from './PulsePeopleTab';
 // OnboardingChecklist + ProfileCompletenessCard removed — the wizard now
 // handles all setup before the user reaches the home screen.
-import { FoundingMemberBadge } from './FoundingMemberBadge';
 import { WeeklyReviewPromptCard } from './WeeklyReviewPromptCard';
 import { FirstWeekIntentionsCard, useFirstWeekIntentionsEligible } from './FirstWeekIntentionsCard';
-import { deriveMomentum, momentumChipClasses } from './momentum';
+import { deriveMomentum } from './momentum';
 import { QuickRestartCard } from './QuickRestartCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
 import { supabase } from '../../../lib/supabase';
@@ -103,11 +102,6 @@ function formatTimeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-const WORK_TYPE_LABELS: Record<string, string> = {
-  designer: 'Designer', developer: 'Developer', writer: 'Writer / Creator',
-  founder: 'Founder', filmmaker: 'Filmmaker / Producer', marketer: 'Marketer',
-  consultant: 'Consultant', researcher: 'Researcher', other: 'Creative',
-};
 
 const OUTCOME_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   finished: { label: 'Finished', bg: 'bg-emerald-100', text: 'text-emerald-700' },
@@ -444,35 +438,9 @@ export function DashboardPage() {
   const [hasAnySession, setHasAnySession] = useState<boolean | null>(null);
   const [lastActiveAt, setLastActiveAt] = useState<string | null>(null);
 
-  // Current streak (consecutive UTC days of completed sessions, ≥2).
-  // Fetched independently of the bundled dashboard RPC because (a) the
-  // computation is in its own RPC `current_streak()` shipped in
-  // 20260527000022, and (b) it needs to refresh whenever a session
-  // completes — which the bundled RPC doesn't reactively know about.
-  const [streakDays, setStreakDays] = useState<number>(0);
-  // Cold-load perf: the bundled fetchHomeDashboard RPC already returns
-  // currentStreak, so we seed streakDays from it (below) and DON'T fire the
-  // standalone current_streak RPC on first mount — that was a duplicate query
-  // in the cold-load storm. We only call it on a *subsequent* session-end
-  // (activeSession id change) to refresh the streak reactively.
-  const streakInitRef = useRef(false);
-  useEffect(() => {
-    if (!user?.id) return;
-    // Skip the very first run — the home RPC seeds the streak.
-    if (!streakInitRef.current) { streakInitRef.current = true; return; }
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase.rpc('current_streak');
-      if (cancelled) return;
-      if (error) {
-        console.warn('[DashboardPage] current_streak failed:', error);
-        return;
-      }
-      const row = Array.isArray(data) ? data[0] : data;
-      setStreakDays((row?.days as number) ?? 0);
-    })();
-    return () => { cancelled = true; };
-  }, [user?.id, activeSession?.id]);
+  // (Streak state + its reactive current_streak RPC were removed with the
+  //  hero chip row — the qualitative momentum band, derived from the bundled
+  //  RPC's currentStreak, is all the home surface still uses.)
 
   // Profile-completion modal trigger: first dashboard load after the
   // user has completed ≥1 session, when country/bio are still blank and
@@ -527,10 +495,9 @@ export function DashboardPage() {
       setMyShips(dash.recentShips);
       setWeekSessions(dash.weekSessions);
       setLastActiveAt(dash.lastActiveAt);
-      setStreakDays(dash.currentStreak ?? 0);
-      // Synthesize a partial ProfileStats from the home RPC for the
-      // identity chips. Full stats (best day/week, longest streak, etc.)
-      // still loads lazily when the user opens the Stats tab.
+      // Synthesize a partial ProfileStats from the home RPC (drives the
+      // momentum band + the Stats tab seed). Full stats (best day/week,
+      // longest streak, etc.) still loads lazily when the Stats tab opens.
       setStats({
         totalSessions:     dash.totalSessions,
         completedSessions: dash.totalSessions,
@@ -555,7 +522,6 @@ export function DashboardPage() {
   }, [user?.id]);
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';
-  const workTypeLabel = profile?.work_type ? WORK_TYPE_LABELS[profile.work_type] : null;
   // Day-zero decision uses the cheap count check. Stays null while that
   // tiny query is in flight (~10ms typically) so we don't flicker the
   // wrong branch into view first.
@@ -734,51 +700,10 @@ export function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Identity + momentum chips */}
-          <div className="flex flex-wrap items-center gap-2">
-            <FoundingMemberBadge createdAt={(profile as any)?.created_at} />
-            {workTypeLabel && (
-              <span className="text-xs font-semibold text-primary bg-primary/8 px-2.5 py-1 rounded-full">
-                {workTypeLabel}
-              </span>
-            )}
-            {/* Momentum chip — forgiving warmth band, never a streak count.
-                A single missed day shifts the band gently, never resets it. */}
-            {momentum && momentum.band !== 'building' && (() => {
-              const cls = momentumChipClasses(momentum.band);
-              return (
-                <span
-                  className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${cls.bg} ${cls.text}`}
-                  title={momentum.hint}
-                >
-                  <Flame size={11} /> {momentum.label}
-                </span>
-              );
-            })()}
-            {/* Streak chip — precise counter that complements the
-                qualitative momentum band. Only shown when ≥ 2 (the
-                RPC returns 0 below that threshold so "1 day streak"
-                never appears). Warm orange tones match the
-                streak_at_risk notification icon. */}
-            {streakDays >= 2 && (
-              <span
-                className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700"
-                title={`${streakDays} consecutive days with a completed session`}
-              >
-                <Flame size={11} /> {streakDays}-day streak
-              </span>
-            )}
-            {stats && stats.totalSessions > 0 && (
-              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-                {stats.totalSessions} session{stats.totalSessions !== 1 ? 's' : ''}
-              </span>
-            )}
-            {stats && stats.completionRate > 0 && (
-              <span className="text-xs font-semibold stitch-text-secondary bg-surface-container-low px-2.5 py-1 rounded-full">
-                {stats.completionRate}% finish rate
-              </span>
-            )}
-          </div>
+          {/* (Identity + momentum chips removed from the hero — passive
+              vanity/identity belongs on Profile, and the session/finish
+              counts already live in the Stats tab. Keeps the home hero
+              focused on action, not status.) */}
 
           {/* ── Day-0 vs Returning split ──────────────────────── */}
           {isDayZero ? (
