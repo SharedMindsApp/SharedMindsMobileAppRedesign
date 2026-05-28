@@ -162,28 +162,28 @@ export const ReflectionService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Insert-if-absent. On conflict this does nothing and returns no row.
-    const { data: inserted, error: upsertErr } = await supabase
+    // Insert-if-absent. No .select() here on purpose: with
+    // ignoreDuplicates an ignored insert returns no representation, and
+    // chaining .select().maybeSingle() onto that 0-row response makes
+    // PostgREST answer 406. So we fire-and-forget the upsert, then read
+    // the row back in a separate query (guaranteed to exist either way).
+    const { error: upsertErr } = await supabase
       .from('weekly_reflections')
       .upsert(
         { user_id: user.id, week_start: weekStart, status: 'planning' },
         { onConflict: 'user_id,week_start', ignoreDuplicates: true },
-      )
-      .select()
-      .maybeSingle();
+      );
     if (upsertErr) throw upsertErr;
-    if (inserted) return inserted as WeeklyReflection;
 
-    // Row already existed — fetch it (preserves its current status).
-    const { data: existing, error: fetchErr } = await supabase
+    const { data: row, error: fetchErr } = await supabase
       .from('weekly_reflections')
       .select('*')
       .eq('user_id', user.id)
       .eq('week_start', weekStart)
       .maybeSingle();
     if (fetchErr) throw fetchErr;
-    if (!existing) throw new Error('Failed to ensure weekly reflection');
-    return existing as WeeklyReflection;
+    if (!row) throw new Error('Failed to ensure weekly reflection');
+    return row as WeeklyReflection;
   },
 
   async updateReflection(
