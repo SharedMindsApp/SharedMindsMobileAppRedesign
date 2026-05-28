@@ -125,6 +125,20 @@ export interface FocusSession {
   session_kind?: 'do' | 'plan' | 'reflect' | null;
   /** Mood code captured at session start (interpreted via session_kind). */
   start_mood?: string | null;
+  /** Host's scheduled guided-wizard agenda. Fired client-side at relative
+   *  moments + broadcast to participants. See migration 20260529000020. */
+  planned_wizards?: PlannedWizard[] | null;
+}
+
+/** A single scheduled wizard in a session's agenda. */
+export interface PlannedWizard {
+  /** Local uuid — stable id for cancel/fire bookkeeping. */
+  id: string;
+  /** WizardId from the wizard registry. */
+  wizardId: string;
+  /** Relative moment to fire at. */
+  at: 'start' | 'min5' | 'halfway' | 'last5';
+  status: 'planned' | 'fired' | 'cancelled';
 }
 
 export interface CommunitySession extends FocusSession {

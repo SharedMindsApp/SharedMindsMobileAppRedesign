@@ -8,9 +8,10 @@ import { ConnectButton } from '../connections/ConnectButton';
 import { useAuth } from '../../auth/AuthProvider';
 import { ReportModal } from '../moderation/ReportModal';
 import { supabase } from '../../../lib/supabase';
-import type { FocusSession } from '../../../lib/sessions/focusTypes';
+import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
+import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -354,6 +355,48 @@ export function ActiveSessionPage() {
     }
   }, [session, takingOver, setActiveSession]);
 
+  // ── Planned wizards (host agenda) ──────────────────────────────
+  const plannedWizards: PlannedWizard[] = (session?.planned_wizards as PlannedWizard[] | undefined) ?? [];
+
+  const persistPlanned = useCallback(async (next: PlannedWizard[]) => {
+    if (!session) return;
+    setSession((s) => (s ? { ...s, planned_wizards: next } : s));
+    setActiveSession({ ...(session as FocusSession), planned_wizards: next });
+    try { await updatePlannedWizards(session.id, next); }
+    catch (e) { console.warn('[ActiveSessionPage] updatePlannedWizards failed:', e); }
+  }, [session, setActiveSession]);
+
+  const handleScheduleWizard = useCallback((wizardId: WizardId, at: PlannedWizard['at']) => {
+    const cur = (session?.planned_wizards as PlannedWizard[] | undefined) ?? [];
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `pw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    void persistPlanned([...cur, { id, wizardId, at, status: 'planned' }]);
+  }, [session, persistPlanned]);
+
+  const handleCancelPlanned = useCallback((plannedId: string) => {
+    const cur = (session?.planned_wizards as PlannedWizard[] | undefined) ?? [];
+    void persistPlanned(cur.map((p) => (p.id === plannedId ? { ...p, status: 'cancelled' as const } : p)));
+  }, [session, persistPlanned]);
+
+  // Host-side firing loop: when a planned wizard's relative moment is reached,
+  // launch it (broadcasts to everyone) and mark it fired. Only the host fires,
+  // so it can't double-trigger. Fires at most one item per timer tick.
+  useEffect(() => {
+    if (!isPrimaryHost || !session || session.status !== 'active') return;
+    const items = (session.planned_wizards as PlannedWizard[] | undefined) ?? [];
+    if (!items.some((p) => p.status === 'planned')) return;
+    const total = (session.intended_duration_minutes ?? 50) * 60;
+    const elapsed = Math.max(0, total - timerSecondsRemaining);
+    const dueAt = (at: PlannedWizard['at']) =>
+      at === 'start' ? 0
+      : at === 'min5' ? 300
+      : at === 'halfway' ? Math.floor(total / 2)
+      : Math.max(0, total - 300); // last5
+    const due = items.find((p) => p.status === 'planned' && elapsed >= dueAt(p.at));
+    if (!due) return;
+    wizards.launchWizard(due.wizardId as WizardId);
+    void persistPlanned(items.map((p) => (p.id === due.id ? { ...p, status: 'fired' as const } : p)));
+  }, [timerSecondsRemaining, isPrimaryHost, session]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Intro-phase transition watcher. While intro_phase_ends_at is set
   // and in the future, music stays ducked and the overlay is visible.
   // When the timestamp passes (timer tick) OR is nulled (someone tapped
@@ -671,7 +714,12 @@ export function ActiveSessionPage() {
               session: solo users, both sides of a 1-on-1, and group hosts.
               Group participants don't see it — they can only mute. */}
           {(!isMusicGroupSession || isMusicHost) && (
-            <WizardLauncher onLaunch={wizards.launchWizard} />
+            <WizardLauncher
+              onLaunch={wizards.launchWizard}
+              planned={plannedWizards}
+              onSchedule={isPrimaryHost ? handleScheduleWizard : undefined}
+              onCancelPlanned={isPrimaryHost ? handleCancelPlanned : undefined}
+            />
           )}
           {/* Header timer pill. Hidden in solo — the big circular timer in
               the focus view IS the timer there, so showing both is a
