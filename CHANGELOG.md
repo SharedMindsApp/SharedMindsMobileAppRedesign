@@ -35,6 +35,12 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   naming it. Applying reloads the planner grid in place.
 
 ### Changed
+- **"Match me now" actually matches you now** — it used to only ever open your
+  own door (ignoring everyone already working), so it never paired you with
+  anyone. It now opens a chooser that surfaces **live open doors to drop into**
+  first (instant match via `claim_open_session`), with "Open my own door" as
+  the fallback when nobody's available. The declare modal also shows a clear
+  "your door's open" banner when hosting an open-to-match session.
 - **Fewer auth round-trips on load** — globally-mounted shells (chat dock, layout,
   regulation context) each fired a network `auth.getUser()` (a `/auth/v1/user`
   request) on every page load. They now read the cached local session instead,

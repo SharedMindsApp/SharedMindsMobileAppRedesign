@@ -22,6 +22,7 @@ import {
 import { SessionsListView, type ListSession } from './SessionsListView';
 import { QuickTimerButton } from '../dashboard/QuickTimerButton';
 import { FindSessionsSheet } from '../dashboard/FindSessionsSheet';
+import { MatchMeNowSheet } from '../dashboard/MatchMeNowSheet';
 // MatchWaitingSheet + matchMeNow() retired — Match-me-now now opens
 // DeclareSessionModal with startOpenToMatch=true. See handleMatchMeNow
 // below and task #175 / migration 20260527000015.
@@ -317,9 +318,12 @@ export function CalendarView() {
     | { kind: 'free' }
     | { kind: 'solo' }
     | { kind: 'schedule'; at: Date }
-    // 'match' = Match-me-now: solo session with the door open. The modal
-    // opens with both forceSoloMode + startOpenToMatch flipped on so the
-    // user just picks goal + duration. Replaces the old waiting-room flow.
+    // 'matchsheet' = the Match-me-now chooser: surfaces live open doors to
+    // drop into, with "open my own door" as the fallback.
+    | { kind: 'matchsheet' }
+    // 'match' = host your own open-to-match session. The declare modal opens
+    // with forceSoloMode + startOpenToMatch flipped on so the user just picks
+    // goal + duration. Reached from the matchsheet's "open my own door".
     | { kind: 'match' }
   >({ kind: 'closed' });
   const [detail, setDetail] = useState<GridSession | null>(null);
@@ -533,7 +537,7 @@ export function CalendarView() {
   function handleMatchMeNow() {
     if (activeSession) return;
     setMatchError(null);
-    setModalState({ kind: 'match' });
+    setModalState({ kind: 'matchsheet' });
   }
 
   function goToToday() {
@@ -1098,6 +1102,12 @@ export function CalendarView() {
         <DeclareSessionModal
           onClose={() => { setModalState({ kind: 'closed' }); reloadScheduled(); }}
           initialScheduledAt={modalState.at}
+        />
+      )}
+      {modalState.kind === 'matchsheet' && (
+        <MatchMeNowSheet
+          onClose={() => setModalState({ kind: 'closed' })}
+          onOpenOwnDoor={() => setModalState({ kind: 'match' })}
         />
       )}
       {modalState.kind === 'match' && (

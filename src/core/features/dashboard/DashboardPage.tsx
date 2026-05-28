@@ -36,6 +36,7 @@ import { ScheduleSessionModal } from '../sessions/ScheduleSessionModal';
 // MatchWaitingSheet removed — Match-me-now now opens DeclareSessionModal
 // with startOpenToMatch=true (no more waiting-room lobby). See task #175.
 import { FindSessionsSheet } from './FindSessionsSheet';
+import { MatchMeNowSheet } from './MatchMeNowSheet';
 // matchMeNow() service unwired from this page — see comment above. The
 // service function remains in SessionService.ts as deprecated for the
 // next cleanup pass.
@@ -389,6 +390,10 @@ export function DashboardPage() {
   // See migration 20260527000015 + task #174.
   const [matchError, setMatchError] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
+  // "Match me now" opens a sheet that surfaces live open doors to drop into,
+  // with "open my own door" as the fallback. Only routes to the declare modal
+  // when the user chooses to host.
+  const [showMatchSheet, setShowMatchSheet] = useState(false);
 
   // Profile-completion modal — replaces the wizard step we cut. Shown
   // ONCE, after the first completed session, when country/bio are still
@@ -403,8 +408,7 @@ export function DashboardPage() {
   function handleMatchMeNow() {
     if (activeSession) return;
     setMatchError(null);
-    setDeclareOpenToMatch(true);
-    setShowDeclare(true);
+    setShowMatchSheet(true);
   }
   const {
     state: { tasks, projects, activeProjectId },
@@ -879,6 +883,17 @@ export function DashboardPage() {
 
       {findOpen && (
         <FindSessionsSheet onClose={() => setFindOpen(false)} />
+      )}
+
+      {showMatchSheet && (
+        <MatchMeNowSheet
+          onClose={() => setShowMatchSheet(false)}
+          onOpenOwnDoor={() => {
+            setShowMatchSheet(false);
+            setDeclareOpenToMatch(true);
+            setShowDeclare(true);
+          }}
+        />
       )}
 
       {/* Re-entry wizard — mood → matched task shortlist */}
