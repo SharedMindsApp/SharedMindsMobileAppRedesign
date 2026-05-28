@@ -523,6 +523,15 @@ export function ActiveSessionPage() {
     triggerDebriefForSession(session.id).catch(() => { /* idempotent — safe */ });
   }, [timerSecondsRemaining, session, showDebrief, ending]);
 
+  // Stop session music the moment the session winds down. The debrief
+  // overlay opening is the universal "session is over" signal (covers the
+  // host's End click, timer-zero, and the Realtime debrief broadcast), so
+  // killing playback here catches every end path. NOT fired on minimize —
+  // music intentionally survives the FloatingTimerWidget hand-off.
+  useEffect(() => {
+    if (showDebrief) window.dispatchEvent(new CustomEvent('sm:music-stop'));
+  }, [showDebrief]);
+
   // Called by DebriefOverlay once everyone has answered OR the 60s timer expires
   const handleDebriefFinalized = useCallback(async () => {
     if (!session || ending) return;
@@ -557,6 +566,7 @@ export function ActiveSessionPage() {
    *  watcher offers them the takeover. */
   const handleLeaveEarly = useCallback(() => {
     setConfirmingLeave(false);
+    window.dispatchEvent(new CustomEvent('sm:music-stop'));
     clearSession();
     navigate('/sessions', { replace: true });
   }, [clearSession, navigate]);
@@ -564,6 +574,7 @@ export function ActiveSessionPage() {
   /** Leave this match and jump straight back into matching. */
   const handleFindNewMatch = useCallback(() => {
     setConfirmingLeave(false);
+    window.dispatchEvent(new CustomEvent('sm:music-stop'));
     clearSession();
     navigate('/home', { state: { openMatch: true } });
   }, [clearSession, navigate]);
