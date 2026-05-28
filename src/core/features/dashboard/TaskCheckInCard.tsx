@@ -30,8 +30,8 @@ function isoTomorrow(): string {
 
 const PROJECT_HEX: Record<string, string> = {
   cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
-  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
-  indigo: '#6366f1', sky: '#0ea5e9', teal: '#14b8a6', lime: '#84cc16', orange: '#f97316', fuchsia: '#d946ef',
+  emerald: '#10b981', amber: '#f59e0b', orange: '#f97316', rose: '#f43f5e', fuchsia: '#d946ef',
+  slate: '#64748b', stone: '#78716c', sand: '#c2a063',
 };
 function projectDot(token: string | null): string {
   if (!token) return '#94a3b8';

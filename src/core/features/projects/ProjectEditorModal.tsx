@@ -31,13 +31,12 @@ const COLOR_LABELS: Record<string, string> = {
   violet:  'Violet',
   emerald: 'Emerald',
   amber:   'Amber',
-  rose:    'Rose',
-  indigo:  'Indigo',
-  sky:     'Sky',
-  teal:    'Teal',
-  lime:    'Lime',
   orange:  'Orange',
+  rose:    'Rose',
   fuchsia: 'Fuchsia',
+  slate:   'Grey',
+  stone:   'Taupe',
+  sand:    'Cream',
 };
 
 type Props = {
