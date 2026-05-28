@@ -58,8 +58,13 @@ export function OnboardingNudges({
   // what they'd be filling in.
   if (sessionsCompleted < 1) return null;
 
-  const showProject = !hasProjects && !projectDismissed;
-  const showProfile = (!profileCountry || !profileBio) && !profileDismissed;
+  // Profile-first priority: while the profile is still pending (incomplete
+  // and not dismissed) it's the only nudge shown. The "Plan a project" card
+  // waits until the profile is complete or dismissed, so we never split
+  // attention between two asks at once.
+  const profilePending = (!profileCountry || !profileBio) && !profileDismissed;
+  const showProfile = profilePending;
+  const showProject = !hasProjects && !projectDismissed && !profilePending;
 
   if (!showProject && !showProfile) return null;
 

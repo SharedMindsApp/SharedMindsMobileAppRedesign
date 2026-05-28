@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import type { FocusSession, CommunitySession, SessionOutcome } from '../../lib/sessions/focusTypes';
+import { armSkillsPrompt } from '../../lib/skillsPrompt';
 
 export interface CreateScheduledSessionInput {
   title: string;
@@ -238,6 +239,11 @@ export async function joinOneOnOneSession(sessionId: string): Promise<FocusSessi
     }
     throw error;
   }
+
+  // Booking into someone else's session is a social commitment — arm the
+  // one-time skills-rating prompt (shown on next dashboard mount).
+  armSkillsPrompt();
+
   return data as FocusSession;
 }
 
@@ -639,6 +645,14 @@ export async function createScheduledSession(
     .single();
 
   if (error) throw error;
+
+  // Arm the skills-rating prompt: scheduling a real session with others at
+  // a set time is when skills become socially relevant. Quick-timer and
+  // solo sessions are excluded (private/immediate — skills irrelevant).
+  if (!input.isQuickTimer && (input.sessionMode ?? 'group') !== 'solo') {
+    armSkillsPrompt();
+  }
+
   return data as FocusSession;
 }
 

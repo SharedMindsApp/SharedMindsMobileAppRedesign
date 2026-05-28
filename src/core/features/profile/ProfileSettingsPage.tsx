@@ -64,78 +64,94 @@ function arraysEqual(a: string[], b: string[]) {
   return true;
 }
 
-// Section ids — used for ?tab= deep-link back-compat (we scroll-to instead
-// of switching, since there are no tabs anymore).
-const SECTION_ANCHORS: Record<string, string> = {
-  edit:          'profile-edit',
-  notifications: 'profile-notifications',
-  account:       'profile-account',
-};
+// Top-level tabs. Notifications is now its own tab (was a scroll section)
+// so it's easy to find and doesn't get buried under the long edit form.
+type SettingsTab = 'profile' | 'notifications' | 'account';
+
+const TAB_DEFS: { id: SettingsTab; label: string; Icon: typeof Bell }[] = [
+  { id: 'profile',       label: 'Profile',       Icon: UserRound },
+  { id: 'notifications', label: 'Notifications', Icon: Bell },
+  { id: 'account',       label: 'Account',       Icon: Shield },
+];
+
+// Map legacy ?tab= values to the new tab ids ('edit' used to scroll to the
+// edit section — it now just lands on the Profile tab).
+function resolveTab(raw: string | null): SettingsTab {
+  if (raw === 'notifications' || raw === 'account') return raw;
+  return 'profile';
+}
 
 // ── ProfileSettingsPage ───────────────────────────────────────────────────
 
 export function ProfileSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<SettingsTab>(() => resolveTab(searchParams.get('tab')));
 
-  // Back-compat: if the URL has ?tab=edit (or notifications/account) from
-  // an old link, scroll to that section on mount and strip the param.
+  // Keep the tab in sync if the ?tab= param changes (e.g. avatar-dropdown
+  // links to /profile?tab=notifications), and strip the param once consumed.
   useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && SECTION_ANCHORS[tab]) {
-      // Defer to let layout settle before scrolling.
-      const t = setTimeout(() => {
-        document.getElementById(SECTION_ANCHORS[tab])?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        });
-        const params = new URLSearchParams(searchParams);
-        params.delete('tab');
-        setSearchParams(params, { replace: true });
-      }, 80);
-      return () => clearTimeout(t);
+    const raw = searchParams.get('tab');
+    if (raw) {
+      setTab(resolveTab(raw));
+      const params = new URLSearchParams(searchParams);
+      params.delete('tab');
+      setSearchParams(params, { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   return (
-    <div className="space-y-6">
-      {/* 1. Public preview — what people see when they hit /profile/:you */}
-      <section>
-        <SectionHeading
-          icon={<UserRound size={12} />}
-          title="How others see you"
-        />
-        <ProfilePage />
-      </section>
+    <div className="space-y-5">
+      {/* Tab bar */}
+      <div className="flex p-1 rounded-2xl bg-surface-container-low ring-1 ring-surface-container/60">
+        {TAB_DEFS.map(({ id, label, Icon }) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${
+                active ? 'bg-surface stitch-text-primary shadow-sm' : 'stitch-text-secondary hover:stitch-text-primary'
+              }`}
+            >
+              <Icon size={13} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* 2. Edit — the main job of this page */}
-      <section id={SECTION_ANCHORS.edit} className="scroll-mt-4">
-        <SectionHeading
-          icon={<SettingsIcon size={12} />}
-          title="Edit your profile"
-        />
-        <EditTab />
-      </section>
+      {tab === 'profile' && (
+        <div className="space-y-6">
+          {/* Public preview — what people see when they hit /profile/:you */}
+          <section>
+            <SectionHeading icon={<UserRound size={12} />} title="How others see you" />
+            <ProfilePage />
+          </section>
+          {/* Edit — the main job of this tab */}
+          <section className="scroll-mt-4">
+            <SectionHeading icon={<SettingsIcon size={12} />} title="Edit your profile" />
+            <EditTab />
+          </section>
+        </div>
+      )}
 
-      {/* 3. Notifications */}
-      <section id={SECTION_ANCHORS.notifications} className="scroll-mt-4">
-        <SectionHeading
-          icon={<Bell size={12} />}
-          title="Notifications"
-        />
-        <SurfaceCard>
-          <NotificationPreferencesPanel />
-        </SurfaceCard>
-      </section>
+      {tab === 'notifications' && (
+        <section>
+          <SectionHeading icon={<Bell size={12} />} title="Notifications" />
+          <SurfaceCard>
+            <NotificationPreferencesPanel />
+          </SurfaceCard>
+        </section>
+      )}
 
-      {/* 4. Account */}
-      <section id={SECTION_ANCHORS.account} className="scroll-mt-4">
-        <SectionHeading
-          icon={<Shield size={12} />}
-          title="Account"
-        />
-        <AccountTab />
-      </section>
+      {tab === 'account' && (
+        <section>
+          <SectionHeading icon={<Shield size={12} />} title="Account" />
+          <AccountTab />
+        </section>
+      )}
     </div>
   );
 }

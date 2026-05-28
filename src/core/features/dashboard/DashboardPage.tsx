@@ -54,6 +54,9 @@ import { UpcomingSessionCountdown } from './UpcomingSessionCountdown';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
 import { LiveNowDropInStrip } from './LiveNowDropInStrip';
 import { OnboardingNudges } from './OnboardingNudges';
+import { ProfileCompletionModal } from './ProfileCompletionModal';
+import { SkillsPromptModal } from './SkillsPromptModal';
+import { isSkillsPromptArmed, consumeSkillsPromptArm, dismissSkillsPrompt } from '../../../lib/skillsPrompt';
 import { RecentFinishesCarousel } from './RecentFinishesCarousel'; // legacy, no longer used in layout
 import { ShippedFeedStrip } from './ShippedFeedStrip';
 import { DashboardTabs } from './DashboardTabs';
@@ -375,7 +378,7 @@ function ShipRow({ ship }: { ship: ShippedSession }) {
 // ── Main page ─────────────────────────────────────────────────────
 
 export function DashboardPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { activeSession, setActiveSession } = useFocusSession();
 
   // ── Match me now state ───────────────────────────────────────
@@ -387,6 +390,16 @@ export function DashboardPage() {
   // See migration 20260527000015 + task #174.
   const [matchError, setMatchError] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
+
+  // Profile-completion modal — replaces the wizard step we cut. Shown
+  // ONCE, after the first completed session, when country/bio are still
+  // empty. localStorage flag means it never re-nags; the passive
+  // OnboardingNudges card stays as the fallback for anyone who skips.
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  // Skills self-rating modal — armed when the user schedules/books a
+  // session with others; shown once here if they have no skills yet.
+  const [skillsModalOpen, setSkillsModalOpen] = useState(false);
 
   function handleMatchMeNow() {
     if (activeSession) return;
@@ -447,6 +460,44 @@ export function DashboardPage() {
     // Re-run when the active session ends — most likely streak-change
     // moment. activeSession transitions to null when the user finishes.
   }, [user?.id, activeSession?.id]);
+
+  // Profile-completion modal trigger: first dashboard load after the
+  // user has completed ≥1 session, when country/bio are still blank and
+  // they haven't seen (or dismissed) the modal before.
+  useEffect(() => {
+    const LS_KEY = 'sm.profileModal.seen';
+    if (typeof window === 'undefined') return;
+    if (!profile) return;
+    const sessionsDone = stats?.totalSessions ?? 0;
+    const incomplete = !profile.country_code || !profile.bio;
+    let seen = false;
+    try { seen = window.localStorage.getItem(LS_KEY) === 'true'; } catch { /* private mode */ }
+    if (sessionsDone >= 1 && incomplete && !seen) {
+      setProfileModalOpen(true);
+    }
+  }, [profile, stats?.totalSessions]);
+
+  function closeProfileModal() {
+    try { window.localStorage.setItem('sm.profileModal.seen', 'true'); } catch { /* private mode */ }
+    setProfileModalOpen(false);
+  }
+
+  // Skills modal trigger: armed by scheduling/booking a session, and only
+  // when the user has no skills yet. Consume the arm flag so it shows once.
+  useEffect(() => {
+    if (!profile) return;
+    const hasSkills = (profile.skills?.length ?? 0) > 0;
+    if (hasSkills) return;
+    if (isSkillsPromptArmed()) {
+      consumeSkillsPromptArm();
+      setSkillsModalOpen(true);
+    }
+  }, [profile]);
+
+  function closeSkillsModal() {
+    dismissSkillsPrompt();
+    setSkillsModalOpen(false);
+  }
 
   useEffect(() => {
     if (!user?.id) return;
@@ -786,6 +837,24 @@ export function DashboardPage() {
       )}
         </>
       )}
+
+      {/* Profile-completion modal — one-time, post-first-session */}
+      <ProfileCompletionModal
+        open={profileModalOpen}
+        initialCountry={profile?.country_code}
+        initialBio={profile?.bio}
+        onClose={closeProfileModal}
+        onSaved={() => { void refreshProfile(); }}
+      />
+
+      {/* Skills self-rating modal — one-time, after scheduling/booking */}
+      <SkillsPromptModal
+        open={skillsModalOpen}
+        initialSkills={profile?.skills}
+        initialLevels={(profile?.skill_levels as Record<string, number>) ?? undefined}
+        onClose={closeSkillsModal}
+        onSaved={() => { void refreshProfile(); }}
+      />
 
       {/* Modals */}
       {showDeclare && (
