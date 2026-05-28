@@ -14,6 +14,7 @@
 import type { ReactNode } from 'react';
 import { Circle, CheckCircle2, ChevronRight, ChevronDown, ListChecks, Loader2 } from 'lucide-react';
 import { taskUrgency, type UrgencyInput } from '../../lib/taskUrgency';
+import { TaskLoadBadge, type TaskLoad } from './TaskLoadBadge';
 
 export interface TaskCardTask extends UrgencyInput {
   id: string;
@@ -26,6 +27,8 @@ interface Props {
   projectName?: string | null;
   projectColorHex?: string | null;
   showProject?: boolean;
+  /** Cognitive-load tag (Light/Medium/Deep). Omit to hide. */
+  load?: TaskLoad | null;
   /** Toggle done. Omit to render a read-only circle. */
   onToggleDone?: () => void;
   /** Open the task (detail / edit). The title becomes the click target. */
@@ -41,7 +44,7 @@ interface Props {
 }
 
 export function TaskCard({
-  task, projectName, projectColorHex, showProject = true,
+  task, projectName, projectColorHex, showProject = true, load,
   onToggleDone, onOpen, busy,
   stepsTotal = 0, stepsDone = 0, expanded, onToggleExpand, children,
 }: Props) {
@@ -84,6 +87,8 @@ export function TaskCard({
                 {u.label}
               </span>
             )}
+            {/* Cognitive-load tag */}
+            {!done && load && <TaskLoadBadge load={load} />}
             {/* Project tag */}
             {showProject && projectName && (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold stitch-text-secondary">

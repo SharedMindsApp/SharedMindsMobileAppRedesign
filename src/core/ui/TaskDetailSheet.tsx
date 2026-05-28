@@ -23,12 +23,15 @@ import {
 } from 'lucide-react';
 import { taskUrgency, type UrgencyInput } from '../../lib/taskUrgency';
 import { TaskStepsSection } from './TaskStepsSection';
+import { TaskLoadPicker, type TaskLoad } from './TaskLoadBadge';
 
 export interface TaskDetailData extends UrgencyInput {
   id: string;
   title: string;
   projectName?: string | null;
   projectColorHex?: string | null;
+  /** Cognitive load (Light/Medium/Deep). Omit to hide the picker. */
+  load?: TaskLoad;
 }
 
 interface Props {
@@ -40,6 +43,8 @@ interface Props {
   onReschedule?: (isoDate: string | null) => void | Promise<void>;
   /** Commit a renamed title. */
   onRename?: (title: string) => void | Promise<void>;
+  /** Set the cognitive-load tag. Omit to hide the picker. */
+  onSetLoad?: (load: TaskLoad) => void | Promise<void>;
   /** "Let go" — drop the task (soft). Closes on success. */
   onDrop?: () => void | Promise<void>;
   /** Hard delete. Closes on success. Host owns its own confirm step. */
@@ -65,7 +70,7 @@ function isoTomorrow(): string {
 }
 
 export function TaskDetailSheet({
-  task, onClose, onToggleDone, onReschedule, onRename, onDrop, onDelete, onStartSession, onStepPromoted,
+  task, onClose, onToggleDone, onReschedule, onRename, onSetLoad, onDrop, onDelete, onStartSession, onStepPromoted,
 }: Props) {
   const u = taskUrgency(task);
   const done = u.kind === 'done';
@@ -73,6 +78,8 @@ export function TaskDetailSheet({
   const [busy, setBusy] = useState<null | 'done' | 'today' | 'tomorrow' | 'backlog' | 'drop' | 'delete'>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.title);
+  // Local optimistic load so the picker reflects the tap instantly.
+  const [loadValue, setLoadValue] = useState<TaskLoad>(task.load ?? 'medium');
   // "Let it go" is destructive + easy to mis-tap, so the first tap arms an
   // inline confirm rather than acting immediately.
   const [confirmingDrop, setConfirmingDrop] = useState(false);
@@ -250,6 +257,20 @@ export function TaskDetailSheet({
                 onClick={() => run('backlog', () => onReschedule(null))}
               />
             </div>
+          </div>
+        )}
+
+        {/* Focus / cognitive load — Light / Medium / Deep. Lets you correct
+            the tag (everything defaults to Medium when captured quickly). */}
+        {onSetLoad && !done && (
+          <div className="px-5 pb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary mb-2">
+              Focus
+            </p>
+            <TaskLoadPicker
+              value={loadValue}
+              onChange={(next) => { setLoadValue(next); void onSetLoad(next); }}
+            />
           </div>
         )}
 

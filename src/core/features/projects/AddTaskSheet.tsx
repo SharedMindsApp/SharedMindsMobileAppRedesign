@@ -22,6 +22,7 @@ import { Plus, X, Sparkles, Loader2, Check, Target } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useCoreData, type BrainStateId } from '../../data/CoreDataContext';
 import { loadForMood, loadCopy, type Load } from '../../../lib/reentry';
+import { TaskLoadPicker } from '../../ui/TaskLoadBadge';
 import type { ProjectMilestone, ProjectPhase } from '../../services/ProjectService';
 
 type EnergyLevel = 'high' | 'medium' | 'low';
@@ -60,6 +61,7 @@ export function AddTaskSheet({
   const { brainStateOptions } = useCoreData();
 
   const [title, setTitle] = useState('');
+  const [manualLoad, setManualLoad] = useState<Load>('medium');
   const [saving, setSaving] = useState(false);
 
   // Focus: which milestone / phase the AI should anchor on. null = whole project.
@@ -88,7 +90,7 @@ export function AddTaskSheet({
     if (!t || saving) return;
     setSaving(true);
     try {
-      await onCreate({ title: t, energyLevel: 'medium', scheduledFor: defaultScheduledFor });
+      await onCreate({ title: t, energyLevel: loadToEnergy(manualLoad), scheduledFor: defaultScheduledFor });
       setTitle('');
       onClose();
     } catch { /* host logs + reverts */ }
@@ -178,7 +180,7 @@ export function AddTaskSheet({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl"
+        className="w-full sm:max-w-md h-[94dvh] sm:h-auto sm:max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-surface shadow-2xl"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -230,6 +232,12 @@ export function AddTaskSheet({
                 {saving ? '…' : 'Add'}
               </button>
             )}
+          </div>
+
+          {/* Difficulty / focus for the new task */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">Focus</span>
+            <TaskLoadPicker value={manualLoad} onChange={setManualLoad} size="sm" />
           </div>
 
           {/* 2. Milestone / phase focus — used to anchor AI suggestions */}

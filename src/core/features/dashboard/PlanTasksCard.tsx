@@ -171,6 +171,7 @@ export function PlanTasksCard({
                 task={task}
                 projectName={project?.name ?? null}
                 projectColorHex={project ? projectDot(project.color) : null}
+                load={task.energy}
                 onToggleDone={() => handleToggle(task.id)}
                 onOpen={() => setOpenTaskId(task.id)}
                 busy={busyId === task.id}
@@ -224,11 +225,13 @@ export function PlanTasksCard({
           dueOn: openTask.dueOn,
           projectName: openTaskProject?.name ?? null,
           projectColorHex: openTaskProject ? projectDot(openTaskProject.color) : null,
+          load: openTask.energy,
         }}
         onClose={() => setOpenTaskId(null)}
         onToggleDone={() => toggleTask(openTask.id)}
         onReschedule={(iso) => rescheduleTaskAsync(openTask.id, iso)}
         onRename={(title) => updateTaskAsync(openTask.id, { title })}
+        onSetLoad={(load) => updateTaskAsync(openTask.id, { energy: load })}
         onDrop={() => dropTaskAsync(openTask.id)}
         onDelete={() => deleteTaskAsync(openTask.id)}
         onStartSession={() => onSelectTask(openTask.title)}

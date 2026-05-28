@@ -45,6 +45,7 @@ const TaskDetailSheet = lazy(() =>
 const AddTaskSheet = lazy(() =>
   import('./AddTaskSheet').then((m) => ({ default: m.AddTaskSheet })));
 import { SurfaceCard } from '../../ui/CorePage';
+import { TaskLoadBadge, energyToLoad } from '../../ui/TaskLoadBadge';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
 // Project = organising your work to be productive. Sessions live on
@@ -286,6 +287,20 @@ export function ProjectDetailPage() {
     } catch (err) {
       console.error('[ProjectDetailPage] renameTask failed:', err);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, title: original.title } : t)));
+    }
+  }
+
+  /** Set a task's cognitive-load tag (stored as energy_level). Optimistic. */
+  async function setTaskLoad(taskId: string, load: 'deep' | 'medium' | 'light') {
+    const energy = load === 'deep' ? 'high' : load === 'light' ? 'low' : 'medium';
+    const original = tasks.find((t) => t.id === taskId);
+    if (!original || original.energy_level === energy) return;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, energy_level: energy } : t)));
+    try {
+      await TaskService.updateTask(taskId, { energy_level: energy });
+    } catch (err) {
+      console.error('[ProjectDetailPage] setTaskLoad failed:', err);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, energy_level: original.energy_level } : t)));
     }
   }
 
@@ -852,11 +867,13 @@ export function ProjectDetailPage() {
               dueOn: t.due_on ?? null,
               projectName: project.title,
               projectColorHex: color.hex,
+              load: energyToLoad(t.energy_level),
             }}
             onClose={() => setOpenTaskId(null)}
             onToggleDone={() => setTaskStatus(t.id, t.status === 'done' ? 'active' : 'done')}
             onReschedule={(iso) => setTaskSchedule(t.id, iso)}
             onRename={(title) => renameTask(t.id, title)}
+            onSetLoad={(load) => setTaskLoad(t.id, load)}
             onDelete={() => deleteTask(t.id)}
             onStartSession={() => setDeclareOpen(true)}
             onStepPromoted={() => {
@@ -1452,6 +1469,7 @@ function BacklogRow({
       >
         {task.title}
       </button>
+      <TaskLoadBadge load={energyToLoad(task.energy_level)} className="shrink-0" />
       <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <button
           type="button"
@@ -1642,6 +1660,12 @@ function WeekTaskCard({
           <Trash2 size={11} />
         </button>
       </div>
+      {/* Cognitive-load tag */}
+      {!isDone && (
+        <div className="mt-1.5">
+          <TaskLoadBadge load={energyToLoad(task.energy_level)} />
+        </div>
+      )}
       {/* Explicit move controls — name the target stage so it's obvious where
           the task goes. Back button (↑) + forward button (↓). */}
       <div className="flex items-center gap-1.5 mt-2">
@@ -1901,18 +1925,22 @@ function KanbanCard({
         </button>
       )}
 
-      {/* Deadline urgency — only the pressing states (overdue / due soon),
-          since the board is already organised by scheduled day. Matches the
-          urgency chip on the home Today view + shared TaskCard. */}
-      {columnKey !== 'done' && (() => {
-        const u = taskUrgency({ status: task.status, scheduledFor: task.scheduled_for, dueOn: task.due_on });
-        if (u.kind !== 'overdue' && u.kind !== 'due-today' && u.kind !== 'due-soon') return null;
-        return (
-          <span className={`inline-block mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.tone}`}>
-            {u.label}
-          </span>
-        );
-      })()}
+      {/* Load + deadline tags. Load (Light/Medium/Deep) always shows; the
+          urgency chip only when pressing, since the board is organised by day. */}
+      {columnKey !== 'done' && (
+        <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
+          <TaskLoadBadge load={energyToLoad(task.energy_level)} />
+          {(() => {
+            const u = taskUrgency({ status: task.status, scheduledFor: task.scheduled_for, dueOn: task.due_on });
+            if (u.kind !== 'overdue' && u.kind !== 'due-today' && u.kind !== 'due-soon') return null;
+            return (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.tone}`}>
+                {u.label}
+              </span>
+            );
+          })()}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
         <button
