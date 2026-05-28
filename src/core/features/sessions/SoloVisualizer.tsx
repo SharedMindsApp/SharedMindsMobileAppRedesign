@@ -78,16 +78,20 @@ export function SoloVisualizer({
     // Number of bars/particles to render around the full 360°.
     const BAR_COUNT = style === 'bars' ? 60 : 48;
 
-    /** Map a bar index (0..BAR_COUNT-1) to a frequency bin index
-     *  using a log curve. Low frequencies are dominant in music, so
-     *  spreading them visually keeps the bars from clumping at one
-     *  arc. With BAR_COUNT=60 and binCount=128 this maps roughly:
-     *  bar 0 → bin 0, bar 30 → bin ~8, bar 59 → bin ~127. */
+    /** Map a bar index (0..BAR_COUNT-1) to a frequency bin index.
+     *
+     *  The spectrum is MIRRORED around the circle: bars sweep low→high
+     *  frequency over the first half (top → bottom down one side) and back
+     *  high→low over the second half (bottom → top up the other side). Music
+     *  energy lives mostly in the low bins, so without mirroring all the tall
+     *  bars clump onto a single arc and the ring looks lopsided / off-centre.
+     *  Mirroring makes both sides match → a balanced ring concentric with the
+     *  timer. A quadratic curve still emphasises the lows. */
     function binFor(i: number): number {
       if (!binCount) return 0;
-      const t = i / Math.max(1, BAR_COUNT - 1);
-      // Power curve — exponent controls how fast we sweep through
-      // the spectrum. 2 = quadratic emphasis on lows.
+      const half = BAR_COUNT / 2;
+      const mirrored = i <= half ? i : BAR_COUNT - i;   // 0 → half → 0
+      const t = mirrored / Math.max(1, half);
       const logT = Math.pow(t, 2);
       return Math.min(binCount - 1, Math.floor(logT * (binCount - 1)));
     }
