@@ -11,7 +11,7 @@ import {
   Loader2, Pencil, Play, Target, Calendar, ArrowLeft, Link2,
   CheckCircle2, Plus, Clock, Zap,
   Archive, UserPlus, ChevronRight, ChevronDown, Trash2, X, Check,
-  Columns, Flag, NotebookPen, Activity,
+  Columns, Flag, NotebookPen, Activity, Sparkles,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import {
@@ -42,6 +42,8 @@ import { taskUrgency } from '../../../lib/taskUrgency';
 // the route's static import graph means it's not fetched before first paint.
 const TaskDetailSheet = lazy(() =>
   import('../../ui/TaskDetailSheet').then((m) => ({ default: m.TaskDetailSheet })));
+const AddTaskSheet = lazy(() =>
+  import('./AddTaskSheet').then((m) => ({ default: m.AddTaskSheet })));
 import { SurfaceCard } from '../../ui/CorePage';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 
@@ -106,6 +108,8 @@ export function ProjectDetailPage() {
   const [taskSubmitting, setTaskSubmitting] = useState(false);
   /** Task whose "work on this" sheet is open (board tap target). null = closed. */
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  /** Add-task sheet: open + which day the new task lands on. */
+  const [addSheet, setAddSheet] = useState<{ scheduledFor: string | null } | null>(null);
 
   // Progressive load — paint the hero as soon as the project row arrives,
   // then fill in tasks / sessions / milestones / phases as each query
@@ -229,6 +233,28 @@ export function ProjectDetailPage() {
     } finally {
       setTaskSubmitting(false);
     }
+  }
+
+  /** Param-based creator used by the AddTaskSheet (which manages its own
+   *  title + can add several AI suggestions in a row). Optimistic insert. */
+  async function createProjectTask(input: {
+    title: string;
+    energyLevel: 'high' | 'medium' | 'low';
+    scheduledFor: string | null;
+  }): Promise<void> {
+    if (!project || !user) return;
+    const created = await TaskService.createTask({
+      space_id: project.space_id,
+      project_id: project.id,
+      created_by: user.id,
+      title: input.title.trim(),
+      status: 'inbox',
+      priority: 'medium',
+      energy_level: input.energyLevel,
+      scheduled_for: input.scheduledFor ?? null,
+      sort_order: 0,
+    });
+    setTasks((prev) => [created, ...prev]);
   }
 
   /** Move a task to an explicit status. Used by the Kanban arrows so the
@@ -669,6 +695,7 @@ export function ProjectDetailPage() {
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={handleAddTask}
+          onOpenAddSheet={(scheduledFor) => setAddSheet({ scheduledFor })}
           submitting={taskSubmitting}
           colorHex={color.hex}
         />
@@ -840,6 +867,27 @@ export function ProjectDetailPage() {
           </Suspense>
         );
       })()}
+
+      {/* Add-task sheet — milestone/phase focus + AI mood-matched suggestions */}
+      {addSheet && (
+        <Suspense fallback={null}>
+          <AddTaskSheet
+            projectTitle={project.title}
+            projectDescription={project.description}
+            milestones={milestones}
+            phases={phases}
+            defaultScheduledFor={addSheet.scheduledFor}
+            dayLabel={addSheet.scheduledFor === isoDate(new Date())
+              ? 'today'
+              : addSheet.scheduledFor
+                ? formatDayLabel(new Date(`${addSheet.scheduledFor}T00:00:00`))
+                : 'the backlog'}
+            colorHex={color.hex}
+            onClose={() => setAddSheet(null)}
+            onCreate={createProjectTask}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -1135,7 +1183,7 @@ function formatDayLabel(d: Date): string {
 
 function TasksTab({
   tasks, onSetStatus, onRename, onDelete, onSchedule, onCarryForward, onOpenTask,
-  newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  newTaskTitle, setNewTaskTitle, onAdd, onOpenAddSheet, submitting, colorHex,
 }: {
   tasks: Task[];
   onSetStatus: (taskId: string, next: KanbanStatus) => void;
@@ -1148,6 +1196,8 @@ function TasksTab({
   newTaskTitle: string;
   setNewTaskTitle: (s: string) => void;
   onAdd: () => void;
+  /** Open the dedicated add-task sheet for a given day (null = backlog). */
+  onOpenAddSheet: (scheduledFor: string | null) => void;
   submitting: boolean;
   colorHex: string;
 }) {
@@ -1345,6 +1395,7 @@ function TasksTab({
           newTaskTitle={newTaskTitle}
           setNewTaskTitle={setNewTaskTitle}
           onAdd={onAdd}
+          onOpenAddSheet={onOpenAddSheet}
           submitting={submitting}
           colorHex={colorHex}
           emptyMessage={selectedDayIso === todayIso
@@ -1609,7 +1660,7 @@ function WeekTaskCard({
 }
 
 function KanbanTab({
-  tasks, onSetStatus, onRename, onDelete, onSchedule, onOpenTask, newTaskTitle, setNewTaskTitle, onAdd, submitting, colorHex,
+  tasks, onSetStatus, onRename, onDelete, onSchedule, onOpenTask, newTaskTitle, setNewTaskTitle, onAdd, onOpenAddSheet, submitting, colorHex,
   emptyMessage, addContextLabel, scheduledForOnAdd,
 }: {
   tasks: Task[];
@@ -1629,6 +1680,9 @@ function KanbanTab({
   /** Now takes an optional date so the Day-view wrapper can pre-schedule
    *  the new task to the day the user is viewing. */
   onAdd: (scheduledFor?: string | null) => void;
+  /** Opens the dedicated add-task sheet (milestone/phase focus + AI). When
+   *  provided, the inline add row is replaced by a button that opens it. */
+  onOpenAddSheet?: (scheduledFor: string | null) => void;
   submitting: boolean;
   colorHex: string;
   /** Customisable empty-state message — useful when the kanban is
@@ -1655,31 +1709,46 @@ function KanbanTab({
 
   return (
     <div className="space-y-3">
-      {/* Inline add — new tasks pre-scheduled to the day this kanban
-          is filtered to (if any). Otherwise lands in the backlog. */}
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container">
-        <Plus size={13} className="stitch-text-secondary shrink-0" />
-        <input
-          type="text"
-          value={newTaskTitle}
-          onChange={(e) => setNewTaskTitle(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') onAdd(scheduledForOnAdd ?? null); }}
-          placeholder={addContextLabel ? `Add a task for ${addContextLabel}…` : 'Add a task to this project…'}
-          className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none border-0"
-          disabled={submitting}
-        />
-        {newTaskTitle.trim().length > 0 && (
-          <button
-            type="button"
-            onClick={() => onAdd(scheduledForOnAdd ?? null)}
+      {/* Add row. When the dedicated sheet is wired (project board), this is
+          a button that opens it — milestone/phase focus + AI mood matching.
+          Falls back to the inline input where no sheet is provided. */}
+      {onOpenAddSheet ? (
+        <button
+          type="button"
+          onClick={() => onOpenAddSheet(scheduledForOnAdd ?? null)}
+          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container hover:ring-primary/30 transition-colors text-left"
+        >
+          <Plus size={13} className="stitch-text-secondary shrink-0" />
+          <span className="flex-1 text-sm stitch-text-secondary">
+            {addContextLabel ? `Add a task for ${addContextLabel}…` : 'Add a task to this project…'}
+          </span>
+          <Sparkles size={13} className="text-primary shrink-0" />
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container">
+          <Plus size={13} className="stitch-text-secondary shrink-0" />
+          <input
+            type="text"
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onAdd(scheduledForOnAdd ?? null); }}
+            placeholder={addContextLabel ? `Add a task for ${addContextLabel}…` : 'Add a task to this project…'}
+            className="flex-1 bg-transparent text-sm stitch-text-primary placeholder:stitch-text-secondary outline-none border-0"
             disabled={submitting}
-            className="shrink-0 px-3 py-1 rounded-full text-[11px] font-bold text-white"
-            style={{ backgroundColor: colorHex }}
-          >
-            {submitting ? 'Adding…' : 'Add'}
-          </button>
-        )}
-      </div>
+          />
+          {newTaskTitle.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => onAdd(scheduledForOnAdd ?? null)}
+              disabled={submitting}
+              className="shrink-0 px-3 py-1 rounded-full text-[11px] font-bold text-white"
+              style={{ backgroundColor: colorHex }}
+            >
+              {submitting ? 'Adding…' : 'Add'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Overall empty state — shown when no tasks at all for the
           filtered scope (typically: one day with nothing scheduled). */}
