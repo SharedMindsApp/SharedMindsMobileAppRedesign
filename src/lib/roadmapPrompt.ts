@@ -99,6 +99,63 @@ P: [ ] <phase title> | <weight 0-100>
 Use "M:" for each milestone and "P:" for each phase beneath it. If I'm already partway through, the [x] items together should roughly match my stated progress.`;
 }
 
+/**
+ * Prompt for the user's own AI to draft the FIRST few tasks — small, concrete
+ * things finishable in one focus session. Hands over the project + roadmap so
+ * the tasks are relevant. Reply is one task per line (we parse leniently).
+ */
+export function buildTasksPrompt(args: {
+  projectName: string;
+  brainDump?: string | null;
+  milestones: DraftMilestone[];
+}): string {
+  const subject = args.projectName.trim() || '[PROJECT NAME]';
+  const ctx = args.brainDump?.trim() ? `\n\nContext on the project:\n${args.brainDump.trim()}` : '';
+
+  const roadmap = args.milestones
+    .filter((m) => m.title.trim())
+    .map((m) => {
+      const head = `- ${m.title.trim()}${m.already_done ? ' (done)' : ''}`;
+      const ph = m.phases
+        .filter((p) => p.title.trim())
+        .map((p) => `   • ${p.title.trim()}${p.already_done ? ' (done)' : ''}`)
+        .join('\n');
+      return ph ? `${head}\n${ph}` : head;
+    })
+    .join('\n');
+  const roadmapBlock = roadmap ? `\n\nMy roadmap so far:\n${roadmap}` : '';
+
+  return `I'm working on a project called "${subject}".${ctx}${roadmapBlock}
+
+Suggest the first 4-5 tasks I should do next — the smallest concrete next steps that move this forward, each finishable in a single focus session. Skip anything I've already marked done. Make them specific and actionable (start with a verb).
+
+Return ONLY the tasks, one per line, nothing else — no numbering, no commentary:
+
+T: <task>
+T: <task>
+T: <task>`;
+}
+
+/** Parse a tasks reply into clean titles. Forgiving: strips "T:", bullets,
+ *  numbering, markdown; drops blanks + duplicates; caps at 6. */
+export function parseTasksReply(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split('\n')) {
+    let line = raw.replace(/\*\*/g, '').trim();
+    line = line.replace(/^T:\s*/i, '');               // explicit T: prefix
+    line = line.replace(/^[\s>`]*(?:[-*•]\s*|\d+[.)]\s*)/, ''); // bullets / numbering
+    line = line.replace(/`/g, '').trim();
+    if (!line) continue;
+    const key = line.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(line.slice(0, 120));
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
 /** Even-split helper: distribute 100 across n items (last absorbs rounding). */
 function evenSplit(n: number): number[] {
   if (n <= 0) return [];

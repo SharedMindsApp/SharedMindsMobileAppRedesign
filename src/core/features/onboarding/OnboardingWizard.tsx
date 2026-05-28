@@ -39,7 +39,7 @@ import { ProjectService } from '../../services/ProjectService';
 import { SpaceService } from '../../services/SpaceService';
 import { TaskService } from '../../services/TaskService';
 import { ReflectionService, mondayOf } from '../../services/ReflectionService';
-import { buildRoadmapValidationPrompt, parseRoadmapReply } from '../../../lib/roadmapPrompt';
+import { buildRoadmapValidationPrompt, parseRoadmapReply, buildTasksPrompt, parseTasksReply } from '../../../lib/roadmapPrompt';
 import { AvatarCropper } from './AvatarCropper';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -934,6 +934,11 @@ export function OnboardingWizard({
   const [roadmapPromptCopied, setRoadmapPromptCopied] = useState(false);
   const [roadmapReply, setRoadmapReply] = useState('');
   const [roadmapApplyMsg, setRoadmapApplyMsg] = useState<string | null>(null);
+  // Tasks "write with your own AI" helper (tasks step).
+  const [showTasksHelper, setShowTasksHelper] = useState(false);
+  const [tasksPromptCopied, setTasksPromptCopied] = useState(false);
+  const [tasksReply, setTasksReply] = useState('');
+  const [tasksApplyMsg, setTasksApplyMsg] = useState<string | null>(null);
 
   // ── Roadmap: milestones with nested phases ─────────────────────
   // Two-tier structure:
@@ -1037,6 +1042,30 @@ export function OnboardingWizard({
     setRoadmapApplyMsg(`Applied ${parsed.length} milestone${parsed.length === 1 ? '' : 's'} · ${phaseCount} phase${phaseCount === 1 ? '' : 's'}.`);
     setRoadmapReply('');
     setShowRoadmapHelper(false);
+  }
+
+  async function copyTasksPrompt() {
+    try {
+      await navigator.clipboard.writeText(
+        buildTasksPrompt({ projectName: projectTitle, brainDump: projectBrainDump, milestones: milestoneInputs }),
+      );
+      setTasksPromptCopied(true);
+      setTimeout(() => setTasksPromptCopied(false), 2000);
+    } catch {
+      setTasksPromptCopied(false);
+    }
+  }
+
+  function applyTasksReply() {
+    const parsed = parseTasksReply(tasksReply);
+    if (parsed.length === 0) {
+      setTasksApplyMsg("Couldn't read any tasks — paste the AI's reply with one task per line.");
+      return;
+    }
+    setTaskInputs(parsed);
+    setTasksApplyMsg(`Added ${parsed.length} task${parsed.length === 1 ? '' : 's'}.`);
+    setTasksReply('');
+    setShowTasksHelper(false);
   }
 
   function handleCropConfirm(croppedFile: File, previewUrl: string) {
@@ -3154,6 +3183,86 @@ export function OnboardingWizard({
             : <><Wand2 size={14} /> Suggest first tasks for me</>
           }
         </button>
+
+        {/* ── Write tasks with your own AI ────────────────────────
+            Backend-free alternative: hand the project + roadmap to your
+            own AI, paste the task list straight back. */}
+        {projectTitle.trim() && (
+          <div className="mb-4">
+            {!showTasksHelper ? (
+              <button
+                type="button"
+                onClick={() => { setShowTasksHelper(true); setTasksApplyMsg(null); }}
+                className="text-xs font-semibold text-emerald-700 hover:opacity-70 transition-opacity inline-flex items-center gap-1.5"
+              >
+                <Sparkles size={12} />
+                Prefer your own AI? Get it to suggest the tasks, paste them back
+              </button>
+            ) : (
+              <div
+                className="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3"
+                style={{ animation: 'wizFadeUp 300ms cubic-bezier(0.16, 1, 0.3, 1) both' }}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={13} className="text-emerald-600 shrink-0" />
+                    <p className="text-xs font-bold text-emerald-900">Tasks from your AI</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTasksHelper(false)}
+                    className="shrink-0 w-5 h-5 rounded-full hover:bg-emerald-100 flex items-center justify-center transition-colors"
+                    aria-label="Close"
+                  >
+                    <X size={11} className="text-emerald-700" />
+                  </button>
+                </div>
+                <ol className="text-[11px] text-emerald-900 leading-relaxed list-decimal pl-4 space-y-0.5 mb-2.5">
+                  <li>Copy the prompt — it bundles your project + roadmap</li>
+                  <li>Paste it into your AI chat</li>
+                  <li>Paste the task list it returns back below and Apply</li>
+                </ol>
+                <div className="rounded-lg bg-white border border-emerald-200 p-2.5 max-h-32 overflow-y-auto mb-2">
+                  <pre className="text-[10.5px] leading-snug text-slate-700 whitespace-pre-wrap font-mono">
+                    {buildTasksPrompt({ projectName: projectTitle, brainDump: projectBrainDump, milestones: milestoneInputs })}
+                  </pre>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyTasksPrompt}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-[0.97] mb-2.5 ${
+                    tasksPromptCopied
+                      ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-500/30'
+                  }`}
+                >
+                  {tasksPromptCopied
+                    ? <><Check size={12} strokeWidth={3} /> Copied — paste into your AI</>
+                    : <><Sparkles size={12} /> Copy prompt</>
+                  }
+                </button>
+                <textarea
+                  value={tasksReply}
+                  onChange={(e) => { setTasksReply(e.target.value); setTasksApplyMsg(null); }}
+                  placeholder={"Paste your AI's task list here (one per line)…"}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-emerald-200 text-[12px] leading-relaxed text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-400/30 resize-y mb-2"
+                />
+                <button
+                  type="button"
+                  onClick={applyTasksReply}
+                  disabled={!tasksReply.trim()}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-colors disabled:opacity-40"
+                >
+                  <Wand2 size={12} /> Apply tasks
+                </button>
+              </div>
+            )}
+            {tasksApplyMsg && (
+              <p className="text-[11px] font-semibold text-emerald-700 mt-1.5">{tasksApplyMsg}</p>
+            )}
+          </div>
+        )}
 
         {aiError && (
           <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
