@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Play, ChevronLeft, ChevronRight, Calendar as CalIcon,
   Users, UserPlus, User, Loader2, X, Clock, StopCircle, Plus, Search, Zap, HelpCircle,
-  CalendarPlus, List as ListIcon, LayoutGrid, CalendarDays, Pencil, Trash2, Check,
+  CalendarPlus, List as ListIcon, LayoutGrid, CalendarDays, Pencil, Trash2, Check, CalendarClock,
 } from 'lucide-react';
 import { SessionsListView, type ListSession } from './SessionsListView';
 import { QuickTimerButton } from '../dashboard/QuickTimerButton';
@@ -1511,6 +1511,9 @@ export function SessionDetailSheet({
   const isPast = session.startsAt.getTime() + session.intended_duration_minutes * 60_000 < Date.now();
   const isRecap = !isActive && (session.status === 'completed' || isPast);
   const [recapOutcome, setRecapOutcome] = useState<string | null>(null);
+  // Privacy: we keep only the COUNT of participants, never the list of who.
+  const [participantCount, setParticipantCount] = useState(0);
+  const [recapLoaded, setRecapLoaded] = useState(false);
   useEffect(() => {
     if (!isRecap) return;
     let cancelled = false;
@@ -1519,10 +1522,17 @@ export function SessionDetailSheet({
         if (cancelled) return;
         const mine = rows.find((r) => r.user_id === user?.id) ?? rows[0];
         setRecapOutcome(mine?.outcome ?? null);
+        setParticipantCount(rows.length);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setRecapLoaded(true); });
     return () => { cancelled = true; };
   }, [isRecap, session.id, user?.id]);
+
+  // "Missed" = a scheduled session whose time passed with no debrief recorded
+  // and no completed flag. Stated plainly, never punitively — and removable.
+  const isMissed = isRecap && recapLoaded && session.status !== 'completed' && recapOutcome == null;
+  const isGroup = session.session_mode === 'group';
 
   // ── Edit state ─────────────────────────────────────────────
   // Only scheduled sessions are editable. Inline form (no separate
@@ -1800,6 +1810,22 @@ export function SessionDetailSheet({
               </div>
             </div>
           </div>
+        ) : isMissed ? (
+          <div className="mb-4 rounded-2xl bg-amber-50/70 ring-1 ring-amber-200/60 p-3.5 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <CalendarClock size={15} className="text-amber-600 shrink-0" />
+              <p className="text-sm font-extrabold text-amber-900">This one slipped by</p>
+            </div>
+            <p className="text-xs text-amber-800/90 leading-snug">
+              No worries — it happens. You can leave it as a record or clear it off your calendar.
+            </p>
+            <div className="pt-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700/80 mb-0.5">Was going to be</p>
+              <p className="text-sm font-semibold text-amber-900 leading-snug">
+                {session.session_goal ?? session.session_title ?? 'A focus session'}
+              </p>
+            </div>
+          </div>
         ) : isRecap ? (
           <div className="mb-4 rounded-2xl bg-surface-container-low/50 ring-1 ring-surface-container p-3.5 space-y-3">
             <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
@@ -1822,6 +1848,17 @@ export function SessionDetailSheet({
                 return <p className={`text-sm font-semibold ${meta.cls}`}>{meta.label}</p>;
               })()}
             </div>
+
+            {/* Participants — group only, COUNT not names (privacy). */}
+            {isGroup && participantCount > 1 && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Focused together</p>
+                <p className="text-sm font-semibold stitch-text-primary inline-flex items-center gap-1.5">
+                  <Users size={13} className="stitch-text-secondary" />
+                  {participantCount} people
+                </p>
+              </div>
+            )}
 
             {/* Mood — not captured yet; honest placeholder rather than a fake value */}
             <div>
@@ -1902,6 +1939,16 @@ export function SessionDetailSheet({
               </button>
             </div>
           )}
+          {/* Missed session — gently offer to clear it off the calendar. */}
+          {isMine && isMissed && !confirmingDelete && (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="w-full inline-flex items-center justify-center gap-1.5 py-3 rounded-xl bg-rose-50 text-rose-700 text-sm font-bold hover:bg-rose-100 transition-colors"
+            >
+              <Trash2 size={13} /> Remove from calendar
+            </button>
+          )}
           {editing && (
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -1926,7 +1973,9 @@ export function SessionDetailSheet({
           {confirmingDelete && (
             <div className="space-y-2">
               <p className="text-xs stitch-text-secondary text-center px-2">
-                Cancel this scheduled session? It will be removed from your calendar.
+                {isMissed
+                  ? 'Remove this missed session from your calendar? This just clears the record.'
+                  : 'Cancel this scheduled session? It will be removed from your calendar.'}
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
