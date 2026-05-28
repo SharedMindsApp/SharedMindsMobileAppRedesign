@@ -107,7 +107,7 @@ export function RegulationProvider({ children }: { children: ReactNode }) {
 
     try {
       setIsLoading(true);
-      const state = await getRegulationState(undefined, activeProject?.id);
+      const state = await getRegulationState(user.id, activeProject?.id);
 
       if (state) {
         setRegulationState(state);

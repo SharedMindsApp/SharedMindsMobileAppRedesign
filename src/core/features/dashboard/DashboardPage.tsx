@@ -486,8 +486,30 @@ export function DashboardPage() {
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
+    const cacheKey = `sm_has_session_${user.id}`;
+    // Instant gate for returning users. Once a user has logged ANY session
+    // they can never be day-zero again, so a cached flag lets us resolve the
+    // day-zero gate (and render the whole body) immediately — no waiting on
+    // the home RPC. The RPC still runs and backfills the real stats/cards.
+    try {
+      if (localStorage.getItem(cacheKey) === '1') setHasAnySession(true);
+    } catch { /* private mode / disabled storage — ignore */ }
+    // Safety net: the day-zero gate blocks the body below the hero until
+    // `hasAnySession` flips off null. If the home RPC is slow, hangs, or
+    // silently resolves to nothing, fall back to the non-day-zero UI so the
+    // page ALWAYS renders. Each card loads its own data independently.
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setHasAnySession((prev) => (prev === null ? false : prev));
+    }, 2500);
     fetchHomeDashboard(user.id).then((dash) => {
-      if (cancelled || !dash) return;
+      if (cancelled) return;
+      // Resolved-null (RPC errored and the service returned null) must still
+      // resolve the gate — otherwise the skeleton hangs forever with no error.
+      if (!dash) { setHasAnySession((prev) => prev ?? false); return; }
+      // Once confirmed, remember it so future loads skip the gate wait.
+      try {
+        if (dash.hasAnySession) localStorage.setItem(cacheKey, '1');
+      } catch { /* ignore */ }
       // One batched setState call — React 18 commits these atomically
       // so the whole dashboard paints in a single render.
       setHasAnySession(dash.hasAnySession);
@@ -514,11 +536,11 @@ export function DashboardPage() {
         peopleAlongsideThisMonth: 0,
       });
     }).catch(() => {
-      // Soft-fail: leave hasAnySession null so the skeleton stays put
-      // briefly, then resolves on a retry. Don't lock the user out.
+      // Soft-fail: resolve to the non-day-zero UI rather than locking the
+      // user out behind the skeleton.
       if (!cancelled) setHasAnySession(false);
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; window.clearTimeout(safety); };
   }, [user?.id]);
 
   const firstName = profile?.display_name?.split(' ')[0] ?? 'there';

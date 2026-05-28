@@ -1,4 +1,5 @@
 import { supabase, Member } from './supabase';
+import { getAuthedUser } from './authUser';
 
 export type Household = {
   id: string;
@@ -123,9 +124,7 @@ export async function createHousehold(name: string, spaceType: 'personal' | 'sha
 }
 
 export async function getUserHousehold(): Promise<Household | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthedUser();
 
   if (!user) return null;
 

@@ -19,10 +19,48 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 
 ## [Unreleased]
 
+### Added
+- **Editable templates** — every weekly template is now fully editable: rename
+  it and add / edit / delete blocks on any day (start time, duration, type,
+  project). Adopting a preset drops you straight into the editor so it becomes
+  genuinely yours, and you can build a template from scratch with "New blank
+  template".
+- **Planner settings** — a single gear (showing your current hours, e.g.
+  "7am–10pm") on the home planner opens a settings sheet (popup on web,
+  bottom-sheet on mobile) with the **day window** and **weekly templates**
+  in one place. Also reachable from Settings → Account → "Planner & calendar".
+- **Weekly time-block templates** — apply a saved template to this week or
+  next (additive + idempotent, today-onward by default), or adopt a curated
+  starter preset by mapping its project slots to your real projects and
+  naming it. Applying reloads the planner grid in place.
+
 ### Changed
+- **Fewer auth round-trips on load** — globally-mounted shells (chat dock, layout,
+  regulation context) each fired a network `auth.getUser()` (a `/auth/v1/user`
+  request) on every page load. They now read the cached local session instead,
+  cutting redundant calls — easier on the backend and faster to paint.
+- **Day window is now universal** — the visible hour range you set applies to
+  both the home planner *and* the sessions calendar, so the two views no
+  longer contradict each other. (Previously the sessions calendar was a fixed
+  6am–11pm regardless of your planner setting.)
 - **Task detail sheet** — moved the Edit action down beside Delete in the
   footer, and Delete now arms an "are you sure?" confirm (matching "Let it
   go") instead of deleting on the first tap.
+
+### Fixed
+- **App-wide data stalls / infinite spinners** — supabase-js serialises auth
+  token access through the Web Locks API and the default waits forever, so a
+  stale lock held by another tab / a zombie context / rapid reloads could
+  deadlock *every* authenticated query: home dashboard, "this week's sessions",
+  templates and more spun indefinitely with no error. Replaced it with a
+  process-local (in-tab) lock that can't be blocked by a stale cross-tab lock
+  and times out rather than hanging.
+- **Home page hanging on the loading skeleton** — the day-zero gate now always
+  resolves (resolved-null + safety timeout), and returning users render
+  instantly from a cached flag.
+- **Week planner project tags** — fixed a scope bug where the week grid
+  couldn't resolve project names for time blocks (the lookup map is now
+  threaded into the week timeline).
 
 
 ## [v0.6.0] — 2026-05-28

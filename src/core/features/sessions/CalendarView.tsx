@@ -285,7 +285,12 @@ export function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
 
 export function CalendarView() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  // Visible hour window — shared with the home planner via the profile, so
+  // both calendar surfaces show the same hours (no contradiction). Falls
+  // back to the module defaults when the profile hasn't loaded.
+  const gridStartHour = Math.max(0, Math.min(22, profile?.planner_start_hour ?? START_HOUR));
+  const gridEndHour   = Math.max(gridStartHour + 1, Math.min(23, profile?.planner_end_hour ?? END_HOUR));
   const { activeSession, sessionGoal, timerSecondsRemaining, clearSession, setActiveSession } = useFocusSession();
 
   // End session directly from the sidebar — writes to DB immediately so the
@@ -540,8 +545,8 @@ export function CalendarView() {
     // Slot 0 corresponds to viewStartHour when today is in view, or
     // START_HOUR otherwise. Re-derive here from the day being clicked.
     const startHour = sameDay(day, new Date())
-      ? Math.max(START_HOUR, new Date().getHours() - 1)
-      : START_HOUR;
+      ? Math.max(gridStartHour, new Date().getHours() - 1)
+      : gridStartHour;
     at.setHours(startHour, 0, 0, 0);
     at.setMinutes(slotIndex * SLOT_MINUTES);
     // Past slots → ignore
@@ -611,9 +616,9 @@ export function CalendarView() {
    *  so the view advances as the hour ticks over. */
   const viewStartHour = useMemo(() => {
     const todayInWindow = days.some((d) => sameDay(d, new Date()));
-    if (!todayInWindow) return START_HOUR;
-    return Math.max(START_HOUR, now.getHours() - 1);
-  }, [days, now]);
+    if (!todayInWindow) return gridStartHour;
+    return Math.max(gridStartHour, now.getHours() - 1);
+  }, [days, now, gridStartHour]);
 
   // Total live count (excluding solo and excluding self) for header strip
   const liveCount = active.filter(
@@ -963,7 +968,7 @@ export function CalendarView() {
                 hours are always the first two rows when today is in
                 view; other anchors get the full 06:00–23:00 grid. */}
             <div className="border-r border-surface-container">
-              {Array.from({ length: END_HOUR - viewStartHour }, (_, h) => (
+              {Array.from({ length: gridEndHour - viewStartHour }, (_, h) => (
                 <div
                   key={h}
                   data-hour={viewStartHour + h}
@@ -982,7 +987,7 @@ export function CalendarView() {
                 trimmed time gutter — no phantom rows extending past
                 the visible window. */}
             {(() => {
-              const viewTotalSlots = (END_HOUR - viewStartHour) * SLOTS_PER_HOUR;
+              const viewTotalSlots = (gridEndHour - viewStartHour) * SLOTS_PER_HOUR;
               return days.map((day, dayIdx) => {
               const dayIsToday = sameDay(day, new Date());
               // Now-line position relative to viewStartHour (not the
@@ -1054,6 +1059,7 @@ export function CalendarView() {
                         session={s}
                         isMine={s.user_id === user?.id}
                         viewStartHour={viewStartHour}
+                        endHour={gridEndHour}
                         col={lay.col}
                         cols={lay.cols}
                         onClick={(e) => handleSessionClick(s, e)}
@@ -1142,6 +1148,7 @@ function SessionBlock({
   session,
   isMine,
   viewStartHour,
+  endHour,
   col,
   cols,
   onClick,
@@ -1153,6 +1160,8 @@ function SessionBlock({
    *  START_HOUR. Drives the session block's vertical position so it
    *  lands on the right row after the gutter has been re-based. */
   viewStartHour: number;
+  /** Last hour visible in the grid (profile-backed day window end). */
+  endHour: number;
   /** 0-indexed horizontal column position within its overlap cluster. */
   col: number;
   /** Total columns in the overlap cluster (1 = full width). */
@@ -1162,7 +1171,7 @@ function SessionBlock({
   const sH = session.startsAt.getHours();
   const sM = session.startsAt.getMinutes();
   const startMins = (sH - viewStartHour) * 60 + sM;
-  const gridMins = (END_HOUR - viewStartHour) * 60;
+  const gridMins = (endHour - viewStartHour) * 60;
   // Clamp visible portion to the visible grid range
   if (startMins + session.intended_duration_minutes < 0) return null;
   if (startMins >= gridMins) return null;
