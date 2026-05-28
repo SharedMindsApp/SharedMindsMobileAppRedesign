@@ -499,6 +499,18 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           </span>
         </div>
 
+        {/* Open-to-match banner — when launched from "Match me now", make it
+            obvious the door's open + point to the vibe control on step 2. */}
+        {startOpenToMatch && openToMatch && (
+          <div className="shrink-0 mx-5 mb-2 flex items-center gap-2 rounded-xl bg-amber-50 ring-1 ring-amber-200/70 px-3 py-2">
+            <DoorOpen size={15} className="text-amber-600 shrink-0" />
+            <p className="text-[11px] font-semibold text-amber-800 leading-snug">
+              Your door's open — anyone can drop in to work alongside you.
+              {wizardStep === 'goal' ? ' Set your vibe on the next step.' : ' Pick your vibe below.'}
+            </p>
+          </div>
+        )}
+
         {/* ═══════════════════════════════════════════════════════
             STEP 1 — Goal: pick a task / type one + pin to project
             ═══════════════════════════════════════════════════════ */}
