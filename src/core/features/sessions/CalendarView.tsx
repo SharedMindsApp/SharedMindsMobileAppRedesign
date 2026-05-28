@@ -36,6 +36,7 @@ import { DeclareSessionModal } from './DeclareSessionModal';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import {
   fetchUpcomingScheduledSessions,
+  fetchSessionOutcomes,
   joinOneOnOneSession,
   markSessionEnded,
   updateScheduledSession,
@@ -213,7 +214,7 @@ export type GridSession = {
   quiet_mode: boolean;
   intended_duration_minutes: number;
   startsAt: Date;
-  status: 'active' | 'scheduled';
+  status: 'active' | 'scheduled' | 'completed';
   project_id?: string | null;
   project_title?: string | null;
   project_color?: string | null;
@@ -263,7 +264,7 @@ export function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     quiet_mode: !!(s as any).quiet_mode,
     intended_duration_minutes: s.intended_duration_minutes ?? 50,
     startsAt: new Date(s.scheduled_at ?? s.start_time),
-    status: 'scheduled',
+    status: ((s as any).status === 'completed' ? 'completed' : 'scheduled'),
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
@@ -1473,6 +1474,15 @@ function ActiveSessionBanner({
 
 // ── Session detail sheet ────────────────────────────────────────
 
+/** Debrief outcome → recap label + tone. 'none' covers no-debrief / no_answer. */
+const OUTCOME_META: Record<string, { label: string; cls: string }> = {
+  finished: { label: '✓ Finished what I set out to do', cls: 'text-emerald-700' },
+  partially: { label: '◐ Made partial progress', cls: 'text-amber-700' },
+  something_came_up: { label: 'Something came up', cls: 'text-slate-600' },
+  no_answer: { label: 'Not recorded', cls: 'text-slate-500' },
+  none: { label: 'Not recorded', cls: 'text-slate-500' },
+};
+
 export function SessionDetailSheet({
   session, isMine, onClose, onJoined, onChanged,
 }: {
@@ -1489,10 +1499,30 @@ export function SessionDetailSheet({
   const navigate = useNavigate();
   const { activeSession: contextActive, setActiveSession, clearSession } = useFocusSession();
 
+  const { user } = useAuth();
   const isActive = session.status === 'active';
   const isScheduled = session.status === 'scheduled';
   const isOneOnOne = session.session_mode === 'one_on_one';
   const partnerOpen = isOneOnOne && !session.partner_user_id;
+
+  // A session has "happened" if it's flagged completed, or its time window has
+  // already passed. Past sessions are a read-only recap — no edit / cancel /
+  // add-to-calendar; instead we surface what was recorded.
+  const isPast = session.startsAt.getTime() + session.intended_duration_minutes * 60_000 < Date.now();
+  const isRecap = !isActive && (session.status === 'completed' || isPast);
+  const [recapOutcome, setRecapOutcome] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isRecap) return;
+    let cancelled = false;
+    fetchSessionOutcomes(session.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const mine = rows.find((r) => r.user_id === user?.id) ?? rows[0];
+        setRecapOutcome(mine?.outcome ?? null);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isRecap, session.id, user?.id]);
 
   // ── Edit state ─────────────────────────────────────────────
   // Only scheduled sessions are editable. Inline form (no separate
@@ -1639,7 +1669,7 @@ export function SessionDetailSheet({
             mode={session.session_mode}
             quietMode={session.quiet_mode}
             partnerOpen={partnerOpen}
-            status={isActive ? 'active' : 'scheduled'}
+            status={isActive ? 'active' : isRecap ? undefined : 'scheduled'}
             durationMinutes={session.intended_duration_minutes}
             projectTitle={session.project_title}
             projectColor={session.project_color}
@@ -1770,6 +1800,35 @@ export function SessionDetailSheet({
               </div>
             </div>
           </div>
+        ) : isRecap ? (
+          <div className="mb-4 rounded-2xl bg-surface-container-low/50 ring-1 ring-surface-container p-3.5 space-y-3">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+              Session recap
+            </p>
+
+            {/* Intention */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Intention</p>
+              <p className="text-sm stitch-text-primary leading-snug">
+                {session.session_goal ?? session.session_title ?? 'No intention recorded'}
+              </p>
+            </div>
+
+            {/* Did you finish? — from the end-of-session debrief */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Did you finish?</p>
+              {(() => {
+                const meta = OUTCOME_META[recapOutcome ?? 'none'] ?? OUTCOME_META.none;
+                return <p className={`text-sm font-semibold ${meta.cls}`}>{meta.label}</p>;
+              })()}
+            </div>
+
+            {/* Mood — not captured yet; honest placeholder rather than a fake value */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">State of mind</p>
+              <p className="text-xs stitch-text-secondary italic">Mood check-in (start &amp; end) isn't tracked yet — coming soon.</p>
+            </div>
+          </div>
         ) : (
           <p className="text-sm stitch-text-primary leading-snug mb-4">
             {session.session_goal ?? session.session_title ?? 'Working on something'}
@@ -1825,7 +1884,7 @@ export function SessionDetailSheet({
           {/* Edit + Delete — only for the user's own scheduled sessions.
               Active sessions can't be edited (they're running); past
               sessions can't either (they're history). */}
-          {isMine && isScheduled && !editing && !confirmingDelete && (
+          {isMine && isScheduled && !isRecap && !editing && !confirmingDelete && (
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -1892,14 +1951,18 @@ export function SessionDetailSheet({
           )}
           {!editing && !confirmingDelete && (
             <>
-              <button
-                type="button"
-                onClick={handleAddToCalendar}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
-              >
-                <CalendarPlus size={14} />
-                Add to calendar
-              </button>
+              {/* Add-to-calendar only makes sense for sessions that haven't
+                  happened yet — a past session is history. */}
+              {!isRecap && (
+                <button
+                  type="button"
+                  onClick={handleAddToCalendar}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container transition-colors"
+                >
+                  <CalendarPlus size={14} />
+                  Add to calendar
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
