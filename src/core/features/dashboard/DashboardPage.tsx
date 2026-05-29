@@ -24,7 +24,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowRight, Check, CheckCircle2, Plus, Target, Users, Flag, Layers, RotateCcw,
 } from 'lucide-react';
-import { isMorning, morningPromptSeenToday, markMorningPromptSeen } from '../../../lib/reentry';
+import { isMorning, morningPromptSeenToday, markMorningPromptSeen, breakPromptSeen, markBreakPromptSeen, sessionSoonPromptSeen, markSessionSoonPromptSeen } from '../../../lib/reentry';
+import { TimeBlockService } from '../../services/TimeBlockService';
+import { SessionSoonModal } from './SessionSoonModal';
 import { ProjectService, type ProjectStats } from '../../services/ProjectService';
 import { EMPTY_PROJECT_STATS, deriveProjectProgress, projectColorMeta } from '../projects/ProjectsPage';
 import { useAuth } from '../../auth/AuthProvider';
@@ -596,16 +598,59 @@ export function DashboardPage() {
   // nags, and only for users who've actually started using the app (≥1
   // session) — day-zero users get onboarding, not a check-in.
   const [reEntryOpen, setReEntryOpen] = useState(false);
-  const [reEntryVariant, setReEntryVariant] = useState<'morning' | 'manual'>('manual');
+  const [reEntryVariant, setReEntryVariant] = useState<'morning' | 'manual' | 'break'>('manual');
+  const [sessionSoon, setSessionSoon] = useState<ScheduledSessionWithProfile | null>(null);
   const hasUsedApp = (stats?.totalSessions ?? 0) > 0;
+
+  // Today's planner blocks — used to detect a just-ended scheduled break.
+  const [todayBlocks, setTodayBlocks] = useState<{ id: string; start_time: string; duration_mins: number; block_type: string }[]>([]);
   useEffect(() => {
     if (!hasUsedApp) return;
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    TimeBlockService.getBlocksForDate(today).then(setTodayBlocks).catch(() => { /* non-fatal */ });
+  }, [hasUsedApp]);
+
+  // Re-entry prompts — auto-only (no passive button). Priority order:
+  //   1. A scheduled session starting soon → acknowledge it (SessionSoonModal).
+  //   2. First open of the morning → morning check-in.
+  //   3. Just after a scheduled break ended → "back from your break" check-in.
+  // Outside these triggers we deliberately don't prompt.
+  useEffect(() => {
+    if (!hasUsedApp || activeSession) return;
+
+    // 1. Session booked within the next 15 min (and not already started).
+    const SOON_MS = 15 * 60 * 1000;
+    const nowMs = Date.now();
+    const soon = upcomingScheduled.find((s) => {
+      if (s.status !== 'scheduled') return false;
+      const startMs = new Date((s.scheduled_at ?? s.start_time) as string).getTime();
+      return startMs > nowMs - 60_000 && startMs <= nowMs + SOON_MS && !sessionSoonPromptSeen(s.id);
+    });
+    if (soon) { markSessionSoonPromptSeen(soon.id); setSessionSoon(soon); return; }
+
+    // 2. First morning login.
     if (isMorning() && !morningPromptSeenToday()) {
       markMorningPromptSeen();
       setReEntryVariant('morning');
       setReEntryOpen(true);
+      return;
     }
-  }, [hasUsedApp]);
+
+    // 3. A scheduled break that ended within the last 10 min.
+    const justEndedBreak = todayBlocks.find((b) => {
+      if (b.block_type !== 'break') return false;
+      const [h, m] = b.start_time.split(':').map(Number);
+      const start = new Date(); start.setHours(h, m, 0, 0);
+      const endMs = start.getTime() + b.duration_mins * 60_000;
+      return nowMs >= endMs && nowMs <= endMs + 10 * 60_000 && !breakPromptSeen(b.id);
+    });
+    if (justEndedBreak) {
+      markBreakPromptSeen(justEndedBreak.id);
+      setReEntryVariant('break');
+      setReEntryOpen(true);
+    }
+  }, [hasUsedApp, activeSession, upcomingScheduled, todayBlocks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Quick-start templates pre-fill goal AND duration
   const [templateDuration, setTemplateDuration] = useState<25 | 50 | 90 | undefined>(undefined);
@@ -684,19 +729,8 @@ export function DashboardPage() {
         </p>
       )}
 
-      {/* "I'm back" — on-demand re-entry. Sitting down mid-day after a break?
-          One tap to re-match tasks to your current headspace. Shown to users
-          who've started using the app; hidden while in a session. */}
-      {hasUsedApp && !activeSession && (
-        <button
-          type="button"
-          onClick={() => { setReEntryVariant('manual'); setReEntryOpen(true); }}
-          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface ring-1 ring-surface-container hover:ring-primary/30 stitch-text-primary text-sm font-bold active:scale-[0.99] transition-all"
-        >
-          <RotateCcw size={14} className="text-primary" />
-          I'm back — what should I do?
-        </button>
-      )}
+      {/* Re-entry is auto-only now (morning login, post-break, session-soon) —
+          no passive "what should I do?" button. See the trigger effect above. */}
 
       {/* Live-now drop-in strip — surfaces open-to-match sessions on
           the most-visited page so users passively notice when someone's
@@ -926,6 +960,12 @@ export function DashboardPage() {
             onStartSession={(title) => { setReEntryOpen(false); openDeclare(title); }}
           />
         </Suspense>
+      )}
+
+      {/* Session-soon prompt — supersedes the generic re-entry when a booked
+          session is imminent. */}
+      {sessionSoon && (
+        <SessionSoonModal session={sessionSoon} onClose={() => setSessionSoon(null)} />
       )}
     </div>
   );

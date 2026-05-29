@@ -183,3 +183,24 @@ export function markMorningPromptSeen(): void {
 export function isMorning(): boolean {
   return new Date().getHours() < 11;
 }
+
+// ── One-shot gates for the other auto-prompt triggers ──────────────────────
+// Each fires at most once per day per key (break block / upcoming session), so
+// returning to the home page repeatedly doesn't re-pop the same prompt.
+
+function seenToday(prefix: string, id: string): boolean {
+  try { return window.localStorage.getItem(`${prefix}${id}`) === isoToday(); }
+  catch { return false; }
+}
+function markToday(prefix: string, id: string): void {
+  try { window.localStorage.setItem(`${prefix}${id}`, isoToday()); }
+  catch { /* private mode — fail open */ }
+}
+
+const LS_BREAK_PREFIX = 'sm.reentry.break.';
+export function breakPromptSeen(blockId: string): boolean { return seenToday(LS_BREAK_PREFIX, blockId); }
+export function markBreakPromptSeen(blockId: string): void { markToday(LS_BREAK_PREFIX, blockId); }
+
+const LS_SESSION_SOON_PREFIX = 'sm.reentry.sessionSoon.';
+export function sessionSoonPromptSeen(sessionId: string): boolean { return seenToday(LS_SESSION_SOON_PREFIX, sessionId); }
+export function markSessionSoonPromptSeen(sessionId: string): void { markToday(LS_SESSION_SOON_PREFIX, sessionId); }

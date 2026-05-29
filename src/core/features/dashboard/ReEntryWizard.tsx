@@ -53,8 +53,8 @@ function toReEntryTask(t: CoreTask): ReEntryTask {
 }
 
 interface Props {
-  /** Title chip when launched as the morning check-in vs. mid-day return. */
-  variant?: 'morning' | 'manual';
+  /** Title chip: morning check-in, post-break return, or manual. */
+  variant?: 'morning' | 'manual' | 'break';
   onClose: () => void;
   /** Open session declaration pinned to this task title. */
   onStartSession: (taskTitle: string) => void;
@@ -167,7 +167,7 @@ export function ReEntryWizard({ variant = 'manual', onClose, onStartSession }: P
         <div className="flex items-start justify-between gap-3 px-5 pt-3 pb-1">
           <div className="min-w-0">
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-primary">
-              {variant === 'morning' ? 'Morning check-in' : "Welcome back"}
+              {variant === 'morning' ? 'Morning check-in' : variant === 'break' ? 'Break’s over' : 'Welcome back'}
             </p>
             <h2 className="text-lg font-extrabold stitch-text-primary leading-tight mt-0.5">
               {step === 'mood' ? "How's your head right now?" : copy.label}
