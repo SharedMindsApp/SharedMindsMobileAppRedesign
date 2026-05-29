@@ -11,7 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, updateSessionStartMood, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -27,6 +27,8 @@ import { WizardLauncher } from './SessionWizards/WizardLauncher';
 import { WizardOverlay } from './SessionWizards/WizardOverlay';
 import { DeclareTaskSheet } from './DeclareTaskSheet';
 import { SessionPlanSheet } from './SessionPlanSheet';
+import { StartMoodSheet } from './StartMoodSheet';
+import type { SessionKind } from '../../../lib/sessionMood';
 import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 
 // Sessions become joinable 5 minutes before their scheduled start.
@@ -633,17 +635,64 @@ export function ActiveSessionPage() {
   useEffect(() => {
     if (!session || !isPrimaryHost || session.status !== 'active') return;
     if (needsTaskDeclaration) return;                  // task prompt comes first
+    if (!moodResolved) return;                         // mood check comes before the plan
     if (currentGoal.trim().length === 0) return;       // no task yet
     if (taskSheetOpen || planAutoShownRef.current) return;
     try { if (localStorage.getItem(`sm_plan_done_${session.id}`)) { planAutoShownRef.current = true; return; } } catch { /* ignore */ }
     planAutoShownRef.current = true;
     setPlanSheetOpen(true);
-  }, [session?.id, session?.status, isPrimaryHost, needsTaskDeclaration, currentGoal, taskSheetOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.status, isPrimaryHost, needsTaskDeclaration, currentGoal, taskSheetOpen, moodResolved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closePlan = useCallback(() => {
     setPlanSheetOpen(false);
     try { if (session) localStorage.setItem(`sm_plan_done_${session.id}`, '1'); } catch { /* ignore */ }
   }, [session]);
+
+  // ── Start-of-session mood check ────────────────────────────────
+  // A focused, skippable single-question step (was buried in the declare
+  // modal). Fires once for the session owner, only on a fresh start (not a
+  // mid-session refresh), and only if no mood was recorded yet.
+  const [moodStepOpen, setMoodStepOpen] = useState(false);
+  const [moodResolved, setMoodResolved] = useState(false);
+  const moodHandledRef = useRef(false);
+
+  const moodApplicable =
+    isPrimaryHost
+    && session?.status === 'active'
+    && !session?.start_mood
+    && !needsTaskDeclaration
+    && !!session?.start_time
+    && (Date.now() - new Date(session.start_time).getTime()) < 5 * 60_000;
+
+  useEffect(() => {
+    if (!session || moodHandledRef.current || taskSheetOpen) return;
+    if (!moodApplicable) { setMoodResolved(true); return; } // nothing to ask → don't block plan
+    try {
+      if (localStorage.getItem(`sm_mood_done_${session.id}`)) {
+        moodHandledRef.current = true; setMoodResolved(true); return;
+      }
+    } catch { /* ignore */ }
+    moodHandledRef.current = true;
+    setMoodStepOpen(true);
+  }, [session?.id, session?.status, isPrimaryHost, needsTaskDeclaration, taskSheetOpen, moodApplicable]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resolveMood = useCallback(() => {
+    setMoodStepOpen(false);
+    setMoodResolved(true);
+    try { if (session) localStorage.setItem(`sm_mood_done_${session.id}`, '1'); } catch { /* ignore */ }
+  }, [session]);
+
+  const handlePickMood = useCallback(async (code: string) => {
+    resolveMood();
+    if (!session) return;
+    try {
+      await updateSessionStartMood(session.id, code);
+      setSession((s) => (s ? { ...s, start_mood: code } : s));
+      setActiveSession({ ...(session as FocusSession), start_mood: code });
+    } catch (e) {
+      console.warn('[ActiveSessionPage] start mood save failed:', e);
+    }
+  }, [session, resolveMood, setActiveSession]);
 
   const handleApplyPlan = useCallback((next: PlannedWizard[], music: string | null) => {
     // Preserve already-fired/cancelled history; replace the 'planned' set.
@@ -1303,6 +1352,15 @@ export function ActiveSessionPage() {
         <DeclareTaskSheet
           onClose={() => setTaskSheetOpen(false)}
           onChoose={(title, taskId) => { void handleDeclareTask(title, taskId); }}
+        />
+      )}
+
+      {/* Focused start-of-session mood check (was buried in the declare modal). */}
+      {moodStepOpen && session && (
+        <StartMoodSheet
+          kind={(session.session_kind ?? 'do') as SessionKind}
+          onPick={(code) => { void handlePickMood(code); }}
+          onSkip={resolveMood}
         />
       )}
 

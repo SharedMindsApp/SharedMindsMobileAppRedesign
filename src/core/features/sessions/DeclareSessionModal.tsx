@@ -14,7 +14,6 @@ import { TaskLoadBadge } from '../../ui/TaskLoadBadge';
 import { InputWell } from '../../ui/CorePage';
 import { taskUrgency } from '../../../lib/taskUrgency';
 import { SESSION_KINDS, type SessionKind } from '../../../lib/sessionMood';
-import { MoodPicker } from './MoodPicker';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConductGateModal } from '../moderation/ConductGateModal';
 import { useSessionLimits } from '../../../hooks/useSessionLimits';
@@ -1174,12 +1173,9 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           )}
         </div>
 
-        {/* ── Start-of-session mood check-in (immediate sessions only) ── */}
-        {!isScheduling && (
-          <div className="shrink-0 px-5 pt-3">
-            <MoodPicker kind={sessionKind} value={startMood} onChange={setStartMood} when="before" />
-          </div>
-        )}
+        {/* Start-of-session mood is now captured in a focused step once the
+            session opens (StartMoodSheet in ActiveSessionPage) — keeping it out
+            of this busy modal lifts honest-answer rates. */}
 
         {/* ── Session mode (hidden when locked to Solo, when scheduling, or
             in Match-me-now mode — a match is always 1-on-1, so the picker

@@ -1191,6 +1191,16 @@ export async function fetchSessionInvites(sessionId: string): Promise<SessionInv
   return (data ?? []) as SessionInvite[];
 }
 
+/** Record the session owner's start-of-session mood/energy. Captured in a
+ *  focused step once the session opens (not buried in the declare modal). */
+export async function updateSessionStartMood(sessionId: string, mood: string): Promise<void> {
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({ start_mood: mood })
+    .eq('id', sessionId);
+  if (error) throw error;
+}
+
 /** Set/replace the session's declared goal mid-session. Used by the
  *  match-me-now waiting room, where the task is declared AFTER the door
  *  opens rather than up front. Optionally links a task row. */
