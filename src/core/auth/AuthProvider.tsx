@@ -44,6 +44,12 @@ export interface Profile {
     /** Skills the user would love to find in *other people* (identity-oriented,
      *  distinct from seeking which is task-oriented). Drawn from SKILL_CATEGORIES. */
     wanted_skills?: string[] | null;
+    /** One-line hook shown under the name (≤80 chars). */
+    headline?: string | null;
+    /** "Right now" line — what they're working on / looking for (≤140). */
+    current_focus?: string | null;
+    /** Opportunity signals — what they're open to (see lib/openTo.ts ids). */
+    open_to?: string[] | null;
     location?: string | null;
     country_code?: string | null;
     city?: string | null;

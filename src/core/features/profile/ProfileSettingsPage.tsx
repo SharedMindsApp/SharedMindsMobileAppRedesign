@@ -33,6 +33,7 @@ import { CountryPicker } from '../../ui/CountryPicker';
 import { CityAutocomplete } from '../../ui/CityAutocomplete';
 import { SkillsEditor } from '../../ui/SkillsEditor';
 import { formatLocation } from '../../../lib/countries';
+import { OPEN_TO_OPTIONS, HEADLINE_MAX, CURRENT_FOCUS_MAX } from '../../../lib/openTo';
 import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
 import { exportMyData, deleteMyAccount } from '../../services/PrivacyService';
 import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
@@ -192,6 +193,11 @@ function EditTab() {
   const [skillLevels, setSkillLevels] = useState<Record<string, number>>(
     (profile?.skill_levels as Record<string, number>) ?? {}
   );
+  const [headline, setHeadline] = useState(profile?.headline ?? '');
+  const [currentFocus, setCurrentFocus] = useState(profile?.current_focus ?? '');
+  const [openTo, setOpenTo] = useState<string[]>(profile?.open_to ?? []);
+  const [offering, setOffering] = useState<string[]>(profile?.offering ?? []);
+  const [seeking, setSeeking] = useState<string[]>(profile?.seeking ?? []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,6 +219,11 @@ function EditTab() {
       setWorkTypes(types);
       setSkills(profile.skills ?? []);
       setSkillLevels((profile.skill_levels as Record<string, number>) ?? {});
+      setHeadline(profile.headline ?? '');
+      setCurrentFocus(profile.current_focus ?? '');
+      setOpenTo(profile.open_to ?? []);
+      setOffering(profile.offering ?? []);
+      setSeeking(profile.seeking ?? []);
     }
   }, [profile]);
 
@@ -270,6 +281,11 @@ function EditTab() {
           skill_levels: Object.fromEntries(
             Object.entries(skillLevels).filter(([k]) => skills.includes(k))
           ),
+          headline: headline.trim() || null,
+          current_focus: currentFocus.trim() || null,
+          open_to: openTo,
+          offering,
+          seeking,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -295,7 +311,12 @@ function EditTab() {
     city !== (profile?.city ?? '') ||
     !arraysEqual(workTypes, initialWorkTypes) ||
     !arraysEqual(skills, profile?.skills ?? []) ||
-    JSON.stringify(skillLevels) !== JSON.stringify((profile?.skill_levels as Record<string, number>) ?? {});
+    JSON.stringify(skillLevels) !== JSON.stringify((profile?.skill_levels as Record<string, number>) ?? {}) ||
+    headline !== (profile?.headline ?? '') ||
+    currentFocus !== (profile?.current_focus ?? '') ||
+    !arraysEqual(openTo, profile?.open_to ?? []) ||
+    !arraysEqual(offering, profile?.offering ?? []) ||
+    !arraysEqual(seeking, profile?.seeking ?? []);
 
   return (
     <div className="space-y-5">
@@ -388,6 +409,36 @@ function EditTab() {
 
           <div>
             <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 flex items-center gap-1.5">
+              <Zap size={10} /> Headline <span className="font-normal opacity-60 normal-case tracking-normal">— the one-liner under your name</span>
+            </label>
+            <input
+              type="text"
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value.slice(0, HEADLINE_MAX))}
+              placeholder="e.g. Founder building tools for focused work"
+              maxLength={HEADLINE_MAX}
+              className="w-full px-4 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+            />
+            <p className="text-[10px] stitch-text-secondary text-right mt-1">{headline.length}/{HEADLINE_MAX}</p>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 flex items-center gap-1.5">
+              <Sparkles size={10} /> Right now <span className="font-normal opacity-60 normal-case tracking-normal">— what you're working on / looking for</span>
+            </label>
+            <input
+              type="text"
+              value={currentFocus}
+              onChange={(e) => setCurrentFocus(e.target.value.slice(0, CURRENT_FOCUS_MAX))}
+              placeholder="e.g. Building GrowDo — looking for a designer to partner with"
+              maxLength={CURRENT_FOCUS_MAX}
+              className="w-full px-4 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+            />
+            <p className="text-[10px] stitch-text-secondary text-right mt-1">{currentFocus.length}/{CURRENT_FOCUS_MAX}</p>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1.5 flex items-center gap-1.5">
               <MapPin size={10} /> Country
             </label>
             <CountryPicker
@@ -461,6 +512,52 @@ function EditTab() {
           levels={skillLevels as Record<string, 1 | 2 | 3 | 4 | 5>}
           onLevelsChange={(next) => setSkillLevels(next)}
         />
+      </SurfaceCard>
+
+      {/* ── Open to (opportunity signals) ─────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">
+          <span className="flex items-center gap-1.5"><Zap size={10} /> Open to</span>
+        </p>
+        <p className="text-xs stitch-text-secondary mb-4">
+          What are you open to right now? Helps the right people reach out — pick “Just here to focus” to keep it quiet.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {OPEN_TO_OPTIONS.map((o) => {
+            const active = openTo.includes(o.id);
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => setOpenTo((cur) => cur.includes(o.id) ? cur.filter((x) => x !== o.id) : [...cur, o.id])}
+                title={o.hint}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-[0.97] ${
+                  active ? 'stitch-btn--primary text-white shadow-sm shadow-primary/20' : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'
+                }`}
+              >
+                <span>{o.emoji}</span>
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      </SurfaceCard>
+
+      {/* ── Looking for / Can help with ───────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">
+          <span className="flex items-center gap-1.5"><Sparkles size={10} /> Looking for</span>
+        </p>
+        <p className="text-xs stitch-text-secondary mb-3">Skills or help you'd love to find in others.</p>
+        <SkillsEditor value={seeking} onChange={setSeeking} />
+
+        <div className="h-px bg-surface-container my-5" />
+
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">
+          <span className="flex items-center gap-1.5"><Check size={10} /> Can help with</span>
+        </p>
+        <p className="text-xs stitch-text-secondary mb-3">What you're happy to help others with.</p>
+        <SkillsEditor value={offering} onChange={setOffering} />
       </SurfaceCard>
 
       {/* ── Save button ───────────────────────────────────── */}

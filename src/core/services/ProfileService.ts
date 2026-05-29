@@ -31,6 +31,13 @@ export interface PublicProfile {
   last_seen_at?: string | null;
   presence_privacy?: 'everyone' | 'connections' | 'nobody';
   status_mode?: 'auto' | 'busy' | 'offline';
+  // ── Intent layer (what I want / what I offer) ──
+  headline?: string | null;
+  current_focus?: string | null;
+  open_to?: string[] | null;
+  offering?: string[] | null;
+  seeking?: string[] | null;
+  skill_levels?: Record<string, number> | null;
 }
 
 export interface RecentShip {
@@ -74,7 +81,7 @@ export async function listMembers(): Promise<PublicProfile[]> {
 export async function fetchPublicProfile(userId: string): Promise<PublicProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, location, country_code, city, created_at')
+    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, skill_levels, location, country_code, city, created_at, headline, current_focus, open_to, offering, seeking')
     .eq('id', userId)
     .single();
 
@@ -700,7 +707,7 @@ export async function reverifyExistingAvatar(userId: string, avatarUrl: string):
 export async function fetchProfileFull(userId: string): Promise<PublicProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, location, country_code, city, created_at')
+    .select('id, display_name, bio, avatar_url, work_type, work_types, skills, skill_levels, location, country_code, city, created_at, headline, current_focus, open_to, offering, seeking')
     .eq('id', userId)
     .single();
 

@@ -12,6 +12,7 @@ import { SurfaceCard } from '../../ui/CorePage';
 import { Avatar } from '../../ui/Avatar';
 import { findCountry, formatLocation } from '../../../lib/countries';
 import { findSkillCategory } from '../../../lib/skills';
+import { openToMeta } from '../../../lib/openTo';
 import { fetchConnections, type ConnectionWithProfile } from '../../services/ConnectionService';
 
 const WORK_TYPE_META: Record<string, { label: string; emoji: string }> = {
@@ -305,6 +306,11 @@ export function ProfilePage() {
           <h1 className="stitch-headline text-xl font-extrabold tracking-tight leading-tight">
             {profile.display_name}
           </h1>
+          {profile.headline && (
+            <p className="text-[13px] font-semibold stitch-text-primary/90 leading-snug mt-0.5">
+              {profile.headline}
+            </p>
+          )}
           {(() => {
             const country = findCountry(profile.country_code);
             const locationLabel =
@@ -413,6 +419,60 @@ export function ProfilePage() {
         <p className="text-sm stitch-text-secondary leading-relaxed">{profile.bio}</p>
       ) : null}
 
+      {/* ── Right now (current focus) ──────────────────────── */}
+      {profile.current_focus && (
+        <div className="rounded-2xl bg-gradient-to-r from-violet-50 to-blue-50 ring-1 ring-violet-200/50 px-4 py-3">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-violet-700 mb-1 flex items-center gap-1.5">
+            <Rocket size={11} /> Right now
+          </p>
+          <p className="text-sm font-semibold stitch-text-primary leading-snug">{profile.current_focus}</p>
+        </div>
+      )}
+
+      {/* ── Open to (opportunity signals) ──────────────────── */}
+      {profile.open_to && profile.open_to.length > 0 && (
+        <section>
+          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">Open to</p>
+          <div className="flex flex-wrap gap-1.5">
+            {profile.open_to.map((id) => {
+              const o = openToMeta(id);
+              return (
+                <span key={id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 text-xs font-bold">
+                  <span className="text-[11px] leading-none">{o.emoji}</span>
+                  {o.label}
+                </span>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Looking for / Can help with (the get & the give) ── */}
+      {((profile.seeking?.length ?? 0) > 0 || (profile.offering?.length ?? 0) > 0) && (
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {(profile.seeking?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">🔍 Looking for</p>
+              <div className="flex flex-wrap gap-1.5">
+                {profile.seeking!.map((s) => (
+                  <span key={s} className="inline-flex items-center px-2.5 py-1 rounded-full bg-surface-container-low stitch-text-primary text-xs font-semibold">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {(profile.offering?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">🤝 Can help with</p>
+              <div className="flex flex-wrap gap-1.5">
+                {profile.offering!.map((s) => (
+                  <span key={s} className="inline-flex items-center px-2.5 py-1 rounded-full bg-surface-container-low stitch-text-primary text-xs font-semibold">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* ── Skills ─────────────────────────────────────────── */}
       {profile.skills && profile.skills.length > 0 && (
         <section>
@@ -425,6 +485,7 @@ export function ProfilePage() {
           <div className="flex flex-wrap gap-1.5">
             {profile.skills.map((skill) => {
               const cat = findSkillCategory(skill);
+              const level = profile.skill_levels?.[skill];
               return (
                 <span
                   key={skill}
@@ -432,6 +493,13 @@ export function ProfilePage() {
                 >
                   {cat && <span className="text-[11px] leading-none">{cat.emoji}</span>}
                   {skill}
+                  {typeof level === 'number' && level > 0 && (
+                    <span className="ml-1 inline-flex gap-0.5" aria-label={`Level ${level} of 5`}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <span key={n} className={`w-1 h-1 rounded-full ${n <= level ? 'bg-primary' : 'bg-surface-container-high'}`} />
+                      ))}
+                    </span>
+                  )}
                 </span>
               );
             })}
