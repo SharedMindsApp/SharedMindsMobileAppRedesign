@@ -61,10 +61,21 @@ export function UpcomingPublicSessionsStrip({
   const navigate = useNavigate();
 
   // Filter out solo (always private) — they don't exist as scheduled, but defensive.
-  // Drop your own scheduled sessions (the SmartNextCard handles those).
+  // We intentionally KEEP the viewer's own scheduled sessions here: this is a
+  // calendar overview ("what's coming up"), and for an established host the
+  // only upcoming sessions are often their own — filtering them out left the
+  // whole section empty/hidden. Your own sessions are tagged "You" below.
+  // Only genuinely upcoming sessions — the feed also carries `completed`
+  // history rows (the calendar scrolls backward), which must not leak into
+  // a "coming up" strip as stale cards.
+  const FRESH_GRACE_MS = 15 * 60 * 1000; // tolerate a session that just started
   const upcoming = sessions
     .filter((s) => (s as any).session_mode !== 'solo')
-    .filter((s) => s.user_id !== myUserId)
+    .filter((s) => (s as any).status !== 'completed' && (s as any).status !== 'cancelled')
+    .filter((s) => {
+      const t = new Date(s.scheduled_at ?? s.start_time).getTime();
+      return Number.isFinite(t) && t > Date.now() - FRESH_GRACE_MS;
+    })
     .slice(0, 6);
 
   if (upcoming.length === 0) return null;
@@ -127,7 +138,7 @@ export function UpcomingPublicSessionsStrip({
                   </div>
                 )}
                 <p className="text-xs font-bold stitch-text-primary truncate flex-1 min-w-0">
-                  {s.display_name}
+                  {s.user_id === myUserId ? 'You' : s.display_name}
                 </p>
               </div>
 
