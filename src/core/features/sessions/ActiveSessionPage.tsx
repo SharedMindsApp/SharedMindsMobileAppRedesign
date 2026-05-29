@@ -11,7 +11,8 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
+import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -86,6 +87,9 @@ function avatarClass(name: string): string {
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
+
+/** Seconds before two compatible waiting hosts are auto-connected. */
+const MERGE_COUNTDOWN_START = 6;
 
 export function ActiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -174,6 +178,14 @@ export function ActiveSessionPage() {
   // door) or carry on solo.
   const [showPartnerLeft, setShowPartnerLeft] = useState(false);
   const [reopening, setReopening] = useState(false);
+  // Auto-connect: when two compatible hosts are both waiting, the later opener
+  // (this user) is offered a cancelable countdown to merge into the earlier
+  // "anchor" door. mergeAnchor is the door we'd join; mergeSecs counts down.
+  const [mergeAnchor, setMergeAnchor] = useState<CommunitySession | null>(null);
+  const [mergeSecs, setMergeSecs] = useState(MERGE_COUNTDOWN_START);
+  const [merging, setMerging] = useState(false);
+  const mergeAnchorIdRef = useRef<string | null>(null);
+  const mergeDismissedRef = useRef<Set<string>>(new Set());
   // Leave-early confirm + report (matched 1-on-1 only).
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -458,6 +470,52 @@ export function ActiveSessionPage() {
       setReopening(false);
     }
   }, [session, reopening, setActiveSession]);
+
+  // Merge into the anchor door: claim their slot (race-safe), then soft-cancel
+  // our own now-orphaned door so it doesn't linger as a ghost. Claim FIRST so a
+  // lost race leaves us safely still hosting our own door.
+  const handleMerge = useCallback(async (anchor: CommunitySession) => {
+    if (!session || merging) return;
+    setMerging(true);
+    try {
+      const claimed = await claimOpenSession(anchor.id);
+      if (!claimed) {
+        // Anchor filled up or closed — drop it; detection will find another.
+        mergeAnchorIdRef.current = null;
+        setMergeAnchor(null);
+        setMerging(false);
+        return;
+      }
+      try { await deleteScheduledSession(session.id); }
+      catch (e) { console.warn('[ActiveSessionPage] merge: cancel own door failed:', e); }
+      window.dispatchEvent(new CustomEvent('sm:music-stop'));
+      setActiveSession(claimed);
+      navigate(`/session/${claimed.id}`, { state: { session: claimed } });
+    } catch (e) {
+      console.warn('[ActiveSessionPage] merge failed:', e);
+      setMerging(false);
+    }
+  }, [session, merging, navigate, setActiveSession]);
+
+  // "Stay separate" — pass on this person (mutual cooldown so we stop being
+  // re-surfaced to each other) and clear the prompt.
+  const handleDismissMerge = useCallback(() => {
+    const a = mergeAnchor;
+    if (a) {
+      mergeDismissedRef.current.add(a.user_id);
+      void skipMatchDoors([a.user_id]);
+    }
+    mergeAnchorIdRef.current = null;
+    setMergeAnchor(null);
+  }, [mergeAnchor]);
+
+  // "silent deep work" / "chatty plan" / "connect" — purpose + vibe adjective.
+  const mergeLabel = (() => {
+    if (!mergeAnchor) return '';
+    const purpose = intentMeta(mergeAnchor.session_intent).label.toLowerCase();
+    const vibe = mergeAnchor.vibe === 'silent' ? 'silent ' : mergeAnchor.vibe === 'chatty' ? 'chatty ' : '';
+    return `${vibe}${purpose}`;
+  })();
 
   // ── Planned wizards (host agenda) ──────────────────────────────
   const plannedWizards: PlannedWizard[] = (session?.planned_wizards as PlannedWizard[] | undefined) ?? [];
@@ -821,6 +879,70 @@ export function ActiveSessionPage() {
     const t = setInterval(() => { void touchDoorPresence(id); }, DOOR_HEARTBEAT_MS);
     return () => clearInterval(t);
   }, [isOpenUnmatchedHost, session?.id]);
+
+  // ── Auto-connect: two compatible waiting hosts → merge ─────────
+  // While this user is a waiting host, look for another open door with the
+  // SAME purpose + vibe that opened BEFORE theirs. Only the LATER opener is
+  // prompted (the earlier door is the anchor and is never surfaced its own
+  // partner), so exactly one side initiates — no double-merge race. skips are
+  // already filtered out by fetchOpenSessions.
+  useEffect(() => {
+    if (!isOpenUnmatchedHost || !session?.id || merging) {
+      if (!isOpenUnmatchedHost) { mergeAnchorIdRef.current = null; setMergeAnchor(null); }
+      return;
+    }
+    const sid = session.id;
+    const myIntent = session.session_intent ?? 'work';
+    const myVibe = session.vibe ?? 'brief_hi';
+    let cancelled = false;
+
+    const openedAt = (s: { door_opened_at?: string | null; start_time: string }) =>
+      s.door_opened_at ? new Date(s.door_opened_at).getTime() : Date.parse(s.start_time);
+
+    const findAnchor = async () => {
+      // My own door-open time (door_opened_at isn't on the cached row, so read it).
+      let myOpened = Date.parse(session.start_time);
+      try {
+        const { data } = await supabase.from('focus_sessions').select('door_opened_at').eq('id', sid).maybeSingle();
+        if (data?.door_opened_at) myOpened = new Date(data.door_opened_at as string).getTime();
+      } catch { /* fall back to start_time */ }
+
+      let open: CommunitySession[] = [];
+      try { open = await fetchOpenSessions(); } catch { return; }
+      if (cancelled) return;
+
+      const anchor = open
+        .filter((o) => (o.session_intent ?? 'work') === myIntent)
+        .filter((o) => (o.vibe ?? 'brief_hi') === myVibe)
+        .filter((o) => !mergeDismissedRef.current.has(o.user_id))
+        .filter((o) => openedAt(o as any) < myOpened)   // they opened first → anchor
+        .sort((a, b) => openedAt(a as any) - openedAt(b as any))[0] ?? null;
+
+      if (cancelled) return;
+      if (anchor) {
+        if (mergeAnchorIdRef.current !== anchor.id) {
+          mergeAnchorIdRef.current = anchor.id;
+          setMergeSecs(MERGE_COUNTDOWN_START);
+        }
+        setMergeAnchor(anchor);
+      } else {
+        mergeAnchorIdRef.current = null;
+        setMergeAnchor(null);
+      }
+    };
+
+    void findAnchor();
+    const t = setInterval(() => { void findAnchor(); }, 12_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [isOpenUnmatchedHost, session?.id, session?.session_intent, session?.vibe, merging]);
+
+  // Countdown → auto-connect when it hits zero.
+  useEffect(() => {
+    if (!mergeAnchor || merging) return;
+    if (mergeSecs <= 0) { void handleMerge(mergeAnchor); return; }
+    const t = window.setTimeout(() => setMergeSecs((s) => s - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [mergeAnchor, mergeSecs, merging, handleMerge]);
 
   // Would a 30-min extension push the session past the 1-hour mark? If so we
   // offer to pair it with an optional mid-session break.
@@ -1206,6 +1328,44 @@ export function ActiveSessionPage() {
             >
               {reopening ? <Loader2 size={13} className="animate-spin" /> : <DoorOpen size={13} />}
               Find a new match
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Auto-connect prompt — another compatible host is waiting ──── */}
+      {mergeAnchor && !showDebrief && !showPartnerLeft && (
+        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-violet-500/15 ring-1 ring-violet-400/40 px-4 py-3 flex items-center gap-3">
+          {mergeAnchor.avatar_url ? (
+            <img src={mergeAnchor.avatar_url} alt={mergeAnchor.display_name ?? 'host'} className="w-9 h-9 rounded-full object-cover shrink-0 ring-1 ring-violet-300/40" />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-blue-500 grid place-items-center text-white text-sm font-bold shrink-0">
+              {(mergeAnchor.display_name ?? '?').charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white leading-tight truncate">{mergeAnchor.display_name ?? 'Someone'} is waiting too</p>
+            <p className="text-[11px] text-white/70 leading-snug mt-0.5">
+              You both want {mergeLabel} — connecting in {mergeSecs}s…
+            </p>
+          </div>
+          <div className="shrink-0 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleDismissMerge}
+              disabled={merging}
+              className="inline-flex items-center text-white/80 hover:text-white text-xs font-bold px-2.5 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
+            >
+              Stay separate
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleMerge(mergeAnchor)}
+              disabled={merging}
+              className="inline-flex items-center gap-1.5 bg-violet-500 hover:bg-violet-400 text-white text-xs font-extrabold px-3 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
+            >
+              {merging ? <Loader2 size={13} className="animate-spin" /> : <Users size={13} />}
+              Join now
             </button>
           </div>
         </div>
