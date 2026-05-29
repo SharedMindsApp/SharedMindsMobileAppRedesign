@@ -13,6 +13,7 @@ import { Avatar } from '../../ui/Avatar';
 import { findCountry, formatLocation } from '../../../lib/countries';
 import { findSkillCategory } from '../../../lib/skills';
 import { openToMeta } from '../../../lib/openTo';
+import { WorkCreditsSection } from './WorkCredits';
 import { fetchConnections, type ConnectionWithProfile } from '../../services/ConnectionService';
 
 const WORK_TYPE_META: Record<string, { label: string; emoji: string }> = {
@@ -506,6 +507,9 @@ export function ProfilePage() {
           </div>
         </section>
       )}
+
+      {/* ── Work (credits / body of work) ──────────────────── */}
+      <WorkCreditsSection userId={targetId} />
 
       {/* Profile = identity only. Stats, streaks, activity, and the
           "Start a session" empty state previously lived here — they've

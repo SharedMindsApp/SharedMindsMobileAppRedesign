@@ -44,6 +44,7 @@ import { useUIPreferences } from '../../../contexts/UIPreferencesContext';
 import { useCoreData } from '../../data/CoreDataContext';
 import { PlannerSettingsSheet } from '../dashboard/PlannerSettingsSheet';
 import { ProfilePage } from './ProfilePage';
+import { WorkCreditsEditor } from './WorkCredits';
 
 /** "7am" / "12pm" / "10pm" for an hour 0–23. */
 function fmtHour(h: number): string {
@@ -558,6 +559,17 @@ function EditTab() {
         </p>
         <p className="text-xs stitch-text-secondary mb-3">What you're happy to help others with.</p>
         <SkillsEditor value={offering} onChange={setOffering} />
+      </SurfaceCard>
+
+      {/* ── Work / credits (own body of work) ─────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">
+          <span className="flex items-center gap-1.5"><Briefcase size={10} /> Work</span>
+        </p>
+        <p className="text-xs stitch-text-secondary mb-4">
+          Your body of work — past projects and the role you played. Saves on its own as you add each one.
+        </p>
+        <WorkCreditsEditor />
       </SurfaceCard>
 
       {/* ── Save button ───────────────────────────────────── */}
