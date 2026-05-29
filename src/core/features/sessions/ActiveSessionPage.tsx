@@ -11,7 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -169,6 +169,11 @@ export function ActiveSessionPage() {
   // offered to take over as host (which re-opens the door for a new match).
   const [showTakeover, setShowTakeover] = useState(false);
   const [takingOver, setTakingOver] = useState(false);
+  // Mirror image of takeover, for the HOST: if their matched partner drops out
+  // of presence past the grace window, offer to find a new match (re-open the
+  // door) or carry on solo.
+  const [showPartnerLeft, setShowPartnerLeft] = useState(false);
+  const [reopening, setReopening] = useState(false);
   // Leave-early confirm + report (matched 1-on-1 only).
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -341,19 +346,25 @@ export function ActiveSessionPage() {
     return () => { supabase.removeChannel(channel); };
   }, [session?.id, session?.session_mode, session?.open_to_match, session?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Host-abandonment takeover (Option A) ───────────────────────
+  // ── Mutual abandonment detection ───────────────────────────────
   // Both parties of a CLAIMED 1-on-1 join a per-session realtime presence
-  // channel. If the remaining partner sees the host drop out of presence and
-  // stay gone past a grace window — and it wasn't a deliberate End (no
-  // debrief broadcast) — we offer them takeover. Presence is socket-level, so
-  // it fires even when the host closes the tab; the grace window tolerates a
-  // refresh/reconnect.
+  // channel and watch the OTHER person. If they drop out and stay gone past a
+  // grace window — and it wasn't a deliberate End (no debrief broadcast) — we
+  // prompt the one left behind:
+  //   • partner left behind by host  → "Take over" (becomes host, door re-opens)
+  //   • host left behind by partner  → "Find a new match" (re-opens the door)
+  // Presence is socket-level, so it fires even when the other closes the tab;
+  // the grace window tolerates a refresh/reconnect.
   useEffect(() => {
     if (!session || !user) return;
     if (session.status !== 'active') return;
-    const hostId = session.user_id;
     if (!session.partner_user_id) return;          // not matched yet
-    const amPartner = user.id === session.partner_user_id;
+    const hostId = session.user_id;
+    const partnerId = session.partner_user_id;
+    const amHost = user.id === hostId;
+    const amPartner = user.id === partnerId;
+    if (!amHost && !amPartner) return;             // bystander — shouldn't happen
+    const watchId = amPartner ? hostId : partnerId; // the other person
 
     const channel = supabase.channel(`session-presence:${session.id}`, {
       config: { presence: { key: user.id } },
@@ -363,13 +374,16 @@ export function ActiveSessionPage() {
     const clearGrace = () => { if (graceTimer) { window.clearTimeout(graceTimer); graceTimer = null; } };
 
     const evaluate = () => {
-      if (!amPartner || session.debrief_started_at) { clearGrace(); return; }
-      const present = Object.keys(channel.presenceState()).includes(hostId);
+      if (session.debrief_started_at) { clearGrace(); return; }
+      const present = Object.keys(channel.presenceState()).includes(watchId);
       if (present) {
         clearGrace();
-        setShowTakeover(false);
+        if (amPartner) setShowTakeover(false); else setShowPartnerLeft(false);
       } else if (!graceTimer) {
-        graceTimer = window.setTimeout(() => setShowTakeover(true), 25_000);
+        graceTimer = window.setTimeout(
+          () => { if (amPartner) setShowTakeover(true); else setShowPartnerLeft(true); },
+          25_000,
+        );
       }
     };
 
@@ -401,6 +415,49 @@ export function ActiveSessionPage() {
       setTakingOver(false);
     }
   }, [session, takingOver, setActiveSession]);
+
+  // Host whose partner left chose to find someone new — abandon the dead match
+  // and re-open the door with a fresh baseline. The presence-heartbeat effect
+  // restarts automatically once open_to_match flips back on.
+  const handleReopenForMatch = useCallback(async () => {
+    if (!session || reopening) return;
+    setReopening(true);
+    try {
+      const updated = await reopenForNewMatch(session.id);
+      if (updated) {
+        setSession(updated);
+        setActiveSession(updated);
+        setPartnerJoined(false);
+      }
+      setShowPartnerLeft(false);
+    } catch (e) {
+      console.warn('[ActiveSessionPage] reopen for new match failed:', e);
+    } finally {
+      setReopening(false);
+    }
+  }, [session, reopening, setActiveSession]);
+
+  // …or carry on alone: re-open clears the dead partner + mode, then close the
+  // door so it's a clean solo session (not discoverable).
+  const handleKeepSolo = useCallback(async () => {
+    if (!session || reopening) return;
+    setReopening(true);
+    try {
+      const reopened = await reopenForNewMatch(session.id);
+      if (reopened) {
+        await closeTheDoor(session.id);
+        const solo = { ...reopened, open_to_match: false };
+        setSession(solo);
+        setActiveSession(solo);
+        setPartnerJoined(false);
+      }
+      setShowPartnerLeft(false);
+    } catch (e) {
+      console.warn('[ActiveSessionPage] keep-solo failed:', e);
+    } finally {
+      setReopening(false);
+    }
+  }, [session, reopening, setActiveSession]);
 
   // ── Planned wizards (host agenda) ──────────────────────────────
   const plannedWizards: PlannedWizard[] = (session?.planned_wizards as PlannedWizard[] | undefined) ?? [];
@@ -1119,6 +1176,38 @@ export function ActiveSessionPage() {
             {takingOver ? <Loader2 size={13} className="animate-spin" /> : <DoorOpen size={13} />}
             Take over
           </button>
+        </div>
+      )}
+
+      {/* ── Partner-left prompt (host side, matched 1-on-1) ──────────── */}
+      {showPartnerLeft && !showDebrief && (
+        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-amber-500/15 ring-1 ring-amber-400/40 px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-amber-300 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-white leading-tight">Your partner left</p>
+            <p className="text-[11px] text-white/70 leading-snug mt-0.5">
+              Re-open the door to match with someone new, or keep going solo.
+            </p>
+          </div>
+          <div className="shrink-0 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleKeepSolo}
+              disabled={reopening}
+              className="inline-flex items-center text-white/80 hover:text-white text-xs font-bold px-2.5 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
+            >
+              Keep solo
+            </button>
+            <button
+              type="button"
+              onClick={handleReopenForMatch}
+              disabled={reopening}
+              className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
+            >
+              {reopening ? <Loader2 size={13} className="animate-spin" /> : <DoorOpen size={13} />}
+              Find a new match
+            </button>
+          </div>
         </div>
       )}
 
