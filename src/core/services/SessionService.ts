@@ -149,6 +149,8 @@ export async function startCommunitySession(
       // behaviour for a future joiner), but we still persist what the user
       // picked even on non-solo sessions so reports can read it back.
       open_to_match: input.sessionMode === 'solo' && !!input.openToMatch,
+      // Baseline for match-wait tracking — when this door opened.
+      door_opened_at: (input.sessionMode === 'solo' && input.openToMatch) ? now.toISOString() : null,
       vibe: input.vibe ?? null,
       session_kind: input.sessionKind ?? 'do',
       start_mood: input.startMood ?? null,
@@ -1023,42 +1025,37 @@ export async function fetchMatchWaitStats(): Promise<
   { avgMinutes: number; sampleSize: number; basis: 'live' | 'global' } | null
 > {
   const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from('focus_sessions')
-    .select('start_time, match_joined_at, intended_duration_minutes')
-    .not('match_joined_at', 'is', null)
-    .gte('start_time', fourteenDaysAgo)
-    .order('start_time', { ascending: false })
-    .limit(300);
-  if (error) { console.warn('[fetchMatchWaitStats] query failed:', error.message); return null; }
+  // Aggregated over GENUINELY-completed matches only (see match_wait_buckets
+  // RPC); abandoned / never-jointly-finished matches are excluded server-side.
+  const { data, error } = await supabase.rpc('match_wait_buckets', { p_since: fourteenDaysAgo });
+  if (error) { console.warn('[fetchMatchWaitStats] rpc failed:', error.message); return null; }
+  const rows = (data ?? []) as { day: number; bucket: number; cnt: number; avg_minutes: number }[];
+  if (rows.length === 0) return null;
 
   const now = new Date();
   const nowDay = now.getUTCDay();
-  const nowBucket = Math.floor(now.getUTCHours() / 2); // 0-11, matches admin
+  const nowBucket = Math.floor(now.getUTCHours() / 2);
 
-  const all: number[] = [];
-  const bucket: number[] = [];
-  for (const row of data ?? []) {
-    const start = new Date(row.start_time as string).getTime();
-    const joined = new Date(row.match_joined_at as string).getTime();
-    const mins = (joined - start) / 60_000;
-    // Drop noise: negatives (clock skew) and waits longer than the session
-    // itself (stale rows / re-opened doors) aren't representative.
-    const cap = (row.intended_duration_minutes ?? 120);
-    if (mins < 0 || mins > cap) continue;
-    all.push(mins);
-    const d = new Date(row.start_time as string);
-    if (d.getUTCDay() === nowDay && Math.floor(d.getUTCHours() / 2) === nowBucket) bucket.push(mins);
+  // Current time bucket — prefer it once it has enough samples.
+  const cur = rows.find((r) => r.day === nowDay && r.bucket === nowBucket);
+  if (cur && cur.cnt >= MATCH_WAIT_BUCKET_MIN_SAMPLES) {
+    return { avgMinutes: Math.round(cur.avg_minutes), sampleSize: Number(cur.cnt), basis: 'live' };
   }
 
-  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  if (bucket.length >= MATCH_WAIT_BUCKET_MIN_SAMPLES) {
-    return { avgMinutes: Math.round(mean(bucket)), sampleSize: bucket.length, basis: 'live' };
-  }
-  if (all.length >= 3) {
-    return { avgMinutes: Math.round(mean(all)), sampleSize: all.length, basis: 'global' };
-  }
-  return null;
+  // Global = sample-weighted mean across all buckets.
+  const totalCnt = rows.reduce((a, r) => a + Number(r.cnt), 0);
+  if (totalCnt < 3) return null;
+  const weighted = rows.reduce((a, r) => a + r.avg_minutes * Number(r.cnt), 0) / totalCnt;
+  return { avgMinutes: Math.round(weighted), sampleSize: totalCnt, basis: 'global' };
+}
+
+/** Host whose partner left wants a fresh match — abandons the current match
+ *  (so it doesn't pollute wait stats) and re-opens the door with a new
+ *  baseline. Returns the updated session, or null if not applicable. */
+export async function reopenForNewMatch(sessionId: string): Promise<FocusSession | null> {
+  const { data, error } = await supabase.rpc('reopen_for_new_match', { p_session_id: sessionId });
+  if (error) throw error;
+  return (data as FocusSession) ?? null;
 }
 
 export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]> {

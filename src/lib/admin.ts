@@ -676,41 +676,24 @@ export async function getMatchWaitAnalytics(
     : range === 'month'   ? new Date(Date.now() - 30 * 86400_000).toISOString()
     :                       new Date(Date.now() - 90 * 86400_000).toISOString();
 
-  let q = supabase
-    .from('focus_sessions')
-    .select('start_time, match_joined_at, intended_duration_minutes')
-    .not('match_joined_at', 'is', null);
-  if (since) q = q.gte('start_time', since);
-  const { data } = await q;
+  // Reads the SECURITY DEFINER aggregate over GENUINELY-completed matches
+  // (abandoned / never-jointly-finished matches are excluded server-side).
+  const { data } = await supabase.rpc('match_wait_buckets', { p_since: since });
+  const rows = (data ?? []) as { day: number; bucket: number; cnt: number; avg_minutes: number }[];
 
-  const cellMap = new Map<string, { sum: number; count: number }>();
-  let gSum = 0, gCount = 0;
+  const cells: MatchWaitCell[] = rows.map((r) => ({
+    day: Number(r.day),
+    bucket: Number(r.bucket),
+    count: Number(r.cnt),
+    avgMinutes: Number(r.avg_minutes),
+  }));
 
-  for (const row of data ?? []) {
-    if (!row.start_time || !row.match_joined_at) continue;
-    const start = new Date(row.start_time as string).getTime();
-    const joined = new Date(row.match_joined_at as string).getTime();
-    const mins = (joined - start) / 60_000;
-    const cap = (row.intended_duration_minutes ?? 120);
-    if (mins < 0 || mins > cap) continue; // drop clock skew / stale re-opens
-    const d = new Date(row.start_time as string);
-    const day = d.getUTCDay();
-    const bucket = Math.floor(d.getUTCHours() / 2); // 0-11
-    const key = `${day}-${bucket}`;
-    const cell = cellMap.get(key) ?? { sum: 0, count: 0 };
-    cell.sum += mins; cell.count += 1;
-    cellMap.set(key, cell);
-    gSum += mins; gCount += 1;
-  }
-
-  const cells: MatchWaitCell[] = Array.from(cellMap.entries()).map(([key, { sum, count }]) => {
-    const [day, bucket] = key.split('-').map(Number);
-    return { day, bucket, count, avgMinutes: sum / count };
-  });
+  const totalCount = cells.reduce((a, c) => a + c.count, 0);
+  const weightedSum = cells.reduce((a, c) => a + c.avgMinutes * c.count, 0);
 
   return {
     cells,
-    globalAvgMinutes: gCount > 0 ? gSum / gCount : null,
-    sampleSize: gCount,
+    globalAvgMinutes: totalCount > 0 ? weightedSum / totalCount : null,
+    sampleSize: totalCount,
   };
 }
