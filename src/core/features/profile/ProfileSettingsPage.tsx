@@ -23,7 +23,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, LogOut, MapPin, Briefcase, FileText, Building2, Sparkles, Camera,
   AlertCircle, Eye, EyeOff, UserRound, Bell, Shield, Settings as SettingsIcon,
-  Sun, Moon, Zap, Check, Smartphone, Download, Trash2,
+  Sun, Moon, Zap, Check, Smartphone, Download, Trash2, Plus, Pencil, ArrowLeft,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/AuthProvider';
@@ -98,6 +98,9 @@ function resolveTab(raw: string | null): SettingsTab {
 export function ProfileSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<SettingsTab>(() => resolveTab(searchParams.get('tab')));
+  // Profile is view-first: show the public profile, flip to the editor only
+  // when the user taps "Edit profile".
+  const [editingProfile, setEditingProfile] = useState(false);
 
   // Keep the tab in sync if the ?tab= param changes (e.g. avatar-dropdown
   // links to /profile?tab=notifications), and strip the param once consumed.
@@ -135,18 +138,42 @@ export function ProfileSettingsPage() {
       </div>
 
       {tab === 'profile' && (
-        <div className="space-y-6">
-          {/* Public preview — what people see when they hit /profile/:you */}
-          <section>
-            <SectionHeading icon={<UserRound size={12} />} title="How others see you" />
-            <ProfilePage />
-          </section>
-          {/* Edit — the main job of this tab */}
-          <section className="scroll-mt-4">
-            <SectionHeading icon={<SettingsIcon size={12} />} title="Edit your profile" />
+        editingProfile ? (
+          <div className="space-y-4">
+            {/* Edit mode — flip back to the view with Done. */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setEditingProfile(false)}
+                className="inline-flex items-center gap-1.5 text-sm font-bold stitch-text-secondary hover:stitch-text-primary transition-colors"
+              >
+                <ArrowLeft size={15} /> Back to profile
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingProfile(false)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full stitch-btn--primary text-white text-xs font-bold active:scale-95 transition-transform"
+              >
+                <Check size={13} strokeWidth={3} /> Done
+              </button>
+            </div>
             <EditTab />
-          </section>
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* View mode — exactly what others see, plus one Edit affordance. */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setEditingProfile(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full ring-1 ring-surface-container stitch-text-primary text-xs font-bold hover:bg-surface-container-low active:scale-95 transition-all"
+              >
+                <Pencil size={12} /> Edit profile
+              </button>
+            </div>
+            <ProfilePage />
+          </div>
+        )
       )}
 
       {tab === 'notifications' && (
@@ -164,6 +191,42 @@ export function ProfileSettingsPage() {
           <AccountTab />
         </section>
       )}
+    </div>
+  );
+}
+
+// Keeps a heavy picker (e.g. the skill category browser) collapsed to a chip
+// summary until the user taps Add/Edit — so the editor isn't a wall of chips.
+function CollapsiblePicker({ value, addLabel, children }: { value: string[]; addLabel: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (open) {
+    return (
+      <div className="space-y-2">
+        {children}
+        <button type="button" onClick={() => setOpen(false)} className="text-[11px] font-bold text-primary hover:underline">
+          Done
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {value.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((s) => (
+            <span key={s} className="inline-flex items-center px-2.5 py-1 rounded-full bg-surface-container-low stitch-text-primary text-xs font-semibold">{s}</span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs stitch-text-secondary italic opacity-70">Nothing added yet.</p>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl ring-1 ring-dashed ring-surface-container-high stitch-text-secondary hover:stitch-text-primary hover:bg-surface-container-low text-xs font-bold transition-all"
+      >
+        <Plus size={13} /> {value.length ? 'Edit' : addLabel}
+      </button>
     </div>
   );
 }
@@ -507,12 +570,14 @@ function EditTab() {
         <p className="text-xs stitch-text-secondary mb-4">
           Tools, crafts, languages — anything you bring to the work. Filterable on /people.
         </p>
-        <SkillsEditor
-          value={skills}
-          onChange={setSkills}
-          levels={skillLevels as Record<string, 1 | 2 | 3 | 4 | 5>}
-          onLevelsChange={(next) => setSkillLevels(next)}
-        />
+        <CollapsiblePicker value={skills} addLabel="Add skills">
+          <SkillsEditor
+            value={skills}
+            onChange={setSkills}
+            levels={skillLevels as Record<string, 1 | 2 | 3 | 4 | 5>}
+            onLevelsChange={(next) => setSkillLevels(next)}
+          />
+        </CollapsiblePicker>
       </SurfaceCard>
 
       {/* ── Open to (opportunity signals) ─────────────────── */}
@@ -550,7 +615,9 @@ function EditTab() {
           <span className="flex items-center gap-1.5"><Sparkles size={10} /> Looking for</span>
         </p>
         <p className="text-xs stitch-text-secondary mb-3">Skills or help you'd love to find in others.</p>
-        <SkillsEditor value={seeking} onChange={setSeeking} />
+        <CollapsiblePicker value={seeking} addLabel="Add what you're looking for">
+          <SkillsEditor value={seeking} onChange={setSeeking} />
+        </CollapsiblePicker>
 
         <div className="h-px bg-surface-container my-5" />
 
@@ -558,7 +625,9 @@ function EditTab() {
           <span className="flex items-center gap-1.5"><Check size={10} /> Can help with</span>
         </p>
         <p className="text-xs stitch-text-secondary mb-3">What you're happy to help others with.</p>
-        <SkillsEditor value={offering} onChange={setOffering} />
+        <CollapsiblePicker value={offering} addLabel="Add what you can help with">
+          <SkillsEditor value={offering} onChange={setOffering} />
+        </CollapsiblePicker>
       </SurfaceCard>
 
       {/* ── Work / credits (own body of work) ─────────────── */}
