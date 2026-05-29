@@ -6,11 +6,21 @@
 // opens. Portaled to <body> so it escapes the session header's stacking
 // context.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, List, PenLine, Check, Loader2, Plus } from 'lucide-react';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
+import { TimeBlockService } from '../../services/TimeBlockService';
+
+type ProjectFilter = string | 'all' | 'unscoped';
+
+const PROJECT_COLOR_HEX: Record<string, string> = {
+  cyan: '#22d3ee', blue: '#3b82f6', violet: '#8b5cf6',
+  emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+const projectSwatch = (token: string | null | undefined) =>
+  PROJECT_COLOR_HEX[token ?? ''] ?? PROJECT_COLOR_HEX.blue;
 
 interface Props {
   onClose: () => void;
@@ -19,9 +29,50 @@ interface Props {
 }
 
 export function DeclareTaskSheet({ onClose, onChoose }: Props) {
-  const { state: { tasks }, addTaskAsync } = useCoreData();
-  const openTasks = tasks.filter((t) => !t.done);
-  const [tab, setTab] = useState<'pick' | 'type'>(openTasks.length > 0 ? 'pick' : 'type');
+  const { state: { tasks, projects }, addTaskAsync } = useCoreData();
+  const allOpenTasks = tasks.filter((t) => !t.done);
+
+  // Only show project chips that actually have open tasks.
+  const projectsWithTasks = projects.filter((p) =>
+    allOpenTasks.some((t) => t.projectId === p.id),
+  );
+  const hasUnscoped = allOpenTasks.some((t) => !t.projectId);
+
+  const [projectFilter, setProjectFilter] = useState<ProjectFilter>('all');
+
+  // Auto-apply the project of the time block covering the current hour, so
+  // when someone's blocked "10:00 Pitch deck" the picker opens pre-filtered
+  // to that project's tasks. Falls back to 'all' if no block / no project.
+  useEffect(() => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    TimeBlockService.getBlocksForDate(todayStr)
+      .then((blocks) => {
+        const covering = blocks.find((b) => {
+          if (!b.project_id) return false;
+          const [h, m] = b.start_time.split(':').map(Number);
+          const startMin = h * 60 + m;
+          return nowMin >= startMin && nowMin < startMin + b.duration_mins;
+        });
+        // Only apply if that project still has open tasks to show.
+        if (covering?.project_id && projectsWithTasks.some((p) => p.id === covering.project_id)) {
+          setProjectFilter(covering.project_id);
+        }
+      })
+      .catch(() => { /* non-fatal — leave on 'all' */ });
+    // run once on open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openTasks = (() => {
+    if (projectFilter === 'all') return allOpenTasks;
+    if (projectFilter === 'unscoped') return allOpenTasks.filter((t) => !t.projectId);
+    return allOpenTasks.filter((t) => t.projectId === projectFilter);
+  })();
+
+  const [tab, setTab] = useState<'pick' | 'type'>(allOpenTasks.length > 0 ? 'pick' : 'type');
   const [typed, setTyped] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -92,6 +143,28 @@ export function DeclareTaskSheet({ onClose, onChoose }: Props) {
           </div>
         </div>
 
+        {/* project filter — only in the pick tab, only if there are projects
+            with open tasks. Auto-selects the current time block's project. */}
+        {tab === 'pick' && projectsWithTasks.length > 0 && (
+          <div className="shrink-0 px-5 pb-3 -mt-1">
+            <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-1">
+              <FilterChip label="All" selected={projectFilter === 'all'} onClick={() => setProjectFilter('all')} />
+              {projectsWithTasks.map((p) => (
+                <FilterChip
+                  key={p.id}
+                  label={p.title}
+                  dot={projectSwatch((p as { color?: string | null }).color)}
+                  selected={projectFilter === p.id}
+                  onClick={() => setProjectFilter(p.id)}
+                />
+              ))}
+              {hasUnscoped && (
+                <FilterChip label="No project" selected={projectFilter === 'unscoped'} onClick={() => setProjectFilter('unscoped')} />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* body */}
         <div className="flex-1 overflow-y-auto px-5 pb-5 min-h-0">
           {tab === 'pick' ? (
@@ -145,5 +218,25 @@ export function DeclareTaskSheet({ onClose, onChoose }: Props) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+function FilterChip({ label, dot, selected, onClick }: {
+  label: string;
+  dot?: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+        selected ? 'stitch-btn--primary text-white' : 'bg-surface-container-low stitch-text-secondary hover:bg-surface-container'
+      }`}
+    >
+      {dot && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />}
+      <span className="max-w-[120px] truncate">{label}</span>
+    </button>
   );
 }
