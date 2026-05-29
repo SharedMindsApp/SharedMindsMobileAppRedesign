@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X, Loader2, DoorOpen, Users, MessageCircle, Volume2, Zap, Check } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { fetchOpenSessions, claimOpenSession, skipMatchDoors } from '../../services/SessionService';
+import { fetchOpenSessions, claimOpenSession, skipMatchDoors, fetchActiveMatchSkipCount } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { SESSION_INTENTS, intentMeta, type SessionIntent } from '../../../lib/sessionIntent';
 
@@ -48,6 +48,9 @@ export function MatchMeNowSheet({
   // When someone's already waiting and you tap "open my own door", we nudge
   // once: join them, or start your own (which honours the pass — see below).
   const [confirmOwnDoor, setConfirmOwnDoor] = useState(false);
+  // How many people the user recently passed on (hidden from the lists for a
+  // cooldown) — shown as a footnote so a thinned-out sheet doesn't read as dead.
+  const [skippedCount, setSkippedCount] = useState(0);
 
   const visible = purpose
     ? sessions.filter((s) => (s.session_intent ?? 'work') === purpose)
@@ -55,8 +58,12 @@ export function MatchMeNowSheet({
 
   const refresh = useCallback(async () => {
     try {
-      const open = await fetchOpenSessions();
+      const [open, skipped] = await Promise.all([
+        fetchOpenSessions(),
+        fetchActiveMatchSkipCount().catch(() => 0),
+      ]);
       setSessions(open);
+      setSkippedCount(skipped);
     } catch (e) {
       console.warn('[MatchMeNowSheet] fetchOpenSessions failed:', e);
     } finally {
@@ -189,6 +196,11 @@ export function MatchMeNowSheet({
                 );
               })}
             </div>
+            {skippedCount > 0 && (
+              <p className="text-[10px] stitch-text-secondary/70 mt-2 px-1">
+                {skippedCount} {skippedCount === 1 ? 'person you' : 'people you'} recently passed on {skippedCount === 1 ? 'is' : 'are'} hidden for a bit.
+              </p>
+            )}
           </section>
 
           {/* Step 2 — appears once a purpose is chosen: who's open for it + the

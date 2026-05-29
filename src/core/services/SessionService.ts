@@ -1180,6 +1180,22 @@ export async function skipMatchDoors(skippedUserIds: string[]): Promise<void> {
   if (error) console.warn('[skipMatchDoors] failed:', error);
 }
 
+/** How many people the current user has actively passed on (skipper side
+ *  only). Powers the "N recently passed — hidden for a bit" footnote so an
+ *  empty-looking sheet doesn't read as "nobody's here" when really we're just
+ *  hiding people they declined. */
+export async function fetchActiveMatchSkipCount(): Promise<number> {
+  const me = await getAuthedUser();
+  if (!me) return 0;
+  const { count, error } = await supabase
+    .from('match_skips')
+    .select('*', { count: 'exact', head: true })
+    .eq('skipper_user_id', me.id)
+    .gt('expires_at', new Date().toISOString());
+  if (error) return 0;
+  return count ?? 0;
+}
+
 /** Race-safe drop-in: claim a partner slot in an open session. Returns
  *  the joined session (mode now 'one_on_one', intro_phase_ends_at set
  *  according to arrival timing + host vibe). Returns null if the slot
