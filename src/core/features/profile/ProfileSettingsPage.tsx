@@ -45,6 +45,7 @@ import { useCoreData } from '../../data/CoreDataContext';
 import { PlannerSettingsSheet } from '../dashboard/PlannerSettingsSheet';
 import { ProfilePage } from './ProfilePage';
 import { WorkCreditsEditor } from './WorkCredits';
+import { BuildingEditor } from './BuildingProjects';
 
 /** "7am" / "12pm" / "10pm" for an hour 0–23. */
 function fmtHour(h: number): string {
@@ -639,6 +640,17 @@ function EditTab() {
           Your body of work — past projects and the role you played. Saves on its own as you add each one.
         </p>
         <WorkCreditsEditor />
+      </SurfaceCard>
+
+      {/* ── Building (feature projects on profile) ────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">
+          <span className="flex items-center gap-1.5"><Building2 size={10} /> Building</span>
+        </p>
+        <p className="text-xs stitch-text-secondary mb-4">
+          Feature the projects you're working on so people see what you're building. Toggles save instantly.
+        </p>
+        <BuildingEditor />
       </SurfaceCard>
 
       {/* ── Save button ───────────────────────────────────── */}

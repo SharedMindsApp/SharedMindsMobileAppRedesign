@@ -11,6 +11,8 @@ export interface Project {
     color: string | null;
     icon: string | null;
     is_private: boolean;
+    /** Featured on the owner's public profile ("Building"). */
+    show_on_profile?: boolean;
     starts_on: string | null;
     target_date: string | null;
     completed_at: string | null;
@@ -153,6 +155,29 @@ export const ProjectService = {
             shared = (sd ?? []) as Project[];
         }
         return [...own, ...shared].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+    },
+
+    /** A user's projects featured on their public profile ("Building").
+     *  Readable by any member via the show_on_profile RLS policy. */
+    async getProfileProjects(userId: string): Promise<Project[]> {
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('created_by', userId)
+            .eq('show_on_profile', true)
+            .neq('status', 'archived')
+            .order('last_activity_at', { ascending: false, nullsFirst: false });
+        if (error) { console.warn('[ProjectService] getProfileProjects failed:', error); return []; }
+        return (data ?? []) as Project[];
+    },
+
+    /** Toggle whether a project is featured on the owner's profile. */
+    async setProjectShownOnProfile(projectId: string, show: boolean): Promise<void> {
+        const { error } = await supabase
+            .from('projects')
+            .update({ show_on_profile: show, updated_at: new Date().toISOString() })
+            .eq('id', projectId);
+        if (error) throw error;
     },
 
     async getProjectById(projectId: string): Promise<Project | null> {
