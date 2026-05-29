@@ -1009,10 +1009,19 @@ export function minutesLeft(row: {
   return (endMs - Date.now()) / 60_000;
 }
 
+/** Min samples in the current time bucket before we trust the "around now"
+ *  estimate over the global average. */
+const MATCH_WAIT_BUCKET_MIN_SAMPLES = 4;
+
 /** Rolling average wait between a match-me-now door opening (start_time) and a
- *  partner dropping in (match_joined_at), over recently claimed sessions.
- *  Returns null when there isn't enough signal to quote a number. */
-export async function fetchMatchWaitStats(): Promise<{ avgMinutes: number; sampleSize: number } | null> {
+ *  partner dropping in (match_joined_at). Prefers the average for the CURRENT
+ *  2-hour × weekday bucket once it has enough samples (`basis: 'live'`),
+ *  otherwise falls back to the global average (`basis: 'global'`). Returns
+ *  null when there isn't enough signal at all. Buckets match the admin
+ *  match-wait heatmap (UTC day × 2-hour blocks). */
+export async function fetchMatchWaitStats(): Promise<
+  { avgMinutes: number; sampleSize: number; basis: 'live' | 'global' } | null
+> {
   const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('focus_sessions')
@@ -1020,10 +1029,15 @@ export async function fetchMatchWaitStats(): Promise<{ avgMinutes: number; sampl
     .not('match_joined_at', 'is', null)
     .gte('start_time', fourteenDaysAgo)
     .order('start_time', { ascending: false })
-    .limit(200);
+    .limit(300);
   if (error) { console.warn('[fetchMatchWaitStats] query failed:', error.message); return null; }
 
-  const waits: number[] = [];
+  const now = new Date();
+  const nowDay = now.getUTCDay();
+  const nowBucket = Math.floor(now.getUTCHours() / 2); // 0-11, matches admin
+
+  const all: number[] = [];
+  const bucket: number[] = [];
   for (const row of data ?? []) {
     const start = new Date(row.start_time as string).getTime();
     const joined = new Date(row.match_joined_at as string).getTime();
@@ -1031,11 +1045,20 @@ export async function fetchMatchWaitStats(): Promise<{ avgMinutes: number; sampl
     // Drop noise: negatives (clock skew) and waits longer than the session
     // itself (stale rows / re-opened doors) aren't representative.
     const cap = (row.intended_duration_minutes ?? 120);
-    if (mins >= 0 && mins <= cap) waits.push(mins);
+    if (mins < 0 || mins > cap) continue;
+    all.push(mins);
+    const d = new Date(row.start_time as string);
+    if (d.getUTCDay() === nowDay && Math.floor(d.getUTCHours() / 2) === nowBucket) bucket.push(mins);
   }
-  if (waits.length < 3) return null; // not enough to quote confidently
-  const avg = waits.reduce((a, b) => a + b, 0) / waits.length;
-  return { avgMinutes: Math.round(avg), sampleSize: waits.length };
+
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  if (bucket.length >= MATCH_WAIT_BUCKET_MIN_SAMPLES) {
+    return { avgMinutes: Math.round(mean(bucket)), sampleSize: bucket.length, basis: 'live' };
+  }
+  if (all.length >= 3) {
+    return { avgMinutes: Math.round(mean(all)), sampleSize: all.length, basis: 'global' };
+  }
+  return null;
 }
 
 export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]> {

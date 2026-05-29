@@ -19,10 +19,13 @@ import {
 import { AdminLayout } from './AdminLayout';
 import {
   getHeatmapAnalytics,
+  getMatchWaitAnalytics,
   MOOD_SCORES,
   type HeatmapAnalytics,
   type MoodTimeCell,
   type MoodShift,
+  type MatchWaitAnalytics,
+  type MatchWaitCell,
 } from '../../lib/admin';
 
 type Range = 'week' | 'month' | 'quarter' | 'all';
@@ -40,6 +43,22 @@ const BUCKET_LABELS = [
   '12–3am', '3–6am', '6–9am', '9am–12pm',
   '12–3pm', '3–6pm', '6–9pm', '9pm–12am',
 ];
+
+// 2-hour buckets (12/day) for the match-wait heatmap, labelled in UTC.
+const MATCH_BUCKET_LABELS = [
+  '12am', '2am', '4am', '6am', '8am', '10am',
+  '12pm', '2pm', '4pm', '6pm', '8pm', '10pm',
+];
+
+/** Wait minutes → colour. Lower (faster match) = greener, higher = redder. */
+function waitToColor(mins: number | null): string {
+  if (mins === null) return 'bg-gray-100';
+  if (mins < 3)  return 'bg-emerald-500';
+  if (mins < 6)  return 'bg-lime-400';
+  if (mins < 10) return 'bg-amber-300';
+  if (mins < 15) return 'bg-orange-400';
+  return 'bg-red-400';
+}
 
 const KIND_META: Record<string, { label: string; emoji: string; color: string }> = {
   do:      { label: 'Do work',     emoji: '⚡', color: '#3b82f6' },
@@ -249,17 +268,63 @@ function ProductivityChart({ data }: { data: HeatmapAnalytics['dailyActivity'] }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+/** Match-wait heatmap — day-of-week × 2-hour bucket, avg wait minutes. */
+function MatchWaitHeatmap({ cells }: { cells: MatchWaitCell[] }) {
+  const byKey = new Map(cells.map((c) => [`${c.day}-${c.bucket}`, c]));
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-block min-w-full">
+        {/* Column headers (2-hour buckets) */}
+        <div className="grid" style={{ gridTemplateColumns: `48px repeat(12, minmax(34px, 1fr))` }}>
+          <div />
+          {MATCH_BUCKET_LABELS.map((label) => (
+            <div key={label} className="text-[9px] text-gray-400 text-center pb-1">{label}</div>
+          ))}
+        </div>
+        {DAY_LABELS.map((dayLabel, day) => (
+          <div key={day} className="grid items-center" style={{ gridTemplateColumns: `48px repeat(12, minmax(34px, 1fr))` }}>
+            <div className="text-[11px] font-semibold text-gray-500 pr-2 text-right">{dayLabel}</div>
+            {Array.from({ length: 12 }).map((_, bucket) => {
+              const cell = byKey.get(`${day}-${bucket}`);
+              return (
+                <div key={bucket} className="p-0.5">
+                  <div
+                    title={cell ? `${dayLabel} ${MATCH_BUCKET_LABELS[bucket]} UTC · ~${Math.round(cell.avgMinutes)} min · ${cell.count} match${cell.count === 1 ? '' : 'es'}` : 'No matches'}
+                    className={`h-8 rounded grid place-items-center text-[9px] font-bold tabular-nums
+                      ${cell ? waitToColor(cell.avgMinutes) + ' text-white' : 'bg-gray-100 text-gray-300'}`}
+                  >
+                    {cell ? Math.round(cell.avgMinutes) : ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {/* Legend */}
+        <div className="flex items-center gap-2 mt-3 text-[10px] text-gray-400">
+          <span>Faster</span>
+          {['bg-emerald-500', 'bg-lime-400', 'bg-amber-300', 'bg-orange-400', 'bg-red-400'].map((c) => (
+            <span key={c} className={`w-5 h-3 rounded ${c}`} />
+          ))}
+          <span>Slower</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AdminHeatmaps() {
   const [range, setRange] = useState<Range>('month');
   const [data, setData]   = useState<HeatmapAnalytics | null>(null);
+  const [matchWait, setMatchWait] = useState<MatchWaitAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback((r: Range) => {
     setLoading(true);
     setError(null);
-    getHeatmapAnalytics(r)
-      .then(setData)
+    Promise.all([getHeatmapAnalytics(r), getMatchWaitAnalytics(r)])
+      .then(([h, mw]) => { setData(h); setMatchWait(mw); })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
@@ -379,6 +444,29 @@ export function AdminHeatmaps() {
             </p>
           </div>
           {data && <MoodShiftPanel shifts={data.moodShifts} />}
+        </div>
+
+        {/* ── Panel: Match-me-now wait times ─────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Match-me-now Wait Times</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Average minutes a door waits before a partner drops in, by day × 2-hour block (UTC).
+                Feeds the live "around now" estimate shown when opening a door.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-bold text-gray-900 tabular-nums">
+                {matchWait?.globalAvgMinutes != null ? `${Math.round(matchWait.globalAvgMinutes)}m` : '—'}
+              </p>
+              <p className="text-[11px] text-gray-400">global avg · {matchWait?.sampleSize ?? 0} matches</p>
+            </div>
+          </div>
+          {matchWait && matchWait.cells.length > 0
+            ? <MatchWaitHeatmap cells={matchWait.cells} />
+            : <p className="text-gray-400 text-sm">No matched sessions in this range yet.</p>
+          }
         </div>
 
         {/* ── Panel 3: Productivity ──────────────────────────────────────── */}

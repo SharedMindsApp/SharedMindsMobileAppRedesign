@@ -642,3 +642,75 @@ export async function getHeatmapAnalytics(
     avgMoodScore: globalMoodCount > 0 ? globalMoodSum / globalMoodCount : null,
   };
 }
+
+// ── Match-wait heatmap ───────────────────────────────────────────────────────
+// How long match-me-now doors wait before a partner drops in, bucketed by
+// day-of-week × 2-hour block (12 buckets/day → 84 cells). Powers the admin
+// heatmap and (as volume grows) the live "around now" estimate shown when
+// opening a door.
+
+/** Number of 2-hour buckets in a day. */
+export const MATCH_WAIT_BUCKETS_PER_DAY = 12;
+
+export interface MatchWaitCell {
+  /** 0 = Sunday … 6 = Saturday */
+  day: number;
+  /** 0-11, each spanning 2 hours (bucket b = hours [2b, 2b+2)). */
+  bucket: number;
+  count: number;
+  avgMinutes: number;
+}
+
+export interface MatchWaitAnalytics {
+  cells: MatchWaitCell[];
+  /** Global mean wait across all matched doors in range (null if no data). */
+  globalAvgMinutes: number | null;
+  sampleSize: number;
+}
+
+export async function getMatchWaitAnalytics(
+  range: 'week' | 'month' | 'quarter' | 'all' = 'month',
+): Promise<MatchWaitAnalytics> {
+  const since = range === 'all' ? null
+    : range === 'week'    ? new Date(Date.now() - 7  * 86400_000).toISOString()
+    : range === 'month'   ? new Date(Date.now() - 30 * 86400_000).toISOString()
+    :                       new Date(Date.now() - 90 * 86400_000).toISOString();
+
+  let q = supabase
+    .from('focus_sessions')
+    .select('start_time, match_joined_at, intended_duration_minutes')
+    .not('match_joined_at', 'is', null);
+  if (since) q = q.gte('start_time', since);
+  const { data } = await q;
+
+  const cellMap = new Map<string, { sum: number; count: number }>();
+  let gSum = 0, gCount = 0;
+
+  for (const row of data ?? []) {
+    if (!row.start_time || !row.match_joined_at) continue;
+    const start = new Date(row.start_time as string).getTime();
+    const joined = new Date(row.match_joined_at as string).getTime();
+    const mins = (joined - start) / 60_000;
+    const cap = (row.intended_duration_minutes ?? 120);
+    if (mins < 0 || mins > cap) continue; // drop clock skew / stale re-opens
+    const d = new Date(row.start_time as string);
+    const day = d.getUTCDay();
+    const bucket = Math.floor(d.getUTCHours() / 2); // 0-11
+    const key = `${day}-${bucket}`;
+    const cell = cellMap.get(key) ?? { sum: 0, count: 0 };
+    cell.sum += mins; cell.count += 1;
+    cellMap.set(key, cell);
+    gSum += mins; gCount += 1;
+  }
+
+  const cells: MatchWaitCell[] = Array.from(cellMap.entries()).map(([key, { sum, count }]) => {
+    const [day, bucket] = key.split('-').map(Number);
+    return { day, bucket, count, avgMinutes: sum / count };
+  });
+
+  return {
+    cells,
+    globalAvgMinutes: gCount > 0 ? gSum / gCount : null,
+    sampleSize: gCount,
+  };
+}

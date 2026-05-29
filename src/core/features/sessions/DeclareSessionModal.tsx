@@ -164,7 +164,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   }, []);
   // Average match wait — only fetched/shown for the open-a-door flow, to set
   // expectations and warn when a short session won't leave meaningful time.
-  const [matchWait, setMatchWait] = useState<{ avgMinutes: number; sampleSize: number } | null>(null);
+  const [matchWait, setMatchWait] = useState<{ avgMinutes: number; sampleSize: number; basis: 'live' | 'global' } | null>(null);
   useEffect(() => {
     if (!startOpenToMatch) return;
     fetchMatchWaitStats().then(setMatchWait).catch(() => { /* non-fatal */ });
@@ -567,7 +567,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </div>
             {matchWait && (
               <p className="mt-1.5 pl-[23px] text-[11px] font-bold text-amber-700 inline-flex items-center gap-1">
-                <Clock size={11} /> Average match wait ~{matchWait.avgMinutes} min
+                <Clock size={11} /> {matchWait.basis === 'live' ? 'Around now,' : 'Average'} match wait ~{matchWait.avgMinutes} min
               </p>
             )}
           </div>
