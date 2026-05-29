@@ -879,6 +879,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         )}
 
         {/* ── When picker ──────────────────────────────────── */}
+        {/* Match-me-now is instant by definition — no scheduling. The whole
+            When block (Start now / Schedule + datetime + conflict warnings +
+            gate notice) is hidden; whenMode stays 'now'. */}
+        {!startOpenToMatch && (
         <div className="shrink-0 px-5 pt-3">
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
             When
@@ -1023,6 +1027,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             </div>
           )}
         </div>
+        )}
 
         {/* ── Duration picker ──────────────────────────────── */}
         <div className="shrink-0 px-5 pt-3">
