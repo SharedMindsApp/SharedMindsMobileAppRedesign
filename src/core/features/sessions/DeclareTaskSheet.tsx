@@ -26,9 +26,12 @@ interface Props {
   onClose: () => void;
   /** Called with the chosen task title + (when an existing task) its id. */
   onChoose: (title: string, taskId?: string) => void;
+  /** Optional eyebrow, e.g. "Step 1 of 2" — shown when this is part of the
+   *  combined match-me-now check-in (task → mood/focus). */
+  stepLabel?: string;
 }
 
-export function DeclareTaskSheet({ onClose, onChoose }: Props) {
+export function DeclareTaskSheet({ onClose, onChoose, stepLabel }: Props) {
   const { state: { tasks, projects }, addTaskAsync } = useCoreData();
   const allOpenTasks = tasks.filter((t) => !t.done);
 
@@ -109,7 +112,12 @@ export function DeclareTaskSheet({ onClose, onChoose }: Props) {
 
         {/* header */}
         <div className="shrink-0 flex items-center justify-between px-5 pt-2 sm:pt-4 pb-3">
-          <h2 className="text-base font-extrabold stitch-text-primary">What will you work on?</h2>
+          <div className="min-w-0">
+            {stepLabel && (
+              <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary mb-0.5">{stepLabel}</p>
+            )}
+            <h2 className="text-base font-extrabold stitch-text-primary">What will you work on?</h2>
+          </div>
           <button
             type="button"
             onClick={onClose}

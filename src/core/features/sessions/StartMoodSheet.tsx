@@ -23,10 +23,12 @@ interface Props {
   onSubmit: (mood: string | null, focus: string | null) => void;
   /** Optional — offered in the low-focus warning to swap to a lighter task. */
   onSwapTask?: () => void;
+  /** Optional eyebrow, e.g. "Step 2 of 2" (combined match-me-now check-in). */
+  stepLabel?: string;
   onSkip: () => void;
 }
 
-export function StartMoodSheet({ kind, demandingTask = false, onSubmit, onSwapTask, onSkip }: Props) {
+export function StartMoodSheet({ kind, demandingTask = false, onSubmit, onSwapTask, stepLabel, onSkip }: Props) {
   const moodOptions = moodOptionsForKind(kind);
   const [mood, setMood] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function StartMoodSheet({ kind, demandingTask = false, onSubmit, onSwapTa
         style={{ paddingTop: 'max(env(safe-area-inset-top), 2.5rem)', paddingBottom: 'max(env(safe-area-inset-bottom), 2.5rem)' }}
       >
         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40 mb-2 text-center">
-          Quick check-in
+          {stepLabel ?? 'Quick check-in'}
         </p>
 
         {/* Mood */}

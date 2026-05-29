@@ -622,6 +622,13 @@ export function ActiveSessionPage() {
       setSessionGoal(goal);
       setSession((s) => (s ? { ...s, session_goal: goal, session_task_id: taskId ?? s.session_task_id } : s));
       setActiveSession({ ...(session as FocusSession), session_goal: goal, session_task_id: taskId ?? session.session_task_id });
+      // Combined check-in: chain straight into step 2 (mood/focus) with no gap,
+      // unless it's already been done/recorded.
+      if (!session.start_mood && !session.start_focus && !moodHandledRef.current) {
+        moodHandledRef.current = true;
+        setMoodResolved(false);
+        setMoodStepOpen(true);
+      }
     } catch (e) {
       console.warn('[ActiveSessionPage] declare task failed:', e);
     }
@@ -1356,6 +1363,7 @@ export function ActiveSessionPage() {
         <DeclareTaskSheet
           onClose={() => setTaskSheetOpen(false)}
           onChoose={(title, taskId) => { void handleDeclareTask(title, taskId); }}
+          stepLabel={session?.open_to_match ? 'Step 1 of 2' : undefined}
         />
       )}
 
@@ -1364,6 +1372,7 @@ export function ActiveSessionPage() {
         <StartMoodSheet
           kind={(session.session_kind ?? 'do') as SessionKind}
           demandingTask={tasks.find((t) => t.id === session.session_task_id)?.energy === 'deep'}
+          stepLabel={session.open_to_match ? 'Step 2 of 2' : undefined}
           onSubmit={(mood, focus) => { void handleSubmitCheckIn(mood, focus); }}
           onSwapTask={() => { resolveMood(); setTaskSheetOpen(true); }}
           onSkip={resolveMood}
