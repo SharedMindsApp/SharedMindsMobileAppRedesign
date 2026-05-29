@@ -11,7 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -751,6 +751,19 @@ export function ActiveSessionPage() {
       console.warn('[ActiveSessionPage] go-solo (close door) failed:', e);
     }
   }, [session, setActiveSession]);
+
+  // ── Door presence heartbeat ────────────────────────────────────
+  // While the host is waiting (door open, not yet matched), ping last_seen_at
+  // so discovery knows the door is live. Stops the moment we match or close —
+  // and if the tab dies, the pings stop and the door goes stale on its own,
+  // so nobody drops into a ghost room. See touchDoorPresence + DOOR_STALE_MS.
+  useEffect(() => {
+    if (!isOpenUnmatchedHost || !session?.id) return;
+    const id = session.id;
+    void touchDoorPresence(id);                      // immediate, don't wait for the first tick
+    const t = setInterval(() => { void touchDoorPresence(id); }, DOOR_HEARTBEAT_MS);
+    return () => clearInterval(t);
+  }, [isOpenUnmatchedHost, session?.id]);
 
   // Would a 30-min extension push the session past the 1-hour mark? If so we
   // offer to pair it with an optional mid-session break.

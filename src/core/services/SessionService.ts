@@ -1014,6 +1014,28 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
  *  joining — below it, the session reverts to solo and stops being shown. */
 export const MIN_MATCH_MINUTES_LEFT = 15;
 
+/** Waiting hosts ping last_seen_at on this cadence (see touchDoorPresence). */
+export const DOOR_HEARTBEAT_MS = 60_000;
+/** A door whose host hasn't pinged within this window is treated as a ghost
+ *  (crashed / closed / asleep) and hidden from discovery. Allows ~2.5 missed
+ *  heartbeats so a brief network blip doesn't drop a live door. */
+export const DOOR_STALE_MS = 150_000;
+
+/** Heartbeat for an open-to-match door: stamp last_seen_at = now() on the
+ *  host's own session so it stays visible in discovery. Owner-only via existing
+ *  RLS. Best-effort — a failed ping just risks the door going stale early, so
+ *  errors are swallowed. */
+export async function touchDoorPresence(sessionId: string): Promise<void> {
+  const me = await getAuthedUser();
+  if (!me) return;
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .eq('user_id', me.id);
+  if (error) console.warn('[touchDoorPresence] failed:', error);
+}
+
 /** Minutes remaining on a session from its end time (target_end_time, else
  *  start_time + intended_duration). Negative if already over. */
 export function minutesLeft(row: {
@@ -1119,6 +1141,14 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
     // Hide doors with too little time left to be worth joining — by the time
     // someone drops in there'd only be a few minutes of shared focus.
     .filter((row: any) => minutesLeft(row) >= MIN_MATCH_MINUTES_LEFT)
+    // Hide "ghost" doors whose host has gone quiet (crashed / closed / asleep).
+    // Guard on presence of the column so we degrade gracefully pre-migration:
+    // a missing last_seen_at means "don't filter", not "everything is stale".
+    .filter((row: any) => {
+      const ls = row.last_seen_at;
+      if (!ls) return true;
+      return Date.now() - new Date(ls).getTime() <= DOOR_STALE_MS;
+    })
     // Hide anyone we've mutually passed on for now.
     .filter((row: any) => !hidden.has(row.user_id))
     .map((row: any) => ({
