@@ -76,6 +76,101 @@ export async function reorderWorkCredits(orderedIds: string[]): Promise<void> {
   );
 }
 
+// ── Collaborators (verified credits) ────────────────────────────────────────
+
+export interface CreditCollaborator {
+  id: string;
+  credit_id: string;
+  owner_user_id: string;
+  collaborator_user_id: string;
+  status: 'pending' | 'confirmed' | 'declined';
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+/** A pending tag awaiting the current user's confirmation. */
+export interface PendingCreditTag {
+  id: string;
+  credit_id: string;
+  status: 'pending' | 'confirmed' | 'declined';
+  credit_title: string;
+  credit_role: string | null;
+  owner_user_id: string;
+  owner_name: string | null;
+  owner_avatar: string | null;
+}
+
+/** Collaborators for a set of credits, grouped by credit id. RLS returns
+ *  confirmed rows to anyone + pending rows to the credit owner. */
+export async function fetchCreditCollaborators(creditIds: string[]): Promise<Record<string, CreditCollaborator[]>> {
+  if (creditIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('work_credit_collaborators')
+    .select('*')
+    .in('credit_id', creditIds);
+  if (error || !data) return {};
+  const userIds = Array.from(new Set(data.map((r: any) => r.collaborator_user_id)));
+  const { data: profiles } = await supabase
+    .from('profiles').select('id, display_name, avatar_url').in('id', userIds);
+  const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  const out: Record<string, CreditCollaborator[]> = {};
+  for (const r of data as any[]) {
+    const p = byId.get(r.collaborator_user_id);
+    (out[r.credit_id] ??= []).push({
+      id: r.id, credit_id: r.credit_id, owner_user_id: r.owner_user_id,
+      collaborator_user_id: r.collaborator_user_id, status: r.status,
+      display_name: p?.display_name ?? null, avatar_url: p?.avatar_url ?? null,
+    });
+  }
+  return out;
+}
+
+/** Tag a member as a collaborator on one of your credits (status 'pending'). */
+export async function addCreditCollaborator(creditId: string, ownerUserId: string, collaboratorUserId: string): Promise<void> {
+  const { error } = await supabase
+    .from('work_credit_collaborators')
+    .insert({ credit_id: creditId, owner_user_id: ownerUserId, collaborator_user_id: collaboratorUserId });
+  if (error) throw error;
+}
+
+export async function removeCreditCollaborator(id: string): Promise<void> {
+  const { error } = await supabase.from('work_credit_collaborators').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Credits the current user has been tagged on and not yet responded to. */
+export async function fetchPendingCreditTags(): Promise<PendingCreditTag[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('work_credit_collaborators')
+    .select('id, credit_id, status, owner_user_id, work_credits!credit_id(title, role)')
+    .eq('collaborator_user_id', user.id)
+    .eq('status', 'pending');
+  if (error || !data) return [];
+  const ownerIds = Array.from(new Set(data.map((r: any) => r.owner_user_id)));
+  const { data: profiles } = await supabase
+    .from('profiles').select('id, display_name, avatar_url').in('id', ownerIds);
+  const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  return (data as any[]).map((r) => ({
+    id: r.id, credit_id: r.credit_id, status: r.status,
+    credit_title: r.work_credits?.title ?? 'a project',
+    credit_role: r.work_credits?.role ?? null,
+    owner_user_id: r.owner_user_id,
+    owner_name: byId.get(r.owner_user_id)?.display_name ?? null,
+    owner_avatar: byId.get(r.owner_user_id)?.avatar_url ?? null,
+  }));
+}
+
+/** Confirm or decline a credit tag (current user is the tagged member). */
+export async function respondToCreditTag(id: string, status: 'confirmed' | 'declined'): Promise<void> {
+  const { error } = await supabase
+    .from('work_credit_collaborators')
+    .update({ status, responded_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 /** Trim/normalise input: empty strings → null, title required. */
 function normalise(input: WorkCreditInput) {
   const t = (s: string | null | undefined) => {
