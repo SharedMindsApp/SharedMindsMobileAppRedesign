@@ -50,6 +50,8 @@ export interface Profile {
     current_focus?: string | null;
     /** Opportunity signals — what they're open to (see lib/openTo.ts ids). */
     open_to?: string[] | null;
+    /** Set when the optional profile-setup wizard is finished or dismissed. */
+    profile_setup_completed_at?: string | null;
     location?: string | null;
     country_code?: string | null;
     city?: string | null;

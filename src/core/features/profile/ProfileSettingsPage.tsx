@@ -46,6 +46,7 @@ import { PlannerSettingsSheet } from '../dashboard/PlannerSettingsSheet';
 import { ProfilePage } from './ProfilePage';
 import { WorkCreditsEditor } from './WorkCredits';
 import { BuildingEditor } from './BuildingProjects';
+import { ProfileSetupWizard } from './ProfileSetupWizard';
 
 /** "7am" / "12pm" / "10pm" for an hour 0–23. */
 function fmtHour(h: number): string {
@@ -57,7 +58,7 @@ function fmtHour(h: number): string {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const WORK_TYPES = [
+export const WORK_TYPES = [
   { id: 'designer', label: 'Designer', emoji: '🎨' },
   { id: 'developer', label: 'Developer', emoji: '💻' },
   { id: 'writer', label: 'Writer / Creator', emoji: '✍️' },
@@ -69,7 +70,7 @@ const WORK_TYPES = [
   { id: 'other', label: 'Something else', emoji: '✨' },
 ];
 
-const MAX_WORK_TYPES = 3;
+export const MAX_WORK_TYPES = 3;
 
 function arraysEqual(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
@@ -102,6 +103,7 @@ export function ProfileSettingsPage() {
   // Profile is view-first: show the public profile, flip to the editor only
   // when the user taps "Edit profile".
   const [editingProfile, setEditingProfile] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   // Keep the tab in sync if the ?tab= param changes (e.g. avatar-dropdown
   // links to /profile?tab=notifications), and strip the param once consumed.
@@ -172,10 +174,12 @@ export function ProfileSettingsPage() {
                 <Pencil size={12} /> Edit profile
               </button>
             </div>
-            <ProfilePage onEdit={() => setEditingProfile(true)} />
+            <ProfilePage onEdit={() => setEditingProfile(true)} onSetup={() => setSetupOpen(true)} />
           </div>
         )
       )}
+
+      {setupOpen && <ProfileSetupWizard onClose={() => setSetupOpen(false)} />}
 
       {tab === 'notifications' && (
         <section>

@@ -148,7 +148,7 @@ function ShipCard({ ship }: { ship: RecentShip }) {
   );
 }
 
-export function ProfilePage({ onEdit }: { onEdit?: () => void } = {}) {
+export function ProfilePage({ onEdit, onSetup }: { onEdit?: () => void; onSetup?: () => void } = {}) {
   const { userId } = useParams<{ userId?: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -325,6 +325,26 @@ export function ProfilePage({ onEdit }: { onEdit?: () => void } = {}) {
           {avatarError}
         </p>
       )}
+
+      {/* ── Complete-your-profile prompt (own, sparse) ─────── */}
+      {isOwn && onSetup && (() => {
+        const missing = !profile.headline || !profile.current_focus || (profile.open_to?.length ?? 0) === 0 || (profile.skills?.length ?? 0) === 0;
+        if (!missing) return null;
+        return (
+          <button
+            type="button"
+            onClick={onSetup}
+            className="w-full text-left rounded-2xl bg-gradient-to-r from-violet-600 to-blue-500 text-white px-4 py-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
+          >
+            <Sparkles size={18} className="shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold leading-tight">Finish your profile</p>
+              <p className="text-[11px] text-white/80 leading-snug">A complete profile is how people find you and reach out.</p>
+            </div>
+            <ArrowRight size={16} className="shrink-0" />
+          </button>
+        );
+      })()}
 
       {/* ── Bio ────────────────────────────────────────────── */}
       {profile.bio ? (
