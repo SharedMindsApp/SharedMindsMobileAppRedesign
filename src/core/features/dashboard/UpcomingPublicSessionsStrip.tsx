@@ -60,17 +60,20 @@ export function UpcomingPublicSessionsStrip({
 }) {
   const navigate = useNavigate();
 
-  // Filter out solo (always private) — they don't exist as scheduled, but defensive.
-  // We intentionally KEEP the viewer's own scheduled sessions here: this is a
-  // calendar overview ("what's coming up"), and for an established host the
-  // only upcoming sessions are often their own — filtering them out left the
-  // whole section empty/hidden. Your own sessions are tagged "You" below.
+  // This strip is a DISCOVERY surface — "what group sessions are coming up
+  // that I could join". So we show GROUP sessions only:
+  //   • solo      → always private, never joinable
+  //   • one_on_one → matched/private, not an open room to drop into
+  // We keep the viewer's own group sessions (tagged "You" below) so an
+  // established host whose only bookings are their own still sees the strip
+  // rather than an empty/hidden section.
   // Only genuinely upcoming sessions — the feed also carries `completed`
-  // history rows (the calendar scrolls backward), which must not leak into
-  // a "coming up" strip as stale cards.
+  // history rows (the calendar scrolls backward), which must not leak in.
   const FRESH_GRACE_MS = 15 * 60 * 1000; // tolerate a session that just started
   const upcoming = sessions
-    .filter((s) => (s as any).session_mode !== 'solo')
+    // null/undefined session_mode = legacy/admin-curated rows, which default
+    // to group; only explicit solo + one_on_one are excluded.
+    .filter((s) => { const m = (s as any).session_mode; return m == null || m === 'group'; })
     .filter((s) => (s as any).status !== 'completed' && (s as any).status !== 'cancelled')
     .filter((s) => {
       const t = new Date(s.scheduled_at ?? s.start_time).getTime();
@@ -84,7 +87,7 @@ export function UpcomingPublicSessionsStrip({
     <section>
       <div className="flex items-center justify-between mb-3">
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
-          Coming up on the calendar
+          Group sessions coming up
         </p>
         <button
           type="button"
