@@ -493,6 +493,13 @@ export interface DailyActivity {
   tasksCompleted: number;
 }
 
+export interface CountryOption {
+  /** ISO-2 country code, or 'unknown' for profiles without one. */
+  code: string;
+  /** Number of sessions from this country in range (for sorting/labels). */
+  count: number;
+}
+
 export interface HeatmapAnalytics {
   moodCells: MoodTimeCell[];
   moodShifts: MoodShift[];
@@ -500,10 +507,15 @@ export interface HeatmapAnalytics {
   /** 0-23: which hour had the most sessions */
   peakHour: number;
   avgMoodScore: number | null;
+  /** All countries present in range (unfiltered) — drives the filter UI. */
+  availableCountries: CountryOption[];
 }
 
 export async function getHeatmapAnalytics(
   range: 'week' | 'month' | 'quarter' | 'all' = 'month',
+  /** When non-empty, restrict to these ISO-2 country codes ('unknown' = no
+   *  country on profile). Empty/undefined = global (all countries). */
+  countries: string[] = [],
 ): Promise<HeatmapAnalytics> {
   const since = range === 'all' ? null
     : range === 'week'    ? new Date(Date.now() - 7  * 86400_000).toISOString()
@@ -511,17 +523,41 @@ export async function getHeatmapAnalytics(
     :                       new Date(Date.now() - 90 * 86400_000).toISOString();
 
   // ── Fetch sessions (start_mood lives on focus_sessions) ─────────────────
+  // Join the host profile's country so we can filter / bucket by country.
   let sessionsQuery = supabase
     .from('focus_sessions')
-    .select('id, start_mood, start_time, session_kind')
+    .select('id, start_mood, start_time, session_kind, profiles!user_id(country_code)')
     .not('start_time', 'is', null);
   if (since) sessionsQuery = sessionsQuery.gte('start_time', since);
-  const { data: rawSessions } = await sessionsQuery;
+  const { data: rawSessionsRaw } = await sessionsQuery;
+
+  // Normalise the joined country onto each row ('unknown' when absent).
+  const rawSessions = (rawSessionsRaw ?? []).map((s: any) => ({
+    id: s.id,
+    start_mood: s.start_mood,
+    start_time: s.start_time,
+    session_kind: s.session_kind,
+    country: (s.profiles?.country_code as string | null) || 'unknown',
+  }));
+
+  // Available countries (from the UNFILTERED set, so the picker always lists
+  // every option regardless of the current selection).
+  const countryCounts = new Map<string, number>();
+  for (const s of rawSessions) countryCounts.set(s.country, (countryCounts.get(s.country) ?? 0) + 1);
+  const availableCountries: CountryOption[] = Array.from(countryCounts.entries())
+    .map(([code, count]) => ({ code, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // Apply the country filter (empty selection = global / all countries). Done
+  // after computing availableCountries so the picker always shows every option.
+  const filtered = countries.length > 0
+    ? rawSessions.filter((s) => countries.includes(s.country))
+    : rawSessions;
 
   // ── Fetch end_mood from session_outcomes (one row per participant) ────────
   // We need session_id → end_mood to join with focus_sessions for the
   // before/after shift calculation. Only rows with a mood value are useful.
-  const sessionIds = (rawSessions ?? []).map((s) => s.id);
+  const sessionIds = filtered.map((s) => s.id);
   let endMoodMap = new Map<string, string>(); // session_id → end_mood
   if (sessionIds.length > 0) {
     const { data: outcomes } = await supabase
@@ -535,7 +571,7 @@ export async function getHeatmapAnalytics(
   }
 
   // Merge end_mood back onto sessions for unified processing below
-  const sessions = (rawSessions ?? []).map((s) => ({
+  const sessions = filtered.map((s) => ({
     ...s,
     end_mood: endMoodMap.get(s.id) ?? null,
   }));
@@ -640,6 +676,7 @@ export async function getHeatmapAnalytics(
     dailyActivity,
     peakHour,
     avgMoodScore: globalMoodCount > 0 ? globalMoodSum / globalMoodCount : null,
+    availableCountries,
   };
 }
 

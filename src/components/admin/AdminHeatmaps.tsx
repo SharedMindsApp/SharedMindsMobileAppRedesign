@@ -50,6 +50,14 @@ const MATCH_BUCKET_LABELS = [
   '12pm', '2pm', '4pm', '6pm', '8pm', '10pm',
 ];
 
+/** ISO-2 code → flag emoji (regional-indicator pairs). 'unknown' → globe. */
+function flagEmoji(code: string): string {
+  if (!code || code === 'unknown' || code.length !== 2) return '🌍';
+  const A = 0x1f1e6;
+  const up = code.toUpperCase();
+  return String.fromCodePoint(A + (up.charCodeAt(0) - 65)) + String.fromCodePoint(A + (up.charCodeAt(1) - 65));
+}
+
 /** Wait minutes → colour. Lower (faster match) = greener, higher = redder. */
 function waitToColor(mins: number | null): string {
   if (mins === null) return 'bg-gray-100';
@@ -315,21 +323,25 @@ function MatchWaitHeatmap({ cells }: { cells: MatchWaitCell[] }) {
 
 export function AdminHeatmaps() {
   const [range, setRange] = useState<Range>('month');
+  const [countries, setCountries] = useState<string[]>([]); // [] = global
   const [data, setData]   = useState<HeatmapAnalytics | null>(null);
   const [matchWait, setMatchWait] = useState<MatchWaitAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
-  const load = useCallback((r: Range) => {
+  const load = useCallback((r: Range, c: string[]) => {
     setLoading(true);
     setError(null);
-    Promise.all([getHeatmapAnalytics(r), getMatchWaitAnalytics(r)])
+    Promise.all([getHeatmapAnalytics(r, c), getMatchWaitAnalytics(r)])
       .then(([h, mw]) => { setData(h); setMatchWait(mw); })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(range); }, [load, range]);
+  useEffect(() => { load(range, countries); }, [load, range, countries]);
+
+  const toggleCountry = (code: string) =>
+    setCountries((cur) => cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const totalSessions  = data?.dailyActivity.reduce((s, d) => s + d.sessions, 0) ?? 0;
@@ -341,7 +353,9 @@ export function AdminHeatmaps() {
     ? `${data.peakHour}:00–${data.peakHour + 1}:00 UTC`
     : '—';
 
-  if (loading) {
+  // Only block on the FIRST load — country/range re-fetches keep the page
+  // (and the filter checkboxes) visible so toggling doesn't blank everything.
+  if (loading && !data) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64 text-gray-500">Loading heatmaps…</div>
@@ -429,9 +443,46 @@ export function AdminHeatmaps() {
               Average start-of-session mood score (1–6) by day and time — hover a cell for details
             </p>
           </div>
+
+          {/* Country filter — Global (clear) + a checkbox per country present. */}
+          {data && data.availableCountries.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCountries([])}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                  countries.length === 0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                🌍 Global
+              </button>
+              {data.availableCountries.map((c) => {
+                const active = countries.includes(c.code);
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    onClick={() => toggleCountry(c.code)}
+                    title={`${c.count} session${c.count === 1 ? '' : 's'}`}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                      active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span>{flagEmoji(c.code)}</span>
+                    <span>{c.code === 'unknown' ? 'Unknown' : c.code.toUpperCase()}</span>
+                    <span className={active ? 'text-blue-200' : 'text-gray-400'}>{c.count}</span>
+                  </button>
+                );
+              })}
+              {loading && <span className="text-xs text-gray-400 ml-1">updating…</span>}
+            </div>
+          )}
+
           {data && data.moodCells.length > 0
             ? <MoodHeatmap cells={data.moodCells} />
-            : <p className="text-gray-400 text-sm">No mood data in this range yet.</p>
+            : <p className="text-gray-400 text-sm">
+                {countries.length > 0 ? 'No mood data for the selected countries in this range.' : 'No mood data in this range yet.'}
+              </p>
           }
         </div>
 
