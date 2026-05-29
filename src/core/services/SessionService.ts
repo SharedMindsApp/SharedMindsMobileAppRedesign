@@ -125,6 +125,13 @@ export async function startCommunitySession(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
+  // A session must carry at least one signal so it never logs blank: either a
+  // declared intention/task OR a purpose (match-me-now sets the purpose; the
+  // task is filled in the waiting room). Guards every start path.
+  if (!input.goalText?.trim() && !input.sessionIntent) {
+    throw new Error('A session needs an intention or a purpose to start.');
+  }
+
   const now = new Date();
   const targetEnd = new Date(now.getTime() + input.durationMinutes * 60 * 1000);
 

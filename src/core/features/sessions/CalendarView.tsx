@@ -20,6 +20,22 @@ import {
   CalendarPlus, List as ListIcon, LayoutGrid, CalendarDays, Pencil, Trash2, Check, CalendarClock,
 } from 'lucide-react';
 import { SessionsListView, type ListSession } from './SessionsListView';
+import { intentMeta } from '../../../lib/sessionIntent';
+
+/** Resolve a display title for a session, treating empty-string goals as
+ *  missing (nullish coalescing doesn't catch '') and falling back to the
+ *  purpose label so a session never shows blank. */
+function sessionLabelOr(
+  s: { session_goal?: string | null; session_title?: string | null; session_intent?: string | null },
+  fallback: string,
+): string {
+  return (
+    s.session_goal?.trim()
+    || s.session_title?.trim()
+    || (s.session_intent ? `${intentMeta(s.session_intent as any).label} session` : '')
+    || fallback
+  );
+}
 import { QuickTimerButton } from '../dashboard/QuickTimerButton';
 import { FindSessionsSheet } from '../dashboard/FindSessionsSheet';
 import { MatchMeNowSheet } from '../dashboard/MatchMeNowSheet';
@@ -218,6 +234,7 @@ export type GridSession = {
   startsAt: Date;
   status: 'active' | 'scheduled' | 'completed';
   session_kind?: 'do' | 'plan' | 'reflect' | null;
+  session_intent?: string | null;
   start_mood?: string | null;
   project_id?: string | null;
   project_title?: string | null;
@@ -249,6 +266,7 @@ function toGridSession(s: CommunitySession): GridSession {
     startsAt: new Date(s.start_time),
     status: 'active',
     session_kind: (s as any).session_kind ?? null,
+    session_intent: (s as any).session_intent ?? null,
     start_mood: (s as any).start_mood ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
@@ -273,6 +291,7 @@ export function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     startsAt: new Date(s.scheduled_at ?? s.start_time),
     status: ((s as any).status === 'completed' ? 'completed' : 'scheduled'),
     session_kind: (s as any).session_kind ?? null,
+    session_intent: (s as any).session_intent ?? null,
     start_mood: (s as any).start_mood ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
@@ -1312,7 +1331,7 @@ function SessionBlock({
               }
             />
             <span className={`flex-1 min-w-0 text-[11px] font-bold stitch-text-primary truncate leading-tight ${isCompleted ? 'line-through decoration-1' : ''}`}>
-              {session.session_goal ?? session.session_title ?? 'Working on something'}
+              {sessionLabelOr(session, 'Working on something')}
             </span>
             {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
             {isCompleted && <Check size={10} className="stitch-text-secondary shrink-0" />}
@@ -1360,7 +1379,7 @@ function SessionBlock({
             </div>
             {/* Goal / activity title — visual lead at non-compact sizes. */}
             <p className={`text-[11px] font-bold stitch-text-primary leading-tight line-clamp-2 ${isCompleted ? 'line-through decoration-1' : ''}`}>
-              {session.session_goal ?? session.session_title ?? 'Working on something'}
+              {sessionLabelOr(session, 'Working on something')}
             </p>
             {session.project_title && height > 60 && (
               <div className="flex items-center gap-1 mt-0.5">
@@ -1413,7 +1432,7 @@ function SessionBlock({
         </div>
 
         <p className="relative text-xs font-semibold stitch-text-primary leading-snug mb-2 line-clamp-3">
-          {session.session_goal ?? session.session_title ?? 'Working on something'}
+          {sessionLabelOr(session, 'Working on something')}
         </p>
 
         <div className="relative space-y-2">
@@ -1851,7 +1870,7 @@ export function SessionDetailSheet({
             <div className="pt-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700/80 mb-0.5">Was going to be</p>
               <p className="text-sm font-semibold text-amber-900 leading-snug">
-                {session.session_goal ?? session.session_title ?? 'A focus session'}
+                {sessionLabelOr(session, 'A focus session')}
               </p>
             </div>
           </div>
@@ -1865,7 +1884,7 @@ export function SessionDetailSheet({
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Intention</p>
               <p className="text-sm stitch-text-primary leading-snug">
-                {session.session_goal ?? session.session_title ?? 'No intention recorded'}
+                {sessionLabelOr(session, 'No intention recorded')}
               </p>
             </div>
 
@@ -1915,7 +1934,7 @@ export function SessionDetailSheet({
           </div>
         ) : (
           <p className="text-sm stitch-text-primary leading-snug mb-4">
-            {session.session_goal ?? session.session_title ?? 'Working on something'}
+            {sessionLabelOr(session, 'Working on something')}
           </p>
         )}
 
@@ -2356,7 +2375,7 @@ function MonthHoverPopover({
           const time = s.startsAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
           const end = new Date(s.startsAt.getTime() + s.intended_duration_minutes * 60_000)
             .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          const title = s.session_title ?? s.session_goal ?? (s.session_mode === 'solo' ? 'Solo focus' : 'Session');
+          const title = sessionLabelOr(s, s.session_mode === 'solo' ? 'Solo focus' : 'Session');
           const tone =
             s.session_mode === 'solo'
               ? 'bg-rose-500'
@@ -2416,7 +2435,7 @@ function MonthPill({
   onClick: () => void;
 }) {
   const time = session.startsAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const label = session.session_title ?? session.session_goal ?? (session.session_mode === 'solo' ? 'Solo focus' : 'Session');
+  const label = sessionLabelOr(session, session.session_mode === 'solo' ? 'Solo focus' : 'Session');
   // Mode-based colour matches the legend chips in the sidebar.
   const tone =
     session.session_mode === 'solo'
