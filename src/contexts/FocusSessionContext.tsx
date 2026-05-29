@@ -21,6 +21,8 @@ interface FocusSessionContextType {
   driftCount: number;
   distractionCount: number;
   setActiveSession: (session: FocusSession | null) => void;
+  /** Update just the declared goal (match-me-now declares it in-room). */
+  setSessionGoal: (goal: string | null) => void;
   setIsPaused: (paused: boolean) => void;
   setDriftActive: (active: boolean) => void;
   setPendingNudge: (nudge: { type: 'soft' | 'hard' | 'regulation'; message: string } | null) => void;
@@ -246,6 +248,7 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
         driftCount,
         distractionCount,
         setActiveSession: handleSetActiveSession,
+        setSessionGoal,
         setIsPaused,
         setDriftActive,
         setPendingNudge,

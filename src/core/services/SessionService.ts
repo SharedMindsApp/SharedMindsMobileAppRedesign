@@ -1039,6 +1039,23 @@ export async function updatePlannedWizards(
   if (error) throw error;
 }
 
+/** Set/replace the session's declared goal mid-session. Used by the
+ *  match-me-now waiting room, where the task is declared AFTER the door
+ *  opens rather than up front. Optionally links a task row. */
+export async function updateSessionGoal(
+  sessionId: string,
+  goalText: string,
+  taskId?: string,
+): Promise<void> {
+  const updates: Record<string, any> = { session_goal: goalText };
+  if (taskId !== undefined) updates.session_task_id = taskId;
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update(updates)
+    .eq('id', sessionId);
+  if (error) throw error;
+}
+
 /** When the host abandons a matched session, the remaining partner takes it
  *  over: they become the host and the door re-opens for a new match. Returns
  *  the updated session, or null if the caller wasn't the partner / it was

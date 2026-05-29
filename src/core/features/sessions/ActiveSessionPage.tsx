@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check, DoorOpen, DoorClosed } from 'lucide-react';
+import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check, DoorOpen, DoorClosed, Target } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -11,7 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -86,7 +86,7 @@ export function ActiveSessionPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, user } = useAuth();
-  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, clearSession } = useFocusSession();
+  const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, setSessionGoal, clearSession } = useFocusSession();
   // Music category is now driven by the user's ARRIVAL STATE, not the
   // task's cognitive load — the old deep/medium/light axis confused the
   // two. Default to 'flow' (neutral/ready target). The user picks their
@@ -595,6 +595,35 @@ export function ActiveSessionPage() {
   const isOneOnOne = session?.session_mode === 'one_on_one';
   const isQuiet = session?.quiet_mode === true;
 
+  // ── Match-me-now: declare the task WHILE WAITING ───────────────
+  // Open-to-match sessions start goal-less (the modal skips the goal step).
+  // While the host waits for a partner, prompt them to note what they'll
+  // work on, so it's ready by the time someone drops in.
+  const [taskDraft, setTaskDraft] = useState('');
+  const [savingTask, setSavingTask] = useState(false);
+  const needsTaskDeclaration =
+    isPrimaryHost
+    && session?.open_to_match === true
+    && !session?.partner_user_id
+    && currentGoal.trim().length === 0;
+
+  const handleDeclareTask = useCallback(async () => {
+    const goal = taskDraft.trim();
+    if (!session || !goal || savingTask) return;
+    setSavingTask(true);
+    try {
+      await updateSessionGoal(session.id, goal);
+      setSessionGoal(goal);
+      setSession((s) => (s ? { ...s, session_goal: goal } : s));
+      setActiveSession({ ...(session as FocusSession), session_goal: goal });
+      setTaskDraft('');
+    } catch (e) {
+      console.warn('[ActiveSessionPage] declare task failed:', e);
+    } finally {
+      setSavingTask(false);
+    }
+  }, [session, taskDraft, savingTask, setSessionGoal, setActiveSession]);
+
   // Matched = a live 1-on-1 with a partner present. Leaving a matched session
   // is "leave early" (the partner keeps going / can take over), distinct from
   // a solo "End" which finishes your own session.
@@ -981,6 +1010,42 @@ export function ActiveSessionPage() {
             hideAmbientStrip={!!session.body_double || !!session.is_offline}
             isOffline={!!session.is_offline}
           />
+
+          {/* Match-me-now waiting-room task prompt. The door's open and we're
+              waiting for a partner — capture what you'll work on now so it's
+              set the moment someone joins. Disappears once a goal is saved. */}
+          {needsTaskDeclaration && (
+            <div className="absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-4">
+              <div className="w-full max-w-md rounded-2xl bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target size={15} className="text-amber-300 shrink-0" />
+                  <p className="text-sm font-extrabold text-white">What will you work on?</p>
+                </div>
+                <p className="text-[11px] text-white/55 leading-snug mb-3">
+                  The door's open — note your task while you wait. Your partner sees it when they drop in.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={taskDraft}
+                    onChange={(e) => setTaskDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void handleDeclareTask(); }}
+                    placeholder="e.g. Draft the pitch deck intro"
+                    autoFocus
+                    className="flex-1 min-w-0 rounded-xl bg-white/10 text-white placeholder-white/35 text-sm px-3 py-2.5 ring-1 ring-white/15 focus:ring-amber-400/50 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleDeclareTask()}
+                    disabled={!taskDraft.trim() || savingTask}
+                    className="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 rounded-xl bg-amber-500 text-amber-950 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-transform"
+                  >
+                    {savingTask ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Body-double mode: silent video grid sidebar.
               All body-doublers share the same persistent Daily room

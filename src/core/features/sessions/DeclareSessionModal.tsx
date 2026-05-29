@@ -284,14 +284,22 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const otherTasks = openTasks.filter((t) => !continueTasks.includes(t));
 
   const resolvedGoal = tab === 'pick' ? (selectedTask?.title ?? '') : goalText.trim();
-  const canSubmit = resolvedGoal.length > 0 && !submitting;
+  // Match-me-now (open-to-match) reorders the flow: settings → open room →
+  // declare the task WHILE WAITING for a partner. So the goal is NOT required
+  // up front here; the waiting room prompts for it. Every other flow still
+  // requires a goal before starting.
+  const canSubmit = (startOpenToMatch || resolvedGoal.length > 0) && !submitting;
 
   // ── Mini-wizard state ──────────────────────────────────────────
   // Step 1 ("goal") covers task picking / typing + project pin.
   // Step 2 ("settings") covers when, duration, mode, body-double, quiet.
   // Splitting in two reduces cognitive load on the modal — what you'll
   // work on is a separate decision from how the session will run.
-  const [wizardStep, setWizardStep] = useState<'goal' | 'settings'>('goal');
+  // Match-me-now opens straight on settings (no goal step — the task is
+  // declared in the waiting room after the door opens).
+  const [wizardStep, setWizardStep] = useState<'goal' | 'settings'>(
+    startOpenToMatch ? 'settings' : 'goal',
+  );
   const hasGoal = resolvedGoal.length > 0;
 
   async function handleStart() {
@@ -355,7 +363,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         return;
       }
       const session = await startCommunitySession({
-        goalText: resolvedGoal,
+        // Open-to-match starts goal-less; the waiting room collects it.
+        goalText: startOpenToMatch ? '' : resolvedGoal,
         taskId: resolvedTaskId,
         projectId: selectedProjectId ?? undefined,
         durationMinutes: Math.min(duration, limits.maxMinutes),
@@ -485,17 +494,21 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
 
         {/* ── Step indicator ───────────────────────────────── */}
-        <div className="shrink-0 px-5 pb-2 flex items-center gap-1.5">
-          <div className={`h-1 flex-1 rounded-full transition-all ${
-            wizardStep === 'goal' ? 'bg-primary' : 'bg-primary/30'
-          }`} />
-          <div className={`h-1 flex-1 rounded-full transition-all ${
-            wizardStep === 'settings' ? 'bg-primary' : 'bg-primary/15'
-          }`} />
-          <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest ml-1 tabular-nums">
-            {wizardStep === 'goal' ? '1 / 2' : '2 / 2'}
-          </span>
-        </div>
+        {/* Match-me-now is a single step (settings only — task comes later in
+            the waiting room), so the 2-dot indicator is suppressed there. */}
+        {!startOpenToMatch && (
+          <div className="shrink-0 px-5 pb-2 flex items-center gap-1.5">
+            <div className={`h-1 flex-1 rounded-full transition-all ${
+              wizardStep === 'goal' ? 'bg-primary' : 'bg-primary/30'
+            }`} />
+            <div className={`h-1 flex-1 rounded-full transition-all ${
+              wizardStep === 'settings' ? 'bg-primary' : 'bg-primary/15'
+            }`} />
+            <span className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest ml-1 tabular-nums">
+              {wizardStep === 'goal' ? '1 / 2' : '2 / 2'}
+            </span>
+          </div>
+        )}
 
         {/* Open-to-match banner — when launched from "Match me now", make it
             obvious the door's open + point to the vibe control on step 2. */}
@@ -504,7 +517,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             <DoorOpen size={15} className="text-amber-600 shrink-0" />
             <p className="text-[11px] font-semibold text-amber-800 leading-snug">
               Open for a 1-on-1 — the first person to drop in becomes your partner.
-              {wizardStep === 'goal' ? ' Set your vibe on the next step.' : ' Pick your vibe below.'}
+              Set how the room runs below; you'll note what you're working on once the door's open.
             </p>
           </div>
         )}
@@ -1305,14 +1318,17 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           className="shrink-0 px-5 pt-3 pb-6 flex gap-2"
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.5rem)' }}
         >
-          <button
-            type="button"
-            onClick={() => setWizardStep('goal')}
-            disabled={submitting}
-            className="shrink-0 px-4 py-3.5 rounded-2xl text-sm font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            ← Back
-          </button>
+          {/* No goal step to go back to in match-me-now — hide Back there. */}
+          {!startOpenToMatch && (
+            <button
+              type="button"
+              onClick={() => setWizardStep('goal')}
+              disabled={submitting}
+              className="shrink-0 px-4 py-3.5 rounded-2xl text-sm font-bold bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              ← Back
+            </button>
+          )}
           <button
             type="button"
             onClick={handleStart}
@@ -1327,11 +1343,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               <Loader2 size={18} className="animate-spin" />
             ) : (
               <>
-                {isScheduling ? <Calendar size={18} /> : <Timer size={18} />}
+                {isScheduling ? <Calendar size={18} /> : startOpenToMatch ? <DoorOpen size={18} /> : <Timer size={18} />}
                 {!canSubmit
                   ? 'Pick a goal first'
                   : isScheduling
                   ? `Schedule for ${scheduledLabel ?? `${duration} min`}`
+                  : startOpenToMatch
+                  ? `Open the door · ${duration} min`
                   : `Start ${duration}-min session`}
               </>
             )}
