@@ -715,22 +715,22 @@ export function ActiveSessionPage() {
 
   // ── Match door: too little time left ───────────────────────────
   // An open door with under MIN_MATCH_MINUTES_LEFT remaining isn't worth
-  // joining (it's already hidden from discovery). Prompt the host to extend
-  // or go solo. Fires once per dip below the threshold (re-arms if extended).
+  // joining (it's already hidden from discovery). Prompt the host ONCE to
+  // extend or go solo — after that they extend manually from the header, so
+  // we never nag. The prompt is shown at most once per session.
   const [showLowMatchTime, setShowLowMatchTime] = useState(false);
-  const lowMatchArmedRef = useRef(true);
+  const [addBreakOnExtend, setAddBreakOnExtend] = useState(false);
+  const lowMatchShownRef = useRef(false);
   const isOpenUnmatchedHost =
     isPrimaryHost && session?.open_to_match === true && !session?.partner_user_id && session?.status === 'active';
 
   useEffect(() => {
     if (!isOpenUnmatchedHost) { setShowLowMatchTime(false); return; }
+    if (lowMatchShownRef.current) return;        // one-shot — never re-nag
     const mins = timerSecondsRemaining / 60;
-    if (mins > MIN_MATCH_MINUTES_LEFT) { lowMatchArmedRef.current = true; return; }
-    if (mins <= 0) return;
-    if (lowMatchArmedRef.current) {
-      lowMatchArmedRef.current = false;
-      setShowLowMatchTime(true);
-    }
+    if (mins <= 0 || mins > MIN_MATCH_MINUTES_LEFT) return;
+    lowMatchShownRef.current = true;
+    setShowLowMatchTime(true);
   }, [timerSecondsRemaining, isOpenUnmatchedHost]);
 
   const handleMatchGoSolo = useCallback(async () => {
@@ -745,10 +745,23 @@ export function ActiveSessionPage() {
     }
   }, [session, setActiveSession]);
 
-  const handleMatchExtend = useCallback((mins: number) => {
+  // Would a 30-min extension push the session past the 1-hour mark? If so we
+  // offer to pair it with an optional mid-session break.
+  const extendCrossesHour = ((session?.intended_duration_minutes ?? 50) + 30) > 60;
+
+  const handleMatchExtend = useCallback(async (mins: number) => {
     setShowLowMatchTime(false);
-    void handleExtend(mins);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    await handleExtend(mins);
+    // Optionally bake in a 3-min break for the now-longer session.
+    if (addBreakOnExtend && session) {
+      const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `pw_${Math.random().toString(36).slice(2, 10)}`;
+      const cur = (session.planned_wizards as PlannedWizard[] | undefined) ?? [];
+      // Skip if a mid-session break is already planned.
+      const hasBreak = cur.some((p) => p.status === 'planned' && (p.wizardId === 'break_3min' || p.wizardId === 'break_5min'));
+      if (!hasBreak) void persistPlanned([...cur, { id, wizardId: 'break_3min', at: 'halfway', status: 'planned' }]);
+    }
+    setAddBreakOnExtend(false);
+  }, [addBreakOnExtend, session, persistPlanned]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Matched = a live 1-on-1 with a partner present. Leaving a matched session
   // is "leave early" (the partner keeps going / can take over), distinct from
@@ -1415,19 +1428,37 @@ export function ActiveSessionPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => handleMatchExtend(15)}
+                  onClick={() => void handleMatchExtend(15)}
                   className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
                 >
                   +15 min
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleMatchExtend(30)}
+                  onClick={() => void handleMatchExtend(30)}
                   className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
                 >
                   +30 min
                 </button>
               </div>
+              {/* Long-session nudge: past the hour mark, offer to bake in a
+                  short mid-session break with the extension. */}
+              {extendCrossesHour && (
+                <button
+                  type="button"
+                  onClick={() => setAddBreakOnExtend((v) => !v)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${
+                    addBreakOnExtend ? 'bg-primary/10 ring-2 ring-primary/30' : 'bg-surface-container-low hover:bg-surface-container'
+                  }`}
+                >
+                  <div className={`w-8 h-5 rounded-full p-0.5 transition-colors shrink-0 ${addBreakOnExtend ? 'bg-primary' : 'bg-surface-container'}`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${addBreakOnExtend ? 'translate-x-3' : 'translate-x-0'}`} />
+                  </div>
+                  <span className="text-xs font-bold stitch-text-primary leading-snug">
+                    Add a 3-min break midway <span className="font-semibold stitch-text-secondary">· you'll be going over an hour</span>
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void handleMatchGoSolo()}
