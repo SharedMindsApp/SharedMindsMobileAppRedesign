@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw, Flame } from 'lucide-react';
+import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw, Flame, Sparkles } from 'lucide-react';
 import { getFocusSessionSummary, endFocusSession } from '../../lib/sessions/focus';
 import { endCommunitySession, fetchSessionOutcomes, type DebriefOutcome } from '../../core/services/SessionService';
 import { DeclareSessionModal } from '../../core/features/sessions/DeclareSessionModal';
@@ -10,6 +10,7 @@ import { ConnectButton } from '../../core/features/connections/ConnectButton';
 import { ConnectionSuggestionCard } from '../../core/features/connections/ConnectionSuggestions';
 import { fetchConnectionSuggestions, type ConnectionSuggestion } from '../../core/services/ConnectionService';
 import { useAuth } from '../../core/auth/AuthProvider';
+import { ProfileSetupWizard } from '../../core/features/profile/ProfileSetupWizard';
 
 const OUTCOME_OPTIONS: { value: SessionOutcome; label: string; icon: any; description: string }[] = [
   { value: 'finished', label: 'Yes, I finished it', icon: CheckCircle2, description: 'Task complete' },
@@ -373,7 +374,8 @@ function CommunitySummary({
     ?? 0;
 
   const [weekCount, setWeekCount] = useState<number | null>(null);
-  const { user } = useAuth();
+  const [setupOpen, setSetupOpen] = useState(false);
+  const { user, profile } = useAuth();
 
   // Live debrief outcomes — one row per participant in this session.
   // Lets us show "Sarah finished · Tom partial" with a Connect CTA for peers.
@@ -484,6 +486,24 @@ function CommunitySummary({
         {peerOutcomes.length > 0 && (
           <CoSessionConnectNudge peerIds={peerOutcomes.map((p) => p.user_id)} />
         )}
+
+        {/* Finish-your-profile nudge — highest-intent moment, right after a
+            session, for anyone who hasn't set up their profile yet. */}
+        {profile && !profile.profile_setup_completed_at && (
+          <button
+            type="button"
+            onClick={() => setSetupOpen(true)}
+            className="w-full text-left rounded-2xl bg-gradient-to-r from-violet-600 to-blue-500 text-white px-4 py-3.5 flex items-center gap-3 active:scale-[0.99] transition-transform"
+          >
+            <Sparkles size={18} className="shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold leading-tight">Finish your profile</p>
+              <p className="text-[11px] text-white/80 leading-snug">So the people you meet here can find you and reach out.</p>
+            </div>
+            <ArrowRight size={16} className="shrink-0" />
+          </button>
+        )}
+        {setupOpen && <ProfileSetupWizard onClose={() => setSetupOpen(false)} />}
 
         {/* Next actions — for 1-on-1 sessions we lead with "Match again"
             since the user just got value from spontaneous pairing and
