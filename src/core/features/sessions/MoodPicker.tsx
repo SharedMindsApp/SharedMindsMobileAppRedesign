@@ -20,9 +20,11 @@ interface Props {
   when: 'before' | 'after';
   /** Visual theme — light surfaces (declare) vs dark overlay (debrief). */
   tone?: 'light' | 'dark';
+  /** Suppress the built-in prompt (when the caller renders its own header). */
+  hideLabel?: boolean;
 }
 
-export function MoodPicker({ kind, value, onChange, when, tone = 'light' }: Props) {
+export function MoodPicker({ kind, value, onChange, when, tone = 'light', hideLabel = false }: Props) {
   const options = moodOptionsForKind(kind);
   const prompt = moodPromptForKind(kind, when);
 
@@ -30,7 +32,7 @@ export function MoodPicker({ kind, value, onChange, when, tone = 'light' }: Prop
 
   return (
     <div>
-      <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${labelCls}`}>{prompt}</p>
+      {!hideLabel && <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${labelCls}`}>{prompt}</p>}
       <div className="flex flex-wrap gap-1.5">
         {options.map((m) => {
           const active = value === m.code;

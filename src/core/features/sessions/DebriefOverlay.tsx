@@ -24,7 +24,7 @@ import { TaskService } from '../../services/TaskService';
 import { CaptureService, type SessionCapture } from '../../services/CaptureService';
 import { SpaceService } from '../../services/SpaceService';
 import { MoodPicker } from './MoodPicker';
-import { FOCUS_LEVELS, focusPrompt } from '../../../lib/sessionMood';
+import { FOCUS_LEVELS, focusPrompt, moodPromptForKind } from '../../../lib/sessionMood';
 import type { SessionKind } from '../../../lib/sessionMood';
 
 const DEBRIEF_DURATION_S = 60;
@@ -206,7 +206,7 @@ export function DebriefOverlay({
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-0.5">
               Time's up
             </p>
-            <h2 className="text-lg font-bold text-white">Did you finish it?</h2>
+            <h2 className="text-lg font-bold text-white">{myOutcome ? 'Nice work' : "How'd it go?"}</h2>
           </div>
           <div className="flex items-center gap-1.5 bg-white/5 rounded-full px-3 py-1.5">
             <Clock size={12} className="text-white/60" />
@@ -269,34 +269,25 @@ export function DebriefOverlay({
           </div>
         )}
 
-        {/* ── End-of-session mood (adaptive to session kind) ────────── */}
+        {/* ── Reflection: three clearly-separated questions ─────────── */}
         {!myOutcome && (
-          <div className="mb-4">
-            <MoodPicker kind={sessionKind} value={endMood} onChange={setEndMood} when="after" tone="dark" />
-          </div>
-        )}
+          <div className="space-y-3 mb-5">
+            {/* 1 · Energy (categorical pills) */}
+            <section className="rounded-2xl bg-white/[0.04] ring-1 ring-white/5 p-3.5">
+              <SectionLabel n={1} text={moodPromptForKind(sessionKind, 'after')} />
+              <MoodPicker kind={sessionKind} value={endMood} onChange={setEndMood} when="after" tone="dark" hideLabel />
+            </section>
 
-        {/* ── End-of-session focus (separate dimension from mood) ────── */}
-        {!myOutcome && (
-          <div className="mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-2 text-white/60">{focusPrompt('after')}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {FOCUS_LEVELS.map((f) => {
-                const active = endFocus === f.code;
-                return (
-                  <button
-                    key={f.code}
-                    type="button"
-                    onClick={() => setEndFocus(active ? null : f.code)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
-                      active ? 'bg-primary text-white shadow-sm' : 'bg-white/10 text-white/80 hover:bg-white/20'
-                    }`}
-                  >
-                    <span>{f.emoji}</span>{f.label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* 2 · Focus (ordered → slider) */}
+            <section className="rounded-2xl bg-white/[0.04] ring-1 ring-white/5 p-3.5">
+              <SectionLabel n={2} text={focusPrompt('after')} />
+              <FocusSlider value={endFocus} onChange={setEndFocus} />
+            </section>
+
+            {/* 3 · Outcome (the commit) */}
+            <section>
+              <SectionLabel n={3} text="Did you finish?" />
+            </section>
           </div>
         )}
 
@@ -367,6 +358,53 @@ export function DebriefOverlay({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Numbered section header — gives each debrief question a distinct identity. */
+function SectionLabel({ n, text }: { n: number; text: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-2.5">
+      <span className="w-5 h-5 rounded-full bg-white/10 grid place-items-center text-[10px] font-extrabold text-white/70 tabular-nums">{n}</span>
+      <p className="text-sm font-bold text-white leading-none">{text}</p>
+    </div>
+  );
+}
+
+// Focus is an ordered scale, so a slider reads as "more / less" faster than
+// pills. Ascending: Foggy (1) → Laser (5). Left unset until the user moves it.
+const FOCUS_ASCENDING = [...FOCUS_LEVELS].slice().reverse(); // [foggy … laser]
+
+function FocusSlider({ value, onChange }: { value: string | null; onChange: (code: string) => void }) {
+  const idx = value ? FOCUS_ASCENDING.findIndex((f) => f.code === value) : -1;
+  const sliderVal = idx >= 0 ? idx + 1 : 3; // default centre, but show "unset" copy
+  const current = idx >= 0 ? FOCUS_ASCENDING[idx] : null;
+  return (
+    <div>
+      <div className="flex items-center justify-center gap-1.5 mb-2 h-6">
+        {current ? (
+          <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-white">
+            <span className="text-base leading-none">{current.emoji}</span>{current.label}
+          </span>
+        ) : (
+          <span className="text-xs text-white/40">Slide to rate your focus</span>
+        )}
+      </div>
+      <input
+        type="range"
+        min={1}
+        max={FOCUS_ASCENDING.length}
+        step={1}
+        value={sliderVal}
+        onChange={(e) => onChange(FOCUS_ASCENDING[parseInt(e.target.value, 10) - 1].code)}
+        className={`w-full accent-primary ${idx < 0 ? 'opacity-60' : ''}`}
+        aria-label="Focus level"
+      />
+      <div className="flex justify-between text-[10px] text-white/40 mt-1">
+        <span>{FOCUS_ASCENDING[0].label}</span>
+        <span>{FOCUS_ASCENDING[FOCUS_ASCENDING.length - 1].label}</span>
       </div>
     </div>
   );
