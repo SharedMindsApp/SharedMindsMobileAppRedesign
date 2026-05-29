@@ -990,6 +990,25 @@ export async function fetchRecentShippedSessions(userId?: string): Promise<Shipp
  *  drop in" lane. Returns at most `limit` rows, sorted newest-arrival
  *  first (gives the still-fresh sessions priority; very old ones get
  *  deprioritised because the host is probably deep in flow). */
+/** A match-me-now door must have at least this many minutes left to be worth
+ *  joining — below it, the session reverts to solo and stops being shown. */
+export const MIN_MATCH_MINUTES_LEFT = 15;
+
+/** Minutes remaining on a session from its end time (target_end_time, else
+ *  start_time + intended_duration). Negative if already over. */
+export function minutesLeft(row: {
+  target_end_time?: string | null;
+  start_time?: string | null;
+  intended_duration_minutes?: number | null;
+}): number {
+  const endMs = row.target_end_time
+    ? new Date(row.target_end_time).getTime()
+    : row.start_time
+      ? new Date(row.start_time).getTime() + (row.intended_duration_minutes ?? 25) * 60_000
+      : 0;
+  return (endMs - Date.now()) / 60_000;
+}
+
 export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]> {
   // Never offer the user their OWN open door — you can't drop into your own
   // session (claim_open_session rejects self-claims), so showing it just
@@ -1013,13 +1032,17 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
     throw error;
   }
 
-  return (data ?? []).map((row: any) => ({
-    ...row,
-    display_name: row.profiles?.display_name ?? 'Someone',
-    avatar_url: row.profiles?.avatar_url ?? null,
-    country_code: row.profiles?.country_code ?? null,
-    work_type: row.profiles?.work_type ?? null,
-  })) as CommunitySession[];
+  return (data ?? [])
+    // Hide doors with too little time left to be worth joining — by the time
+    // someone drops in there'd only be a few minutes of shared focus.
+    .filter((row: any) => minutesLeft(row) >= MIN_MATCH_MINUTES_LEFT)
+    .map((row: any) => ({
+      ...row,
+      display_name: row.profiles?.display_name ?? 'Someone',
+      avatar_url: row.profiles?.avatar_url ?? null,
+      country_code: row.profiles?.country_code ?? null,
+      work_type: row.profiles?.work_type ?? null,
+    })) as CommunitySession[];
 }
 
 /** Race-safe drop-in: claim a partner slot in an open session. Returns

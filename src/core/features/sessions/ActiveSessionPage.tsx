@@ -11,7 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -653,6 +653,43 @@ export function ActiveSessionPage() {
     closePlan();
   }, [session, persistPlanned, closePlan]);
 
+  // ── Match door: too little time left ───────────────────────────
+  // An open door with under MIN_MATCH_MINUTES_LEFT remaining isn't worth
+  // joining (it's already hidden from discovery). Prompt the host to extend
+  // or go solo. Fires once per dip below the threshold (re-arms if extended).
+  const [showLowMatchTime, setShowLowMatchTime] = useState(false);
+  const lowMatchArmedRef = useRef(true);
+  const isOpenUnmatchedHost =
+    isPrimaryHost && session?.open_to_match === true && !session?.partner_user_id && session?.status === 'active';
+
+  useEffect(() => {
+    if (!isOpenUnmatchedHost) { setShowLowMatchTime(false); return; }
+    const mins = timerSecondsRemaining / 60;
+    if (mins > MIN_MATCH_MINUTES_LEFT) { lowMatchArmedRef.current = true; return; }
+    if (mins <= 0) return;
+    if (lowMatchArmedRef.current) {
+      lowMatchArmedRef.current = false;
+      setShowLowMatchTime(true);
+    }
+  }, [timerSecondsRemaining, isOpenUnmatchedHost]);
+
+  const handleMatchGoSolo = useCallback(async () => {
+    setShowLowMatchTime(false);
+    if (!session) return;
+    try {
+      await closeTheDoor(session.id);
+      setSession((s) => (s ? { ...s, open_to_match: false } : s));
+      setActiveSession({ ...(session as FocusSession), open_to_match: false });
+    } catch (e) {
+      console.warn('[ActiveSessionPage] go-solo (close door) failed:', e);
+    }
+  }, [session, setActiveSession]);
+
+  const handleMatchExtend = useCallback((mins: number) => {
+    setShowLowMatchTime(false);
+    void handleExtend(mins);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Matched = a live 1-on-1 with a partner present. Leaving a matched session
   // is "leave early" (the partner keeps going / can take over), distinct from
   // a solo "End" which finishes your own session.
@@ -1278,6 +1315,57 @@ export function ActiveSessionPage() {
           onClose={closePlan}
           onApply={handleApplyPlan}
         />
+      )}
+
+      {/* Match door running low on time — extend or go solo. */}
+      {showLowMatchTime && createPortal(
+        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center" onClick={() => setShowLowMatchTime(false)}>
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+            className="relative w-full sm:max-w-sm bg-surface rounded-t-3xl sm:rounded-3xl shadow-2xl p-5"
+          >
+            <div className="sm:hidden flex justify-center pb-2 -mt-1"><span className="w-9 h-1 rounded-full bg-black/15" /></div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 grid place-items-center shrink-0">
+                <Clock size={20} className="text-amber-600" />
+              </div>
+              <h2 className="text-base font-extrabold stitch-text-primary leading-tight">
+                Under {MIN_MATCH_MINUTES_LEFT} min left
+              </h2>
+            </div>
+            <p className="text-sm stitch-text-secondary leading-snug mb-4">
+              Not much time for someone to join and get value. Add more time to keep the door open, or close it and finish solo.
+            </p>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleMatchExtend(15)}
+                  className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+                >
+                  +15 min
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMatchExtend(30)}
+                  className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+                >
+                  +30 min
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleMatchGoSolo()}
+                className="w-full py-3 rounded-2xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
+              >
+                Close the door · finish solo
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {/* Mid-session state recheck — only for users who control music,
