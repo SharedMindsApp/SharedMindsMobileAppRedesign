@@ -49,25 +49,30 @@ export function WorkingOnSection({ userId, isOwn = false }: { userId: string; is
         {projects.map((p) => {
           const type = projectTypeMeta(p.project_type);
           const status = STATUS_META[p.status];
+          const color = p.color ?? '#8b5cf6';
           return (
             <button
               key={p.id}
               type="button"
               onClick={() => setOpen(p)}
-              className="w-full text-left flex items-center gap-3 rounded-2xl ring-1 ring-surface-container bg-surface px-3.5 py-3 hover:bg-surface-container-low transition-colors group"
+              className="group w-full text-left flex items-stretch rounded-2xl ring-1 ring-surface-container bg-surface overflow-hidden hover:shadow-md hover:ring-surface-container-high transition-all"
             >
-              <span className="w-9 h-9 rounded-xl grid place-items-center text-base shrink-0" style={{ background: (p.color ?? '#8b5cf6') + '22' }}>{type.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
+              {/* Project-colour accent stripe */}
+              <span className="w-1.5 shrink-0" style={{ background: color }} />
+              <div className="flex items-center gap-3 flex-1 min-w-0 px-3.5 py-3">
+                <span className="w-11 h-11 rounded-2xl grid place-items-center text-xl shrink-0" style={{ background: `${color}1f` }}>{type.emoji}</span>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold stitch-text-primary leading-tight truncate">{p.title}</p>
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-surface-container-low stitch-text-secondary">{type.label}</span>
-                  {status && <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full" style={{ background: `${color}1f`, color }}>{type.label}</span>
+                    {status && <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>}
+                  </div>
+                  {p.public_summary && (
+                    <p className="text-[11px] stitch-text-secondary leading-snug truncate mt-1">{p.public_summary}</p>
+                  )}
                 </div>
-                {(p.public_summary || p.description) && (
-                  <p className="text-[11px] stitch-text-secondary leading-snug truncate mt-0.5">{p.public_summary || p.description}</p>
-                )}
+                <ArrowRight size={15} className="stitch-text-secondary opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all shrink-0" />
               </div>
-              <ArrowRight size={14} className="stitch-text-secondary opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
             </button>
           );
         })}
@@ -96,9 +101,22 @@ function ProjectOverviewSheet({ project, isOwn, onClose }: { project: Project; i
             {status && <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>}
           </div>
           <h2 className="text-xl font-extrabold stitch-text-primary tracking-tight mt-2">{project.title}</h2>
-          {(project.public_summary || project.description) && (
-            <p className="text-sm stitch-text-secondary leading-relaxed mt-2">{project.public_summary || project.description}</p>
+          {project.public_summary ? (
+            <div className="mt-3 rounded-2xl bg-surface-container-low px-4 py-3">
+              <p className="text-sm stitch-text-primary leading-relaxed">{project.public_summary}</p>
+            </div>
+          ) : project.description ? (
+            <div className="mt-3 rounded-2xl bg-surface-container-low px-4 py-3">
+              <p className="text-sm stitch-text-secondary leading-relaxed line-clamp-4">{project.description}</p>
+            </div>
+          ) : null}
+
+          {isOwn && !project.public_summary && (
+            <p className="text-[11px] stitch-text-secondary/80 italic mt-2 leading-snug">
+              Add a public summary so visitors see a clean overview — not your full notes.
+            </p>
           )}
+
           {isOwn && (
             <button type="button" onClick={() => { onClose(); navigate(`/projects/${project.id}`); }}
               className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">
