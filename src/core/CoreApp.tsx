@@ -42,6 +42,7 @@ const ProjectsPage          = lazy(() => import('./features/projects/ProjectsPag
 const ProjectDetailPage     = lazy(() => import('./features/projects/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
 const AcceptInvitePage      = lazy(() => import('./features/projects/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })));
 const AcceptSessionInvitePage = lazy(() => import('./features/sessions/AcceptSessionInvitePage').then(m => ({ default: m.AcceptSessionInvitePage })));
+const AcceptCreditInvitePage = lazy(() => import('./features/profile/AcceptCreditInvitePage').then(m => ({ default: m.AcceptCreditInvitePage })));
 const ReflectionPage        = lazy(() => import('./features/reflection/ReflectionPage').then(m => ({ default: m.ReflectionPage })));
 const PantryPage            = lazy(() => import('./features/pantry/PantryPage').then(m => ({ default: m.PantryPage })));
 const JournalPage           = lazy(() => import('./features/journal/JournalPage').then(m => ({ default: m.JournalPage })));
@@ -214,6 +215,7 @@ function AppContent() {
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="invite/:token" element={<AcceptInvitePage />} />
             <Route path="session-invite/:token" element={<AcceptSessionInvitePage />} />
+            <Route path="credit-invite/:token" element={<AcceptCreditInvitePage />} />
             <Route path="reflection" element={<ReflectionPage />} />
             <Route path="calendar" element={<Navigate to="/sessions" replace />} />
             <Route

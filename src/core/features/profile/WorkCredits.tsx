@@ -17,7 +17,7 @@ import { fetchConnections, type ConnectionWithProfile } from '../../services/Con
 import {
   fetchWorkCredits, createWorkCredit, updateWorkCredit, deleteWorkCredit,
   fetchCreditCollaborators, addCreditCollaborator, removeCreditCollaborator,
-  fetchPendingCreditTags, respondToCreditTag,
+  inviteCreditCollaboratorByEmail, fetchPendingCreditTags, respondToCreditTag,
   type WorkCredit, type WorkCreditInput, type CreditCollaborator, type PendingCreditTag,
 } from '../../services/WorkCreditService';
 
@@ -285,6 +285,10 @@ function CreditCollaboratorsManager({
   const [collabs, setCollabs] = useState<CreditCollaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [invEmail, setInvEmail] = useState('');
+  const [invName, setInvName] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
 
   async function load() {
     const m = await fetchCreditCollaborators([creditId]);
@@ -293,8 +297,28 @@ function CreditCollaboratorsManager({
   }
   useEffect(() => { void load(); }, [creditId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const taggedIds = new Set(collabs.map((c) => c.collaborator_user_id));
+  const taggedIds = new Set(collabs.map((c) => c.collaborator_user_id).filter(Boolean));
   const addable = connections.filter((c) => !taggedIds.has(c.other_user_id));
+
+  async function copyLink(link: string, key: string) {
+    try { await navigator.clipboard.writeText(link); setCopied(key); setTimeout(() => setCopied(null), 2000); } catch { /* ignore */ }
+  }
+
+  async function sendInvite() {
+    const email = invEmail.trim();
+    if (!email || busy) return;
+    setBusy(true);
+    try {
+      const link = await inviteCreditCollaboratorByEmail(creditId, ownerId, email, invName);
+      await load();
+      setInvEmail(''); setInvName('');
+      await copyLink(link, 'new');
+    } catch (e) {
+      console.warn('[CreditCollaboratorsManager] invite failed:', e);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function add(userId: string) {
     if (busy) return;
@@ -316,18 +340,27 @@ function CreditCollaboratorsManager({
 
       {collabs.length > 0 && (
         <div className="space-y-1">
-          {collabs.map((c) => (
-            <div key={c.id} className="flex items-center gap-2">
-              <MiniAvatar name={c.display_name} url={c.avatar_url} size={20} />
-              <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{c.display_name ?? 'Member'}</span>
-              <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${c.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : c.status === 'declined' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-700'}`}>{c.status}</span>
-              <button type="button" onClick={() => void drop(c.id)} aria-label="Remove" className="w-6 h-6 grid place-items-center rounded-md stitch-text-secondary hover:bg-surface-container"><X size={12} /></button>
-            </div>
-          ))}
+          {collabs.map((c) => {
+            const unclaimed = !c.collaborator_user_id && !!c.invite_token;
+            const link = unclaimed ? `${window.location.origin}/credit-invite/${c.invite_token}` : null;
+            return (
+              <div key={c.id} className="flex items-center gap-2">
+                <MiniAvatar name={c.display_name} url={c.avatar_url} size={20} />
+                <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{c.display_name ?? c.invited_email ?? 'Member'}</span>
+                {unclaimed && link && (
+                  <button type="button" onClick={() => void copyLink(link, c.id)} className="text-[10px] font-bold text-primary hover:underline">
+                    {copied === c.id ? 'Copied!' : 'Copy link'}
+                  </button>
+                )}
+                <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${c.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : c.status === 'declined' ? 'bg-rose-100 text-rose-600' : unclaimed ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-700'}`}>{unclaimed ? 'invited' : c.status}</span>
+                <button type="button" onClick={() => void drop(c.id)} aria-label="Remove" className="w-6 h-6 grid place-items-center rounded-md stitch-text-secondary hover:bg-surface-container"><X size={12} /></button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {addable.length > 0 ? (
+      {addable.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {addable.map((c) => (
             <button key={c.other_user_id} type="button" disabled={busy} onClick={() => void add(c.other_user_id)}
@@ -336,9 +369,34 @@ function CreditCollaboratorsManager({
             </button>
           ))}
         </div>
-      ) : collabs.length === 0 ? (
-        <p className="text-[11px] stitch-text-secondary italic">Connect with the people you worked with, then tag them here to verify the credit.</p>
-      ) : null}
+      )}
+
+      {/* Invite someone not on SharedMinds yet */}
+      {inviteOpen ? (
+        <div className="space-y-1.5 pt-1">
+          <input value={invEmail} onChange={(e) => setInvEmail(e.target.value)} placeholder="their@email.com" type="email"
+            className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-xs stitch-text-primary placeholder:stitch-text-secondary outline-none focus:ring-2 focus:ring-primary/30" />
+          <input value={invName} onChange={(e) => setInvName(e.target.value)} placeholder="Their name (optional)"
+            className="w-full px-3 py-2 rounded-lg bg-surface-container-low text-xs stitch-text-primary placeholder:stitch-text-secondary outline-none focus:ring-2 focus:ring-primary/30" />
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void sendInvite()} disabled={!invEmail.trim() || busy}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg stitch-btn--primary text-white text-[11px] font-bold disabled:opacity-50">
+              {busy ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Create invite link
+            </button>
+            <button type="button" onClick={() => setInviteOpen(false)} className="px-3 py-2 rounded-lg bg-surface-container-low stitch-text-secondary text-[11px] font-bold">Cancel</button>
+          </div>
+          <p className="text-[10px] stitch-text-secondary leading-snug">We don't email them — you'll get a link to share. They claim it when they join.</p>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setInviteOpen(true)}
+          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary hover:underline pt-1">
+          <UserPlus size={12} /> Invite someone by email
+        </button>
+      )}
+
+      {collabs.length === 0 && addable.length === 0 && !inviteOpen && (
+        <p className="text-[11px] stitch-text-secondary italic">Tag the people you worked with to verify this credit.</p>
+      )}
     </div>
   );
 }

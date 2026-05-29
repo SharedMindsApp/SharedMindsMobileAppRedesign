@@ -82,10 +82,14 @@ export interface CreditCollaborator {
   id: string;
   credit_id: string;
   owner_user_id: string;
-  collaborator_user_id: string;
+  collaborator_user_id: string | null;   // null = email stub not yet claimed
   status: 'pending' | 'confirmed' | 'declined';
   display_name: string | null;
   avatar_url: string | null;
+  invited_email: string | null;
+  invited_name: string | null;
+  invite_token: string | null;            // present for email invites (owner view)
+  claimed_at: string | null;
 }
 
 /** A pending tag awaiting the current user's confirmation. */
@@ -109,17 +113,21 @@ export async function fetchCreditCollaborators(creditIds: string[]): Promise<Rec
     .select('*')
     .in('credit_id', creditIds);
   if (error || !data) return {};
-  const userIds = Array.from(new Set(data.map((r: any) => r.collaborator_user_id)));
-  const { data: profiles } = await supabase
-    .from('profiles').select('id, display_name, avatar_url').in('id', userIds);
+  const userIds = Array.from(new Set(data.map((r: any) => r.collaborator_user_id).filter(Boolean)));
+  const { data: profiles } = userIds.length
+    ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', userIds)
+    : { data: [] as any[] };
   const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
   const out: Record<string, CreditCollaborator[]> = {};
   for (const r of data as any[]) {
-    const p = byId.get(r.collaborator_user_id);
+    const p = r.collaborator_user_id ? byId.get(r.collaborator_user_id) : null;
     (out[r.credit_id] ??= []).push({
       id: r.id, credit_id: r.credit_id, owner_user_id: r.owner_user_id,
-      collaborator_user_id: r.collaborator_user_id, status: r.status,
-      display_name: p?.display_name ?? null, avatar_url: p?.avatar_url ?? null,
+      collaborator_user_id: r.collaborator_user_id ?? null, status: r.status,
+      display_name: p?.display_name ?? r.invited_name ?? null,
+      avatar_url: p?.avatar_url ?? null,
+      invited_email: r.invited_email ?? null, invited_name: r.invited_name ?? null,
+      invite_token: r.invite_token ?? null, claimed_at: r.claimed_at ?? null,
     });
   }
   return out;
@@ -136,6 +144,34 @@ export async function addCreditCollaborator(creditId: string, ownerUserId: strin
 export async function removeCreditCollaborator(id: string): Promise<void> {
   const { error } = await supabase.from('work_credit_collaborators').delete().eq('id', id);
   if (error) throw error;
+}
+
+/** Credit a non-member by email — creates a stub + invite token. Returns the
+ *  shareable invite link for the tagger to send (no automated email). */
+export async function inviteCreditCollaboratorByEmail(
+  creditId: string, ownerUserId: string, email: string, name: string,
+): Promise<string> {
+  const token = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID().replace(/-/g, '')
+    : `${Date.now()}${Math.random().toString(36).slice(2)}`;
+  const { error } = await supabase
+    .from('work_credit_collaborators')
+    .insert({
+      credit_id: creditId, owner_user_id: ownerUserId,
+      invited_email: email.trim().toLowerCase(), invited_name: name.trim() || null,
+      invite_token: token,
+    });
+  if (error) throw error;
+  return `${window.location.origin}/credit-invite/${token}`;
+}
+
+/** Claim a credit invite by token (the invited person, once signed in). */
+export async function claimCreditInvite(token: string): Promise<{
+  ok: boolean; reason?: string; credit_title?: string; credit_role?: string | null; owner_name?: string;
+}> {
+  const { data, error } = await supabase.rpc('claim_credit_invite', { p_token: token });
+  if (error) return { ok: false, reason: error.message };
+  return (data ?? { ok: false }) as any;
 }
 
 /** Credits the current user has been tagged on and not yet responded to. */
