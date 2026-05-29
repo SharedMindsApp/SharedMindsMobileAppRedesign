@@ -40,22 +40,24 @@ export function SessionPlanSheet({ durationMin, planned, onClose, onApply }: Pro
 
   // Seed initial UI state from any existing agenda.
   const initialBreath = planned.find((p) => p.status === 'planned' && (p.wizardId === 'breathing_1min' || p.wizardId === 'breathing_3min'))?.wizardId as WizardId | undefined;
-  const hasBreak = planned.some((p) => p.status === 'planned' && (p.wizardId === 'break_3min' || p.wizardId === 'break_5min'));
+  const existingBreak = planned.find((p) => p.status === 'planned' && (p.wizardId === 'break_3min' || p.wizardId === 'break_5min'))?.wizardId as WizardId | undefined;
 
   const [music, setMusic] = useState<MusicCategory | null>(null);
   const [breath, setBreath] = useState<WizardId | null>(initialBreath ?? null);
-  const [breakOn, setBreakOn] = useState<boolean>(plan.breakMode === 'auto' ? (hasBreak || true) : hasBreak);
+  // Break is a choice: none / 3 min / 5 min. 90+ pre-selects the 5-min break.
+  const [breakChoice, setBreakChoice] = useState<WizardId | null>(
+    existingBreak ?? (plan.breakMode === 'auto' ? 'break_5min' : null),
+  );
 
   function apply() {
     const next: PlannedWizard[] = [];
     if (breath) next.push({ id: genId(), wizardId: breath, at: 'start', status: 'planned' });
-    if (breakOn && plan.breakMode !== 'none') {
-      next.push({ id: genId(), wizardId: plan.breakWizardId, at: plan.breakAt, status: 'planned' });
+    if (breakChoice && plan.breakMode !== 'none') {
+      next.push({ id: genId(), wizardId: breakChoice, at: plan.breakAt, status: 'planned' });
     }
     onApply(next, music);
   }
 
-  const breakLabel = plan.breakWizardId === 'break_5min' ? 'Take five (5 min)' : 'Quick break (3 min)';
   const breakWhen = plan.breakAt === 'halfway' ? `~${Math.round(durationMin / 2)} min in` : plan.breakAt;
 
   return createPortal(
@@ -116,29 +118,22 @@ export function SessionPlanSheet({ durationMin, planned, onClose, onApply }: Pro
             </div>
           </section>
 
-          {/* Break */}
+          {/* Break — none / 3 min / 5 min, fired at the halfway point. */}
           {plan.breakMode !== 'none' && (
             <section>
               <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2 inline-flex items-center gap-1.5">
                 <Coffee size={11} /> Mid-session break
               </p>
-              <button
-                type="button"
-                onClick={() => setBreakOn((v) => !v)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
-                  breakOn ? 'bg-primary/10 ring-2 ring-primary/30' : 'bg-surface-container-low hover:bg-surface-container'
-                }`}
-              >
-                <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${breakOn ? 'bg-primary' : 'bg-surface-container'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${breakOn ? 'translate-x-4' : 'translate-x-0'}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold stitch-text-primary leading-tight">{breakLabel}</p>
-                  <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
-                    {breakWhen}{plan.breakMode === 'auto' ? ' · recommended for longer sessions' : ''}
-                  </p>
-                </div>
-              </button>
+              <div className="flex gap-1.5">
+                <PlanChip label="None" selected={breakChoice === null} onClick={() => setBreakChoice(null)} />
+                <PlanChip label="3 min" selected={breakChoice === 'break_3min'} onClick={() => setBreakChoice('break_3min')} />
+                <PlanChip label="5 min" selected={breakChoice === 'break_5min'} onClick={() => setBreakChoice('break_5min')} />
+              </div>
+              {breakChoice && (
+                <p className="text-[11px] stitch-text-secondary leading-snug mt-2 px-1">
+                  Fires {breakWhen}{plan.breakMode === 'auto' ? ' · recommended for longer sessions' : ''}.
+                </p>
+              )}
             </section>
           )}
         </div>
