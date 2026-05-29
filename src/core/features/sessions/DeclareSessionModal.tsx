@@ -6,7 +6,8 @@ import { usePublicHostingEligibility } from '../../../hooks/usePublicHostingElig
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import { startCommunitySession, createScheduledSession, fetchConflictingSessions } from '../../services/SessionService';
+import { startCommunitySession, createScheduledSession, fetchConflictingSessions, inviteConnectionToSession, inviteEmailToSession } from '../../services/SessionService';
+import { fetchConnections, type ConnectionWithProfile } from '../../services/ConnectionService';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
 import { TaskLoadBadge } from '../../ui/TaskLoadBadge';
@@ -133,9 +134,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   // Custom = current value isn't on a chip. We only show the slider when
   // the tier allows it.
   const isCustomDuration = !visiblePresets.some((p) => p.value === duration);
-  const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>(
-    forceSoloMode || startOpenToMatch ? 'solo' : 'one_on_one'
-  );
+  // Default to Solo: it's the frictionless quick-start. 1-on-1 now requires
+  // choosing an invitee (random partners go through Match-me-now), so making
+  // it the default would gate the primary CTA behind an invite picker.
+  const [sessionMode, setSessionMode] = useState<'group' | 'one_on_one' | 'solo'>('solo');
   // Solo-only sub-toggles. Mutually exclusive: a user picks one of
   //   • Just me (default, neither toggled)
   //   • Body double (shared silent video room)
@@ -149,6 +151,17 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
    *  phase length + mic behaviour if a joiner arrives. Default 'brief_hi'
    *  matches the "balanced" middle option most users will want. */
   const [vibe, setVibe] = useState<'silent' | 'brief_hi' | 'chatty'>('brief_hi');
+  // ── 1-on-1 invite ────────────────────────────────────────────
+  // A 1-on-1 is always WITH a specific person (random partners go through
+  // Match-me-now), so picking an invitee — a connection or an email — is
+  // required before the session can be created.
+  const [inviteTab, setInviteTab] = useState<'connection' | 'email'>('connection');
+  const [inviteConnId, setInviteConnId] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [connections, setConnections] = useState<ConnectionWithProfile[]>([]);
+  useEffect(() => {
+    fetchConnections().then(setConnections).catch(() => { /* non-fatal */ });
+  }, []);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
   );
@@ -288,7 +301,14 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   // declare the task WHILE WAITING for a partner. So the goal is NOT required
   // up front here; the waiting room prompts for it. Every other flow still
   // requires a goal before starting.
-  const canSubmit = (startOpenToMatch || resolvedGoal.length > 0) && !submitting;
+  // A 1-on-1 (not match-me-now) requires a chosen invitee.
+  const emailValid = /^\S+@\S+\.\S+$/.test(inviteEmail.trim());
+  const oneOnOneNeedsInvite = sessionMode === 'one_on_one' && !startOpenToMatch;
+  const hasInvitee = inviteTab === 'connection' ? !!inviteConnId : emailValid;
+  const canSubmit =
+    (startOpenToMatch || resolvedGoal.length > 0)
+    && (!oneOnOneNeedsInvite || hasInvitee)
+    && !submitting;
 
   // ── Mini-wizard state ──────────────────────────────────────────
   // Step 1 ("goal") covers task picking / typing + project pin.
@@ -301,6 +321,19 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     startOpenToMatch ? 'settings' : 'goal',
   );
   const hasGoal = resolvedGoal.length > 0;
+
+  /** Send the 1-on-1 invite once the session row exists. Connection →
+   *  reserves the seat + notifies; email → creates a token link + copies it
+   *  to the clipboard so the host can paste it to the invitee. */
+  async function sendInvite(sessionId: string) {
+    if (!oneOnOneNeedsInvite) return;
+    if (inviteTab === 'connection' && inviteConnId) {
+      await inviteConnectionToSession(sessionId, inviteConnId);
+    } else if (inviteTab === 'email' && emailValid) {
+      const { url } = await inviteEmailToSession(sessionId, inviteEmail.trim());
+      try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked — non-fatal */ }
+    }
+  }
 
   async function handleStart() {
     if (!canSubmit) return;
@@ -351,13 +384,15 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
 
       if (isScheduling && resolvedScheduledAt) {
         // Future slot → create scheduled session, show reminder confirmation then close
-        await createScheduledSession({
+        const scheduled = await createScheduledSession({
           title: resolvedGoal,
           scheduledAt: resolvedScheduledAt,
           durationMinutes: Math.min(duration, limits.maxMinutes),
           projectId: selectedProjectId ?? undefined,
+          sessionMode,
           sessionKind,
         });
+        await sendInvite(scheduled.id);
         setScheduledConfirm(true);
         setTimeout(onClose, 2500);
         return;
@@ -379,6 +414,8 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         sessionKind,
         startMood,
       });
+      // 1-on-1: reserve the seat for / notify the invited partner.
+      await sendInvite(session.id);
       // Bump the linked task to 'active' + increment sessions_count.
       // Fire-and-forget — the DB write isn't worth blocking navigation on.
       if (resolvedTaskId) {
@@ -1161,6 +1198,86 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         </div>
         )}
 
+        {/* ── 1-on-1 invite picker ─────────────────────────────
+            A 1-on-1 is always with a specific person (random partners use
+            Match-me-now), so we require choosing a connection or an email. */}
+        {oneOnOneNeedsInvite && (
+          <div className="shrink-0 px-5 pt-3">
+            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
+              Invite your partner
+            </p>
+            {/* connection / email tab switch */}
+            <div className="flex p-1 bg-surface-container-low rounded-full gap-1 mb-2">
+              <button
+                type="button"
+                onClick={() => setInviteTab('connection')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                  inviteTab === 'connection' ? 'stitch-btn--primary text-white' : 'stitch-text-secondary'
+                }`}
+              >
+                <Users size={12} /> A connection
+              </button>
+              <button
+                type="button"
+                onClick={() => setInviteTab('email')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                  inviteTab === 'email' ? 'stitch-btn--primary text-white' : 'stitch-text-secondary'
+                }`}
+              >
+                <UserPlus size={12} /> By email
+              </button>
+            </div>
+
+            {inviteTab === 'connection' ? (
+              connections.length === 0 ? (
+                <p className="text-xs stitch-text-secondary px-1 py-2 leading-snug">
+                  No connections yet. Switch to <span className="font-bold">By email</span> to invite someone with a link.
+                </p>
+              ) : (
+                <div className="max-h-44 overflow-y-auto -mx-1 px-1 space-y-1">
+                  {connections.map((c) => {
+                    const active = inviteConnId === c.other_user_id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setInviteConnId(active ? null : c.other_user_id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-left ${
+                          active ? 'bg-primary/10 ring-2 ring-primary/30' : 'bg-surface-container-low hover:bg-surface-container'
+                        }`}
+                      >
+                        {c.avatar_url ? (
+                          <img src={c.avatar_url} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg bg-primary/15 grid place-items-center text-primary text-xs font-extrabold shrink-0">
+                            {c.display_name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="text-sm font-semibold stitch-text-primary truncate flex-1 min-w-0">{c.display_name}</span>
+                        {active && <Check size={15} className="text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ) : (
+              <>
+                <input
+                  type="email"
+                  inputMode="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="partner@email.com"
+                  className="w-full px-4 py-2.5 rounded-xl bg-surface-container-low stitch-text-primary text-sm outline-none focus:ring-2 ring-primary/25 transition-all"
+                />
+                <p className="text-[10px] stitch-text-secondary mt-1.5 px-1 leading-snug">
+                  We'll copy an invite link to your clipboard — paste it to them however you like.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {/* ── Solo sub-toggles: Body double + Open the door ────── */}
         {sessionMode === 'solo' && (
           <div className="shrink-0 px-5 pt-3 space-y-2">
@@ -1354,11 +1471,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               <>
                 {isScheduling ? <Calendar size={18} /> : startOpenToMatch ? <DoorOpen size={18} /> : <Timer size={18} />}
                 {!canSubmit
-                  ? 'Pick a goal first'
+                  ? (oneOnOneNeedsInvite && !hasInvitee ? 'Choose who to invite' : 'Pick a goal first')
                   : isScheduling
                   ? `Schedule for ${scheduledLabel ?? `${duration} min`}`
                   : startOpenToMatch
                   ? `Open the door · ${duration} min`
+                  : oneOnOneNeedsInvite
+                  ? `Invite & start · ${duration} min`
                   : `Start ${duration}-min session`}
               </>
             )}

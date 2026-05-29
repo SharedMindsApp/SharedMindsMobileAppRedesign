@@ -1039,6 +1039,74 @@ export async function updatePlannedWizards(
   if (error) throw error;
 }
 
+// ── Scheduled 1-on-1 invites ────────────────────────────────────────────────
+export interface SessionInvite {
+  id: string;
+  session_id: string;
+  invited_by: string;
+  invited_user_id: string | null;
+  invited_email: string | null;
+  invite_token: string;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  created_at: string;
+  expires_at: string;
+  // joined profile for the invited connection (when invited_user_id set)
+  invited_profile?: { display_name: string; avatar_url: string | null } | null;
+}
+
+/** Invite a connection to a (1-on-1) session. Reserves the partner seat,
+ *  logs the invite, and notifies them — all server-side. Returns invite id. */
+export async function inviteConnectionToSession(
+  sessionId: string,
+  userId: string,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('invite_connection_to_session', {
+    p_session_id: sessionId,
+    p_user_id: userId,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Create an email invite to a session. Returns the shareable link the host
+ *  can send. No notification (recipient may not have an account yet). */
+export async function inviteEmailToSession(
+  sessionId: string,
+  email: string,
+): Promise<{ inviteId: string; url: string }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { data, error } = await supabase
+    .from('session_invites')
+    .insert({ session_id: sessionId, invited_by: user.id, invited_email: email.trim().toLowerCase() })
+    .select('id, invite_token')
+    .single();
+  if (error) throw error;
+  return {
+    inviteId: data.id,
+    url: `${window.location.origin}/session-invite/${data.invite_token}`,
+  };
+}
+
+/** Accept a session invite by token → claims the partner seat. Returns the
+ *  session id to navigate to. */
+export async function acceptSessionInvite(token: string): Promise<string> {
+  const { data, error } = await supabase.rpc('accept_session_invite', { p_token: token });
+  if (error) throw error;
+  return data as string;
+}
+
+/** List invites for a session (host view). */
+export async function fetchSessionInvites(sessionId: string): Promise<SessionInvite[]> {
+  const { data, error } = await supabase
+    .from('session_invites')
+    .select('*, invited_profile:profiles!invited_user_id(display_name, avatar_url)')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SessionInvite[];
+}
+
 /** Set/replace the session's declared goal mid-session. Used by the
  *  match-me-now waiting room, where the task is declared AFTER the door
  *  opens rather than up front. Optionally links a task row. */

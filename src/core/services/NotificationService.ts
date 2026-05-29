@@ -32,7 +32,9 @@ export type NotificationType =
   | 'partner_no_show'
   | 'session_completed'
   | 'session_missed'
-  | 'streak_at_risk';
+  | 'streak_at_risk'
+  // A connection invited you to a scheduled 1-on-1
+  | 'session_invite';
 
 export interface Notification {
   id: string;
