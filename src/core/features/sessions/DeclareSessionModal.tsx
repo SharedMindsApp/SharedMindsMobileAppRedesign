@@ -6,7 +6,7 @@ import { usePublicHostingEligibility } from '../../../hooks/usePublicHostingElig
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import { startCommunitySession, createScheduledSession, fetchConflictingSessions, inviteConnectionToSession, inviteEmailToSession } from '../../services/SessionService';
+import { startCommunitySession, createScheduledSession, fetchConflictingSessions, inviteConnectionToSession, inviteEmailToSession, fetchMatchWaitStats, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
 import { fetchConnections, type ConnectionWithProfile } from '../../services/ConnectionService';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
@@ -162,6 +162,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   useEffect(() => {
     fetchConnections().then(setConnections).catch(() => { /* non-fatal */ });
   }, []);
+  // Average match wait — only fetched/shown for the open-a-door flow, to set
+  // expectations and warn when a short session won't leave meaningful time.
+  const [matchWait, setMatchWait] = useState<{ avgMinutes: number; sampleSize: number } | null>(null);
+  useEffect(() => {
+    if (!startOpenToMatch) return;
+    fetchMatchWaitStats().then(setMatchWait).catch(() => { /* non-fatal */ });
+  }, [startOpenToMatch]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
   );
@@ -550,12 +557,19 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         {/* Open-to-match banner — when launched from "Match me now", make it
             obvious the door's open + point to the vibe control on step 2. */}
         {startOpenToMatch && openToMatch && (
-          <div className="shrink-0 mx-5 mb-2 flex items-center gap-2 rounded-xl bg-amber-50 ring-1 ring-amber-200/70 px-3 py-2">
-            <DoorOpen size={15} className="text-amber-600 shrink-0" />
-            <p className="text-[11px] font-semibold text-amber-800 leading-snug">
-              Open for a 1-on-1 — the first person to drop in becomes your partner.
-              Set how the room runs below; you'll note what you're working on once the door's open.
-            </p>
+          <div className="shrink-0 mx-5 mb-2 rounded-xl bg-amber-50 ring-1 ring-amber-200/70 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <DoorOpen size={15} className="text-amber-600 shrink-0" />
+              <p className="text-[11px] font-semibold text-amber-800 leading-snug">
+                Open for a 1-on-1 — the first person to drop in becomes your partner.
+                Set how the room runs below; you'll note what you're working on once the door's open.
+              </p>
+            </div>
+            {matchWait && (
+              <p className="mt-1.5 pl-[23px] text-[11px] font-bold text-amber-700 inline-flex items-center gap-1">
+                <Clock size={11} /> Average match wait ~{matchWait.avgMinutes} min
+              </p>
+            )}
           </div>
         )}
 
@@ -1140,6 +1154,15 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                 <span>{Math.floor(limits.maxMinutes / 60)}h</span>
               </div>
             </div>
+          )}
+
+          {/* Match-wait reality check: if the average wait eats most of a
+              short session, warn that little shared time would be left. */}
+          {startOpenToMatch && matchWait && duration - matchWait.avgMinutes < MIN_MATCH_MINUTES_LEFT && (
+            <p className="mt-2 text-[11px] font-semibold text-amber-700 bg-amber-50 ring-1 ring-amber-200/70 rounded-lg px-3 py-2 leading-snug">
+              At ~{matchWait.avgMinutes} min average wait, a {duration}-min session leaves only
+              ~{Math.max(0, duration - matchWait.avgMinutes)} min together once matched. Consider a longer block.
+            </p>
           )}
 
           {/* Free-tier upgrade nudge — only shown once paywall is live and

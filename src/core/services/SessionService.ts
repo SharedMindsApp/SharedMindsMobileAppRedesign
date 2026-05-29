@@ -1009,6 +1009,35 @@ export function minutesLeft(row: {
   return (endMs - Date.now()) / 60_000;
 }
 
+/** Rolling average wait between a match-me-now door opening (start_time) and a
+ *  partner dropping in (match_joined_at), over recently claimed sessions.
+ *  Returns null when there isn't enough signal to quote a number. */
+export async function fetchMatchWaitStats(): Promise<{ avgMinutes: number; sampleSize: number } | null> {
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .select('start_time, match_joined_at, intended_duration_minutes')
+    .not('match_joined_at', 'is', null)
+    .gte('start_time', fourteenDaysAgo)
+    .order('start_time', { ascending: false })
+    .limit(200);
+  if (error) { console.warn('[fetchMatchWaitStats] query failed:', error.message); return null; }
+
+  const waits: number[] = [];
+  for (const row of data ?? []) {
+    const start = new Date(row.start_time as string).getTime();
+    const joined = new Date(row.match_joined_at as string).getTime();
+    const mins = (joined - start) / 60_000;
+    // Drop noise: negatives (clock skew) and waits longer than the session
+    // itself (stale rows / re-opened doors) aren't representative.
+    const cap = (row.intended_duration_minutes ?? 120);
+    if (mins >= 0 && mins <= cap) waits.push(mins);
+  }
+  if (waits.length < 3) return null; // not enough to quote confidently
+  const avg = waits.reduce((a, b) => a + b, 0) / waits.length;
+  return { avgMinutes: Math.round(avg), sampleSize: waits.length };
+}
+
 export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]> {
   // Never offer the user their OWN open door — you can't drop into your own
   // session (claim_open_session rejects self-claims), so showing it just
