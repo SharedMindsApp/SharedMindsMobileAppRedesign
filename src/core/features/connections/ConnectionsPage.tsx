@@ -27,6 +27,7 @@ import { useMessagingDock } from '../messages/MessagingDockContext';
 import { SurfaceCard, PageGreeting } from '../../ui/CorePage';
 import { MembersDirectoryPage } from '../people/MembersDirectoryPage';
 import { WantedSkillsCard } from '../people/WantedSkillsCard';
+import { ConnectionSuggestions } from './ConnectionSuggestions';
 
 const AVATAR_COLORS = [
   'bg-violet-100 text-violet-700',
@@ -94,6 +95,7 @@ export function ConnectionsPage() {
 
       {tab === 'discover' ? (
         <div className="space-y-5">
+          <ConnectionSuggestions />
           <WantedSkillsCard />
           <MembersDirectoryPage embedded />
         </div>

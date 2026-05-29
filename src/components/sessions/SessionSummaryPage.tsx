@@ -7,6 +7,8 @@ import { DeclareSessionModal } from '../../core/features/sessions/DeclareSession
 import { supabase } from '../../lib/supabase';
 import type { FocusSessionSummary, SessionOutcome } from '../../lib/sessions/focusTypes';
 import { ConnectButton } from '../../core/features/connections/ConnectButton';
+import { ConnectionSuggestionCard } from '../../core/features/connections/ConnectionSuggestions';
+import { fetchConnectionSuggestions, type ConnectionSuggestion } from '../../core/services/ConnectionService';
 import { useAuth } from '../../core/auth/AuthProvider';
 
 const OUTCOME_OPTIONS: { value: SessionOutcome; label: string; icon: any; description: string }[] = [
@@ -477,6 +479,12 @@ function CommunitySummary({
           </div>
         )}
 
+        {/* Connect nudge — if you've now worked with someone here 3+ times,
+            this is the highest-intent moment to suggest connecting. */}
+        {peerOutcomes.length > 0 && (
+          <CoSessionConnectNudge peerIds={peerOutcomes.map((p) => p.user_id)} />
+        )}
+
         {/* Next actions — for 1-on-1 sessions we lead with "Match again"
             since the user just got value from spontaneous pairing and
             is most likely to want another. Solo / group fall back to
@@ -508,6 +516,32 @@ function CommunitySummary({
         </div>
 
       </div>
+    </div>
+  );
+}
+
+// ── Co-session connect nudge ────────────────────────────────────────
+// After a session, if you've now worked with one of these peers 3+ times and
+// aren't connected, surface the suggestion right here (highest intent). Pulls
+// from the same RPC as the suggestions list and filters to this session's
+// peers. Renders nothing otherwise.
+function CoSessionConnectNudge({ peerIds }: { peerIds: string[] }) {
+  const [match, setMatch] = useState<ConnectionSuggestion | null>(null);
+
+  useEffect(() => {
+    if (peerIds.length === 0) return;
+    let alive = true;
+    fetchConnectionSuggestions()
+      .then((s) => { if (alive) setMatch(s.find((x) => peerIds.includes(x.other_user_id)) ?? null); })
+      .catch(() => { /* ignore */ });
+    return () => { alive = false; };
+  }, [peerIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!match) return null;
+  return (
+    <div className="w-full space-y-2">
+      <p className="text-xs font-bold stitch-text-primary px-0.5">You two keep showing up together 👋</p>
+      <ConnectionSuggestionCard suggestion={match} onDismiss={() => setMatch(null)} />
     </div>
   );
 }

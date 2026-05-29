@@ -19,6 +19,50 @@ export interface ConnectionWithProfile extends Connection {
   other_user_id: string;
 }
 
+/** A "you two keep working together — connect?" suggestion, driven by repeated
+ *  co-sessions. shared_skills / shared_work_types are the overlap with the
+ *  viewer (for ranking + copy), already computed server-side. */
+export interface ConnectionSuggestion {
+  other_user_id: string;
+  co_sessions: number;
+  last_session_at: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  work_type: string | null;
+  shared_skills: string[];
+  shared_work_types: string[];
+  country_code: string | null;
+}
+
+/** Partners the user has co-worked with 3+ times and isn't yet connected to.
+ *  Ordered by frequency, then shared skills/work-types. Returns [] on error or
+ *  if the RPC isn't migrated yet. */
+export async function fetchConnectionSuggestions(): Promise<ConnectionSuggestion[]> {
+  const { data, error } = await supabase.rpc('get_connection_suggestions');
+  if (error) { console.warn('[fetchConnectionSuggestions] failed:', error); return []; }
+  return (data ?? []).map((r: any) => ({
+    other_user_id: r.other_user_id,
+    co_sessions: Number(r.co_sessions ?? 0),
+    last_session_at: r.last_session_at ?? null,
+    display_name: r.display_name ?? null,
+    avatar_url: r.avatar_url ?? null,
+    work_type: r.work_type ?? null,
+    shared_skills: (r.shared_skills ?? []) as string[],
+    shared_work_types: (r.shared_work_types ?? []) as string[],
+    country_code: r.country_code ?? null,
+  }));
+}
+
+/** Hide a connect suggestion ("not now"). Persisted so it doesn't re-surface. */
+export async function dismissConnectionSuggestion(otherUserId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { error } = await supabase
+    .from('connection_suggestion_dismissals')
+    .upsert({ user_id: user.id, other_user_id: otherUserId }, { onConflict: 'user_id,other_user_id' });
+  if (error) console.warn('[dismissConnectionSuggestion] failed:', error);
+}
+
 export async function sendConnectionRequest(
   addresseeId: string,
   note?: string,
