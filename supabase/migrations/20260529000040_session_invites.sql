@@ -79,7 +79,10 @@ CREATE TABLE IF NOT EXISTS public.session_invites (
   -- Exactly one of these is set: a known user (connection) OR an email.
   invited_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   invited_email   text,
-  invite_token    text NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(18), 'hex'),
+  -- Built-in gen_random_uuid() (no pgcrypto needed); two concatenated for
+  -- a long, unguessable token.
+  invite_token    text NOT NULL UNIQUE
+                    DEFAULT (replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')),
   status          text NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled')),
   accepted_by     uuid REFERENCES auth.users(id) ON DELETE SET NULL,
