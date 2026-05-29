@@ -1099,10 +1099,28 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
     throw error;
   }
 
+  // Bidirectional "not right now" hides — if either of us passed on the other
+  // recently (opened our own door instead of pairing), keep us out of each
+  // other's lists until the skip expires. RLS only returns rows involving me,
+  // so the "other" party of each row is who to hide.
+  const hidden = new Set<string>();
+  if (me) {
+    const { data: skips } = await supabase
+      .from('match_skips')
+      .select('skipper_user_id, skipped_user_id')
+      .gt('expires_at', new Date().toISOString());
+    for (const s of (skips ?? []) as any[]) {
+      const other = s.skipper_user_id === me.id ? s.skipped_user_id : s.skipper_user_id;
+      if (other) hidden.add(other);
+    }
+  }
+
   return (data ?? [])
     // Hide doors with too little time left to be worth joining — by the time
     // someone drops in there'd only be a few minutes of shared focus.
     .filter((row: any) => minutesLeft(row) >= MIN_MATCH_MINUTES_LEFT)
+    // Hide anyone we've mutually passed on for now.
+    .filter((row: any) => !hidden.has(row.user_id))
     .map((row: any) => ({
       ...row,
       display_name: row.profiles?.display_name ?? 'Someone',
@@ -1110,6 +1128,26 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
       country_code: row.profiles?.country_code ?? null,
       work_type: row.profiles?.work_type ?? null,
     })) as CommunitySession[];
+}
+
+/** Honour a "start my own door instead" decision: record that the current
+ *  user passed on the given hosts right now. Bidirectional + ephemeral — each
+ *  pair is hidden from the other's open-door list until the skip expires
+ *  (~30 min, see migration 20260530000050). Best-effort: never blocks the
+ *  user from opening their door, so failures are swallowed with a warning. */
+export async function skipMatchDoors(skippedUserIds: string[]): Promise<void> {
+  const me = await getAuthedUser();
+  if (!me) return;
+  const expires = new Date(Date.now() + 30 * 60_000).toISOString();
+  const rows = Array.from(new Set(skippedUserIds))
+    .filter((id) => id && id !== me.id)
+    .map((id) => ({ skipper_user_id: me.id, skipped_user_id: id, expires_at: expires }));
+  if (rows.length === 0) return;
+  // Upsert so re-skipping the same person refreshes the cooldown.
+  const { error } = await supabase
+    .from('match_skips')
+    .upsert(rows, { onConflict: 'skipper_user_id,skipped_user_id' });
+  if (error) console.warn('[skipMatchDoors] failed:', error);
 }
 
 /** Race-safe drop-in: claim a partner slot in an open session. Returns

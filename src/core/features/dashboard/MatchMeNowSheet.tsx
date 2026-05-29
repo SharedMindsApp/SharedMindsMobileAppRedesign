@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X, Loader2, DoorOpen, Users, MessageCircle, Volume2, Zap, Check } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { fetchOpenSessions, claimOpenSession } from '../../services/SessionService';
+import { fetchOpenSessions, claimOpenSession, skipMatchDoors } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { SESSION_INTENTS, intentMeta, type SessionIntent } from '../../../lib/sessionIntent';
 
@@ -45,6 +45,9 @@ export function MatchMeNowSheet({
   // Purpose is the spine — nothing is shown until you pick what you're here
   // for. Pairs you same-with-same and seeds the door you open.
   const [purpose, setPurpose] = useState<SessionIntent | null>(null);
+  // When someone's already waiting and you tap "open my own door", we nudge
+  // once: join them, or start your own (which honours the pass — see below).
+  const [confirmOwnDoor, setConfirmOwnDoor] = useState(false);
 
   const visible = purpose
     ? sessions.filter((s) => (s.session_intent ?? 'work') === purpose)
@@ -102,6 +105,14 @@ export function MatchMeNowSheet({
     }
   }
 
+  // Honour "start my own anyway": pass on everyone currently waiting for this
+  // purpose (bidirectional cooldown), then open the user's own door.
+  async function handleStartOwnAnyway() {
+    if (!purpose) return;
+    await skipMatchDoors(visible.map((v) => v.user_id));
+    onOpenOwnDoor(purpose);
+  }
+
   // How many doors match each purpose — shown as a live count on each card so
   // people gravitate to where the activity is.
   function countFor(intent: SessionIntent) {
@@ -150,7 +161,7 @@ export function MatchMeNowSheet({
                   <button
                     key={m.intent}
                     type="button"
-                    onClick={() => setPurpose(active ? null : m.intent)}
+                    onClick={() => { setConfirmOwnDoor(false); setPurpose(active ? null : m.intent); }}
                     className={`relative text-left rounded-2xl p-3 ring-1 transition-all active:scale-[0.98] ${
                       active
                         ? 'ring-violet-400 bg-gradient-to-br from-violet-50 to-blue-50 shadow-sm'
@@ -256,31 +267,71 @@ export function MatchMeNowSheet({
               </section>
 
               {/* Open your own door — primary when no one's open for this
-                  purpose, demoted under an "or" when matches exist. */}
+                  purpose, demoted under an "or" when matches exist. Tapping it
+                  while someone's waiting raises a one-time nudge to join first;
+                  starting your own anyway honours the pass (mutual cooldown). */}
               <section className="pt-1">
-                {!loading && visible.length > 0 && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="flex-1 h-px bg-surface-container" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">or</span>
-                    <span className="flex-1 h-px bg-surface-container" />
+                {confirmOwnDoor && visible.length > 0 ? (
+                  <div className="rounded-2xl ring-1 ring-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-bold stitch-text-primary leading-snug">
+                      {visible.length === 1
+                        ? `${visible[0].display_name ?? 'Someone'} is already waiting for ${selectedMeta!.label.toLowerCase()}.`
+                        : `${visible.length} people are already waiting for ${selectedMeta!.label.toLowerCase()}.`}
+                    </p>
+                    <p className="text-[11px] stitch-text-secondary leading-snug mt-0.5">
+                      Joining them is quicker than spinning up a second door. Start your own and you won't be matched with {visible.length === 1 ? 'them' : 'them'} for a while.
+                    </p>
+                    <div className="flex gap-2 mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmOwnDoor(false);
+                          if (visible.length === 1) void handleDropIn(visible[0].id);
+                        }}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[13px] font-bold active:scale-[0.98] transition-transform"
+                      >
+                        <DoorOpen size={13} />
+                        {visible.length === 1 ? `Join ${visible[0].display_name ?? 'them'}` : 'See who\'s waiting'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleStartOwnAnyway()}
+                        className="flex-1 inline-flex items-center justify-center px-3 py-2 rounded-lg ring-1 ring-amber-300 stitch-text-primary text-[13px] font-bold hover:bg-amber-100 active:scale-[0.98] transition-all"
+                      >
+                        Start my own
+                      </button>
+                    </div>
                   </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onOpenOwnDoor(purpose)}
-                  className={
-                    !loading && visible.length > 0
-                      ? 'w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl ring-1 ring-surface-container stitch-text-primary text-sm font-bold hover:bg-surface-container-low active:scale-[0.98] transition-all'
-                      : 'w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 text-white text-sm font-bold shadow-md shadow-violet-500/25 active:scale-[0.98] transition-transform'
-                  }
-                >
-                  <DoorOpen size={15} />
-                  Open a {selectedMeta!.label.toLowerCase()} door
-                </button>
-                {(loading || visible.length === 0) && (
-                  <p className="text-[10px] stitch-text-secondary/80 text-center mt-2 leading-snug">
-                    Start a 1-on-1 with the door open — the next person looking to match drops straight in. Only one of you needs to start it.
-                  </p>
+                ) : (
+                  <>
+                    {!loading && visible.length > 0 && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="flex-1 h-px bg-surface-container" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary">or</span>
+                        <span className="flex-1 h-px bg-surface-container" />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!loading && visible.length > 0) setConfirmOwnDoor(true);
+                        else onOpenOwnDoor(purpose);
+                      }}
+                      className={
+                        !loading && visible.length > 0
+                          ? 'w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl ring-1 ring-surface-container stitch-text-primary text-sm font-bold hover:bg-surface-container-low active:scale-[0.98] transition-all'
+                          : 'w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 text-white text-sm font-bold shadow-md shadow-violet-500/25 active:scale-[0.98] transition-transform'
+                      }
+                    >
+                      <DoorOpen size={15} />
+                      Open a {selectedMeta!.label.toLowerCase()} door
+                    </button>
+                    {(loading || visible.length === 0) && (
+                      <p className="text-[10px] stitch-text-secondary/80 text-center mt-2 leading-snug">
+                        Start a 1-on-1 with the door open — the next person looking to match drops straight in. Only one of you needs to start it.
+                      </p>
+                    )}
+                  </>
                 )}
               </section>
             </>
