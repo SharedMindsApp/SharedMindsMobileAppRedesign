@@ -706,6 +706,57 @@ export async function getHeatmapAnalytics(
   };
 }
 
+// ── Monthly calendar heatmap ─────────────────────────────────────────────────
+// Daily granularity laid out as a month: one cell per calendar day, shaded by
+// that day's average mood / focus. Complements the day-of-week × time grid.
+
+export interface MonthlyCell {
+  /** YYYY-MM-DD (UTC). */
+  date: string;
+  avgMood: number | null;   // 1–6
+  avgFocus: number | null;  // 1–5
+  count: number;            // sessions that day
+}
+
+/** Per-day mood/focus averages for the calendar month containing `monthStart`
+ *  (use the 1st of the month). Honours the country filter. */
+export async function getMonthlyHeatmap(
+  monthStart: Date,
+  countries: string[] = [],
+): Promise<MonthlyCell[]> {
+  const start = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+
+  const { data } = await supabase
+    .from('focus_sessions')
+    .select('start_mood, start_focus, start_time, profiles!user_id(country_code)')
+    .not('start_time', 'is', null)
+    .gte('start_time', start.toISOString())
+    .lt('start_time', end.toISOString());
+
+  const map = new Map<string, { moodSum: number; moodN: number; focusSum: number; focusN: number; count: number }>();
+  for (const s of data ?? []) {
+    const country = ((s as any).profiles?.country_code as string | null) || 'unknown';
+    if (countries.length > 0 && !countries.includes(country)) continue;
+    const d = new Date(s.start_time as string);
+    const key = d.toISOString().slice(0, 10); // UTC date
+    const cell = map.get(key) ?? { moodSum: 0, moodN: 0, focusSum: 0, focusN: 0, count: 0 };
+    cell.count += 1;
+    const ms = s.start_mood ? MOOD_SCORES[s.start_mood as string] : undefined;
+    if (ms) { cell.moodSum += ms; cell.moodN += 1; }
+    const fs = (s as any).start_focus ? FOCUS_SCORES[(s as any).start_focus as string] : undefined;
+    if (fs) { cell.focusSum += fs; cell.focusN += 1; }
+    map.set(key, cell);
+  }
+
+  return Array.from(map.entries()).map(([date, c]) => ({
+    date,
+    avgMood: c.moodN > 0 ? c.moodSum / c.moodN : null,
+    avgFocus: c.focusN > 0 ? c.focusSum / c.focusN : null,
+    count: c.count,
+  }));
+}
+
 // ── Match-wait heatmap ───────────────────────────────────────────────────────
 // How long match-me-now doors wait before a partner drops in, bucketed by
 // day-of-week × 2-hour block (12 buckets/day → 84 cells). Powers the admin

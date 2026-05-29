@@ -20,12 +20,14 @@ import { AdminLayout } from './AdminLayout';
 import {
   getHeatmapAnalytics,
   getMatchWaitAnalytics,
+  getMonthlyHeatmap,
   MOOD_SCORES,
   type HeatmapAnalytics,
   type MoodTimeCell,
   type MoodShift,
   type MatchWaitAnalytics,
   type MatchWaitCell,
+  type MonthlyCell,
 } from '../../lib/admin';
 
 type Range = 'week' | 'month' | 'quarter' | 'all';
@@ -321,6 +323,49 @@ function MatchWaitHeatmap({ cells }: { cells: MatchWaitCell[] }) {
   );
 }
 
+/** Monthly calendar — one cell per day, shaded by that day's avg mood/focus. */
+function MonthlyCalendar({ cells, monthAnchor, metric }: { cells: MonthlyCell[]; monthAnchor: Date; metric: 'mood' | 'focus' }) {
+  const byDate = new Map(cells.map((c) => [c.date, c]));
+  const year = monthAnchor.getUTCFullYear();
+  const month = monthAnchor.getUTCMonth();
+  const firstDow = new Date(Date.UTC(year, month, 1)).getUTCDay(); // 0=Sun
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  // Leading blanks + day cells.
+  const cellsOut: ({ day: number; key: string } | null)[] = [];
+  for (let i = 0; i < firstDow; i++) cellsOut.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cellsOut.push({ day: d, key: `${year}-${pad(month + 1)}-${pad(d)}` });
+
+  return (
+    <div>
+      <div className="grid grid-cols-7 gap-1.5 mb-1">
+        {DAY_LABELS.map((d) => (
+          <div key={d} className="text-[10px] text-gray-400 text-center font-semibold">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {cellsOut.map((c, i) => {
+          if (!c) return <div key={`b${i}`} />;
+          const cell = byDate.get(c.key);
+          const score = cell ? (metric === 'mood' ? cell.avgMood : cell.avgFocus) : null;
+          const max = metric === 'mood' ? 6 : 5;
+          return (
+            <div
+              key={c.key}
+              title={cell ? `${c.key} · ${score != null ? `${score.toFixed(1)}/${max}` : 'no rating'} · ${cell.count} session${cell.count === 1 ? '' : 's'}` : `${c.key} · no sessions`}
+              className={`aspect-square rounded-lg flex flex-col items-center justify-center ${score != null ? scoreToColor(score) + ' text-white' : cell ? 'bg-gray-200 text-gray-500' : 'bg-gray-50 text-gray-300'}`}
+            >
+              <span className="text-[11px] font-bold leading-none">{c.day}</span>
+              {score != null && <span className="text-[9px] font-semibold tabular-nums mt-0.5">{score.toFixed(1)}</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function AdminHeatmaps() {
   const [range, setRange] = useState<Range>('month');
   const [countries, setCountries] = useState<string[]>([]); // [] = global
@@ -342,6 +387,20 @@ export function AdminHeatmaps() {
 
   const toggleCountry = (code: string) =>
     setCountries((cur) => cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]);
+
+  // ── Monthly calendar heatmap ───────────────────────────────────
+  const [monthAnchor, setMonthAnchor] = useState<Date>(() => {
+    const n = new Date();
+    return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1));
+  });
+  const [monthMetric, setMonthMetric] = useState<'mood' | 'focus'>('mood');
+  const [monthly, setMonthly] = useState<MonthlyCell[]>([]);
+  useEffect(() => {
+    getMonthlyHeatmap(monthAnchor, countries).then(setMonthly).catch(() => setMonthly([]));
+  }, [monthAnchor, countries]);
+  const shiftMonth = (delta: number) =>
+    setMonthAnchor((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + delta, 1)));
+  const monthLabel = monthAnchor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const totalSessions  = data?.dailyActivity.reduce((s, d) => s + d.sessions, 0) ?? 0;
@@ -506,6 +565,44 @@ export function AdminHeatmaps() {
           {data && data.focusCells.length > 0
             ? <MoodHeatmap cells={data.focusCells} />
             : <p className="text-gray-400 text-sm">No focus data {countries.length > 0 ? 'for the selected countries ' : ''}in this range yet.</p>
+          }
+        </div>
+
+        {/* ── Panel: Monthly calendar (daily granularity) ────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Monthly Calendar</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Each day shaded by its average {monthMetric} (UTC). Respects the country filter above.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              {/* Metric toggle */}
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                {(['mood', 'focus'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMonthMetric(m)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
+                      monthMetric === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              {/* Month nav */}
+              <div className="flex items-center gap-1">
+                <button onClick={() => shiftMonth(-1)} className="w-8 h-8 rounded-lg grid place-items-center text-gray-500 hover:bg-gray-100" aria-label="Previous month">‹</button>
+                <span className="text-sm font-semibold text-gray-700 w-28 text-center tabular-nums">{monthLabel}</span>
+                <button onClick={() => shiftMonth(1)} className="w-8 h-8 rounded-lg grid place-items-center text-gray-500 hover:bg-gray-100" aria-label="Next month">›</button>
+              </div>
+            </div>
+          </div>
+          {monthly.length > 0
+            ? <MonthlyCalendar cells={monthly} monthAnchor={monthAnchor} metric={monthMetric} />
+            : <p className="text-gray-400 text-sm">No {monthMetric} data {countries.length > 0 ? 'for the selected countries ' : ''}in {monthLabel}.</p>
           }
         </div>
 
