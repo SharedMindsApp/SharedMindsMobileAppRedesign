@@ -139,6 +139,20 @@ export function MatchMeNowSheet({
             <p className="text-[11px] font-semibold text-rose-700 bg-rose-50 rounded-lg px-3 py-2">{error}</p>
           )}
 
+          {/* Live "waiting to match" indicator — hidden entirely when nobody's
+              open, so an empty room never reads as dead. */}
+          {!loading && sessions.length > 0 && (
+            <div className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 ring-1 ring-emerald-200/60 px-3 py-2">
+              <span className="relative flex w-2 h-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />
+                <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-[11px] font-bold text-emerald-700">
+                {sessions.length} {sessions.length === 1 ? 'person' : 'people'} waiting to match right now
+              </span>
+            </div>
+          )}
+
           {/* Step 1 — purpose. The hero decision. */}
           <section>
             <p className="text-[10px] font-extrabold tracking-widest uppercase stitch-text-secondary mb-2">What do you want to do?</p>
