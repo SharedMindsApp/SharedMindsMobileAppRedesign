@@ -394,8 +394,8 @@ function CommunitySummary({
   const isFinished = outcome === 'finished';
 
   return (
-    {/* Fit to the space below the fixed header rather than forcing 100vh
-        (which overflowed by the header height and caused a pointless scroll). */}
+    // Fit to the space below the fixed header rather than forcing 100vh
+    // (which overflowed by the header height and caused a pointless scroll).
     <div className="min-h-[calc(100dvh-9rem)] flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 space-y-5 max-w-md mx-auto w-full">
 
