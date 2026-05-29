@@ -14,6 +14,7 @@ import { TaskLoadBadge } from '../../ui/TaskLoadBadge';
 import { InputWell } from '../../ui/CorePage';
 import { taskUrgency } from '../../../lib/taskUrgency';
 import { SESSION_KINDS, type SessionKind } from '../../../lib/sessionMood';
+import { SESSION_INTENTS, intentMeta, WORK_MIN_MINUTES, type SessionIntent } from '../../../lib/sessionIntent';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConductGateModal } from '../moderation/ConductGateModal';
 import { useSessionLimits } from '../../../hooks/useSessionLimits';
@@ -168,6 +169,11 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     if (!startOpenToMatch) return;
     fetchMatchWaitStats().then(setMatchWait).catch(() => { /* non-fatal */ });
   }, [startOpenToMatch]);
+  // If they pick 'work' then shorten below the work threshold, fall back to
+  // 'plan' so the purpose stays valid.
+  useEffect(() => {
+    if (intent === 'work' && duration < WORK_MIN_MINUTES) setIntent('plan');
+  }, [duration, intent]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
   );
@@ -180,6 +186,9 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [submitting, setSubmitting] = useState(false);
   /** What this session is FOR — drives the mood axis. Defaults to 'do'. */
   const [sessionKind, setSessionKind] = useState<SessionKind>('do');
+  /** Purpose for match-me-now doors — plan/connect/meditate any length, work
+   *  45+ only. Drives framing + match pairing. Default 'plan'. */
+  const [intent, setIntent] = useState<SessionIntent>('plan');
   /** Optional "before" mood, captured for immediate sessions only (a
    *  scheduled session's start mood is captured when it actually begins). */
   const [startMood, setStartMood] = useState<string | null>(null);
@@ -417,7 +426,10 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         // Open-to-match is solo-only (the service layer enforces this too).
         openToMatch: sessionMode === 'solo' && openToMatch,
         vibe: openToMatch ? vibe : undefined,
-        sessionKind,
+        // Match-me-now: the purpose drives framing + pairing; derive the mood
+        // axis from it. Other flows keep their session_kind selection.
+        sessionIntent: startOpenToMatch ? intent : undefined,
+        sessionKind: startOpenToMatch ? intentMeta(intent).kind : sessionKind,
         startMood,
       });
       // 1-on-1: reserve the seat for / notify the invited partner.
@@ -569,6 +581,42 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                 <Clock size={11} /> {matchWait.basis === 'live' ? 'Around now,' : 'Average'} match wait ~{matchWait.avgMinutes} min
               </p>
             )}
+          </div>
+        )}
+
+        {/* Match-me-now purpose picker — purpose pairs same-with-same, and
+            'Deep work' only unlocks at 45+ min (short = plan/connect/meditate). */}
+        {startOpenToMatch && (
+          <div className="shrink-0 px-5 pb-1">
+            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">
+              What's this for?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {SESSION_INTENTS.map((m) => {
+                const locked = duration < m.minMinutes;
+                const active = intent === m.intent;
+                return (
+                  <button
+                    key={m.intent}
+                    type="button"
+                    disabled={locked}
+                    onClick={() => setIntent(m.intent)}
+                    title={locked ? `Available at ${m.minMinutes}+ min` : m.hint}
+                    className={`flex flex-col items-start gap-0.5 p-2.5 rounded-xl text-left transition-all ${
+                      active ? 'stitch-btn--primary text-white shadow-md shadow-primary/20'
+                      : locked ? 'bg-surface-container-low/50 stitch-text-secondary opacity-50 cursor-not-allowed'
+                      : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.98]'
+                    }`}
+                  >
+                    <span className="text-base leading-none">{m.emoji}</span>
+                    <span className="text-xs font-extrabold leading-tight mt-0.5">{m.label}</span>
+                    <span className={`text-[10px] leading-tight ${active ? 'text-white/70' : 'stitch-text-secondary'}`}>
+                      {locked ? `${m.minMinutes}+ min` : m.hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

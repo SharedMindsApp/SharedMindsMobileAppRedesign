@@ -29,6 +29,7 @@ import { DeclareTaskSheet } from './DeclareTaskSheet';
 import { SessionPlanSheet } from './SessionPlanSheet';
 import { StartMoodSheet } from './StartMoodSheet';
 import type { SessionKind } from '../../../lib/sessionMood';
+import { intentMeta } from '../../../lib/sessionIntent';
 import { useCoreData } from '../../data/CoreDataContext';
 import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 
@@ -611,6 +612,7 @@ export function ActiveSessionPage() {
     isPrimaryHost
     && session?.open_to_match === true
     && !session?.partner_user_id
+    && session?.session_intent === 'work'   // only deep-work doors declare a task
     && currentGoal.trim().length === 0;
 
   const handleDeclareTask = useCallback(async (goalText: string, taskId?: string) => {
@@ -649,6 +651,7 @@ export function ActiveSessionPage() {
     && !session?.start_mood
     && !session?.start_focus
     && !needsTaskDeclaration
+    && intentMeta(session?.session_intent).checkIn  // skip for connect/meditate
     && !!session?.start_time
     && (Date.now() - new Date(session.start_time).getTime()) < 5 * 60_000;
 

@@ -27,6 +27,8 @@ export interface CreateScheduledSessionInput {
   goalText?: string;
   /** What the session is FOR — drives the mood axis. Defaults 'do'. */
   sessionKind?: 'do' | 'plan' | 'reflect';
+  /** Session purpose — 'work' | 'plan' | 'connect' | 'meditate'. */
+  sessionIntent?: 'work' | 'plan' | 'connect' | 'meditate';
   /** Three-level visibility — see migration 20260527000009. */
   visibility?: 'private' | 'presence' | 'public';
   /** Marker for Quick Timer scheduled blocks — see
@@ -101,6 +103,8 @@ export interface StartCommunitySessionInput {
   vibe?: 'silent' | 'brief_hi' | 'chatty';
   /** What the session is FOR — drives the mood axis. Defaults 'do'. */
   sessionKind?: 'do' | 'plan' | 'reflect';
+  /** Session purpose — 'work' | 'plan' | 'connect' | 'meditate'. */
+  sessionIntent?: 'work' | 'plan' | 'connect' | 'meditate';
   /** Mood code captured at the moment of starting (interpreted via kind). */
   startMood?: string | null;
 }
@@ -153,6 +157,7 @@ export async function startCommunitySession(
       door_opened_at: (input.sessionMode === 'solo' && input.openToMatch) ? now.toISOString() : null,
       vibe: input.vibe ?? null,
       session_kind: input.sessionKind ?? 'do',
+      session_intent: input.sessionIntent ?? null,
       start_mood: input.startMood ?? null,
       // 90+ min sessions auto-include a mid-session break (host can cancel
       // it from the session plan). Shorter sessions start with no agenda.
@@ -672,6 +677,7 @@ export async function createScheduledSession(
       segments: input.segments ?? null,
       visibility: input.visibility ?? defaultVisibilityFor(input.sessionMode, !!input.isQuickTimer),
       session_kind: input.sessionKind ?? 'do',
+      session_intent: input.sessionIntent ?? null,
       planned_wizards: defaultPlannedWizards(input.durationMinutes, genWizardId),
       drift_count: 0,
       distraction_count: 0,

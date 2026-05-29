@@ -123,6 +123,10 @@ export interface FocusSession {
   /** What the session is FOR — drives the context-aware mood axis.
    *  'do' → energy/focus; 'plan'/'reflect' → clarity/confidence. */
   session_kind?: 'do' | 'plan' | 'reflect' | null;
+  /** Purpose of the session — drives framing, whether a task is declared, and
+   *  match pairing (same-purpose doors pair together). 'work' is 45+ min only.
+   *  See migration 20260530000030 + src/lib/sessionIntent.ts. */
+  session_intent?: 'work' | 'plan' | 'connect' | 'meditate' | null;
   /** Mood code captured at session start (interpreted via session_kind). */
   start_mood?: string | null;
   /** Focus/concentration code captured at session start (separate from mood). */
