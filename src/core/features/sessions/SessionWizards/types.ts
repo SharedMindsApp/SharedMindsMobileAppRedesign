@@ -49,6 +49,10 @@ export interface WizardEntry {
    *  (e.g. group breathing). When false, the wizard is personal — only the
    *  launching user sees it. Defaults to true for backwards-compat. */
   broadcast?: boolean;
+  /** Which session modes this wizard is offered in. Omitted = all modes.
+   *  e.g. group intentions only make sense in 'group'; box-breath is hidden
+   *  from matched 1-on-1s to keep the list short. */
+  visibleIn?: Array<'solo' | 'one_on_one' | 'group'>;
 }
 
 export interface WizardComponentProps {

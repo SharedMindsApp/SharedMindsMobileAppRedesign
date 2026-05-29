@@ -26,6 +26,7 @@ import { useSessionWizards } from './SessionWizards/useSessionWizards';
 import { WizardLauncher } from './SessionWizards/WizardLauncher';
 import { WizardOverlay } from './SessionWizards/WizardOverlay';
 import { DeclareTaskSheet } from './DeclareTaskSheet';
+import { SessionPlanSheet } from './SessionPlanSheet';
 import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 
 // Sessions become joinable 5 minutes before their scheduled start.
@@ -622,6 +623,36 @@ export function ActiveSessionPage() {
     }
   }, [session, setSessionGoal, setActiveSession]);
 
+  // ── Session plan step (music + breaks) ─────────────────────────
+  // Once the task is known, host gets a one-time, skippable setup sheet to
+  // pick music + a duration-adaptive break/breath agenda. Remembered per
+  // session so it doesn't re-pop on refresh.
+  const [planSheetOpen, setPlanSheetOpen] = useState(false);
+  const planAutoShownRef = useRef(false);
+
+  useEffect(() => {
+    if (!session || !isPrimaryHost || session.status !== 'active') return;
+    if (needsTaskDeclaration) return;                  // task prompt comes first
+    if (currentGoal.trim().length === 0) return;       // no task yet
+    if (taskSheetOpen || planAutoShownRef.current) return;
+    try { if (localStorage.getItem(`sm_plan_done_${session.id}`)) { planAutoShownRef.current = true; return; } } catch { /* ignore */ }
+    planAutoShownRef.current = true;
+    setPlanSheetOpen(true);
+  }, [session?.id, session?.status, isPrimaryHost, needsTaskDeclaration, currentGoal, taskSheetOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closePlan = useCallback(() => {
+    setPlanSheetOpen(false);
+    try { if (session) localStorage.setItem(`sm_plan_done_${session.id}`, '1'); } catch { /* ignore */ }
+  }, [session]);
+
+  const handleApplyPlan = useCallback((next: PlannedWizard[], music: string | null) => {
+    // Preserve already-fired/cancelled history; replace the 'planned' set.
+    const keep = ((session?.planned_wizards as PlannedWizard[] | undefined) ?? []).filter((p) => p.status !== 'planned');
+    void persistPlanned([...keep, ...next]);
+    if (music) window.dispatchEvent(new CustomEvent('sm:music-set-category', { detail: music }));
+    closePlan();
+  }, [session, persistPlanned, closePlan]);
+
   // Matched = a live 1-on-1 with a partner present. Leaving a matched session
   // is "leave early" (the partner keeps going / can take over), distinct from
   // a solo "End" which finishes your own session.
@@ -826,6 +857,7 @@ export function ActiveSessionPage() {
               planned={plannedWizards}
               onSchedule={isPrimaryHost ? handleScheduleWizard : undefined}
               onCancelPlanned={isPrimaryHost ? handleCancelPlanned : undefined}
+              mode={session.session_mode ?? 'group'}
             />
           )}
           {/* Header timer pill. Hidden in solo — the big circular timer in
@@ -1234,6 +1266,17 @@ export function ActiveSessionPage() {
         <DeclareTaskSheet
           onClose={() => setTaskSheetOpen(false)}
           onChoose={(title, taskId) => { void handleDeclareTask(title, taskId); }}
+        />
+      )}
+
+      {/* Session plan step — music + duration-adaptive breath/break. */}
+      {planSheetOpen && session && (
+        <SessionPlanSheet
+          durationMin={session.intended_duration_minutes ?? 50}
+          mode={session.session_mode ?? 'group'}
+          planned={plannedWizards}
+          onClose={closePlan}
+          onApply={handleApplyPlan}
         />
       )}
 

@@ -3,6 +3,14 @@ import type { FocusSession, CommunitySession, SessionOutcome } from '../../lib/s
 import { armSkillsPrompt } from '../../lib/skillsPrompt';
 import { getAuthedUser } from '../../lib/authUser';
 import type { PlannedWizard } from '../../lib/sessions/focusTypes';
+import { defaultPlannedWizards } from '../features/sessions/SessionWizards/sessionPlan';
+
+/** Stable id for planned-wizard bookkeeping. */
+function genWizardId(): string {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `pw_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export interface CreateScheduledSessionInput {
   title: string;
@@ -144,6 +152,9 @@ export async function startCommunitySession(
       vibe: input.vibe ?? null,
       session_kind: input.sessionKind ?? 'do',
       start_mood: input.startMood ?? null,
+      // 90+ min sessions auto-include a mid-session break (host can cancel
+      // it from the session plan). Shorter sessions start with no agenda.
+      planned_wizards: defaultPlannedWizards(input.durationMinutes, genWizardId),
       drift_count: 0,
       distraction_count: 0,
     })
@@ -654,6 +665,7 @@ export async function createScheduledSession(
       segments: input.segments ?? null,
       visibility: input.visibility ?? defaultVisibilityFor(input.sessionMode, !!input.isQuickTimer),
       session_kind: input.sessionKind ?? 'do',
+      planned_wizards: defaultPlannedWizards(input.durationMinutes, genWizardId),
       drift_count: 0,
       distraction_count: 0,
     })

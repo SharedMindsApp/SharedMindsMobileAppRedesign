@@ -47,6 +47,8 @@ export const WIZARD_REGISTRY: WizardEntry[] = [
     durationSeconds: 300,
     component: BreathingBox5Min,
     enabled: true,
+    // Hidden from matched 1-on-1s — keeps that list short (most won't use it).
+    visibleIn: ['solo', 'group'],
   },
   {
     id: 'break_3min',
@@ -60,7 +62,9 @@ export const WIZARD_REGISTRY: WizardEntry[] = [
   },
   {
     id: 'break_5min',
-    label: 'Group break (5 min)',
+    // Generic break (was "Group break") — a 5-min break suits any mode; the
+    // group framing was misleading for solo / 1-on-1.
+    label: 'Take five (5 min)',
     description: 'Stand up, stretch, water. Back in five.',
     glyph: '🫖',
     kind: 'passive',
@@ -76,6 +80,7 @@ export const WIZARD_REGISTRY: WizardEntry[] = [
     kind: 'active',
     component: ComingSoonWizard,
     enabled: false,
+    visibleIn: ['group'],
   },
   {
     id: 'weekly_intentions',
@@ -85,9 +90,15 @@ export const WIZARD_REGISTRY: WizardEntry[] = [
     kind: 'active',
     component: ComingSoonWizard,
     enabled: false,
+    visibleIn: ['group'],
   },
 ];
 
 export function findWizard(id: WizardId): WizardEntry | undefined {
   return WIZARD_REGISTRY.find((w) => w.id === id);
+}
+
+/** Wizards offered for a given session mode (respects `visibleIn`). */
+export function wizardsForMode(mode: 'solo' | 'one_on_one' | 'group'): WizardEntry[] {
+  return WIZARD_REGISTRY.filter((w) => !w.visibleIn || w.visibleIn.includes(mode));
 }

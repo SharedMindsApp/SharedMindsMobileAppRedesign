@@ -11,9 +11,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Clock, X, Zap } from 'lucide-react';
-import { WIZARD_REGISTRY } from './registry';
+import { WIZARD_REGISTRY, wizardsForMode } from './registry';
 import type { WizardId } from './types';
-import type { PlannedWizard } from '../../../lib/sessions/focusTypes';
+import type { PlannedWizard, SessionMode } from '../../../lib/sessions/focusTypes';
 
 const MOMENTS: { at: PlannedWizard['at']; label: string }[] = [
   { at: 'start',   label: 'At the start' },
@@ -31,12 +31,16 @@ interface Props {
   planned?: PlannedWizard[];
   onSchedule?: (id: WizardId, at: PlannedWizard['at']) => void;
   onCancelPlanned?: (plannedId: string) => void;
+  /** Session mode — filters which wizards are offered (e.g. no group break
+   *  or box-breath in a 1-on-1). Defaults to 'group' (shows everything). */
+  mode?: SessionMode;
 }
 
-export function WizardLauncher({ onLaunch, planned = [], onSchedule, onCancelPlanned }: Props) {
+export function WizardLauncher({ onLaunch, planned = [], onSchedule, onCancelPlanned, mode = 'group' }: Props) {
   const [open, setOpen] = useState(false);
   const [scheduleFor, setScheduleFor] = useState<WizardId | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const visibleWizards = wizardsForMode(mode);
 
   // Click-outside + Esc to close.
   useEffect(() => {
@@ -119,7 +123,7 @@ export function WizardLauncher({ onLaunch, planned = [], onSchedule, onCancelPla
               {onSchedule ? 'Run now or schedule' : 'Guided wizards · for everyone'}
             </p>
             <div className="space-y-0.5">
-              {WIZARD_REGISTRY.map((w) => (
+              {visibleWizards.map((w) => (
                 <div key={w.id} className={`rounded-lg ${w.enabled ? '' : 'opacity-40'}`}>
                   <div className="flex items-start gap-2.5 p-2.5">
                     <span className="text-lg leading-none flex-shrink-0 mt-0.5">{w.glyph}</span>
