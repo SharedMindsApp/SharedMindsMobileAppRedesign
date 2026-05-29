@@ -428,6 +428,8 @@ export interface SessionOutcomeRow {
   declared_goal: string | null;
   /** Mood code at session end (interpreted via the session's kind axis). */
   end_mood?: string | null;
+  /** Focus code at session end (separate from mood). */
+  end_focus?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -556,6 +558,8 @@ export async function submitSessionOutcome(input: {
   declaredGoal: string | null;
   /** Mood code captured at the end of the session (interpreted via kind). */
   endMood?: string | null;
+  /** Focus code captured at the end of the session (separate from mood). */
+  endFocus?: string | null;
 }): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -569,6 +573,7 @@ export async function submitSessionOutcome(input: {
         outcome: input.outcome,
         declared_goal: input.declaredGoal,
         end_mood: input.endMood ?? null,
+        end_focus: input.endFocus ?? null,
       },
       { onConflict: 'session_id,user_id' },
     );
@@ -1191,12 +1196,21 @@ export async function fetchSessionInvites(sessionId: string): Promise<SessionInv
   return (data ?? []) as SessionInvite[];
 }
 
-/** Record the session owner's start-of-session mood/energy. Captured in a
- *  focused step once the session opens (not buried in the declare modal). */
-export async function updateSessionStartMood(sessionId: string, mood: string): Promise<void> {
+/** Record the session owner's start-of-session check-in: mood AND focus (two
+ *  separate dimensions). Captured in a focused step once the session opens.
+ *  Either may be null (the step is skippable per-question). */
+export async function updateSessionStartCheckIn(
+  sessionId: string,
+  mood: string | null,
+  focus: string | null,
+): Promise<void> {
+  const updates: Record<string, any> = {};
+  if (mood !== null) updates.start_mood = mood;
+  if (focus !== null) updates.start_focus = focus;
+  if (Object.keys(updates).length === 0) return;
   const { error } = await supabase
     .from('focus_sessions')
-    .update({ start_mood: mood })
+    .update(updates)
     .eq('id', sessionId);
   if (error) throw error;
 }

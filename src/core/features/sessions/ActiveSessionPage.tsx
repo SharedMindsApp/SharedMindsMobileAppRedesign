@@ -11,7 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { DailyMeeting } from './DailyMeeting';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, updateSessionStartMood, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
 import { DebriefOverlay } from './DebriefOverlay';
@@ -638,6 +638,7 @@ export function ActiveSessionPage() {
     isPrimaryHost
     && session?.status === 'active'
     && !session?.start_mood
+    && !session?.start_focus
     && !needsTaskDeclaration
     && !!session?.start_time
     && (Date.now() - new Date(session.start_time).getTime()) < 5 * 60_000;
@@ -660,15 +661,15 @@ export function ActiveSessionPage() {
     try { if (session) localStorage.setItem(`sm_mood_done_${session.id}`, '1'); } catch { /* ignore */ }
   }, [session]);
 
-  const handlePickMood = useCallback(async (code: string) => {
+  const handleSubmitCheckIn = useCallback(async (mood: string | null, focus: string | null) => {
     resolveMood();
-    if (!session) return;
+    if (!session || (!mood && !focus)) return;
     try {
-      await updateSessionStartMood(session.id, code);
-      setSession((s) => (s ? { ...s, start_mood: code } : s));
-      setActiveSession({ ...(session as FocusSession), start_mood: code });
+      await updateSessionStartCheckIn(session.id, mood, focus);
+      setSession((s) => (s ? { ...s, start_mood: mood ?? s.start_mood, start_focus: focus ?? s.start_focus } : s));
+      setActiveSession({ ...(session as FocusSession), start_mood: mood ?? session.start_mood, start_focus: focus ?? session.start_focus });
     } catch (e) {
-      console.warn('[ActiveSessionPage] start mood save failed:', e);
+      console.warn('[ActiveSessionPage] start check-in save failed:', e);
     }
   }, [session, resolveMood, setActiveSession]);
 
@@ -1360,7 +1361,7 @@ export function ActiveSessionPage() {
       {moodStepOpen && session && (
         <StartMoodSheet
           kind={(session.session_kind ?? 'do') as SessionKind}
-          onPick={(code) => { void handlePickMood(code); }}
+          onSubmit={(mood, focus) => { void handleSubmitCheckIn(mood, focus); }}
           onSkip={resolveMood}
         />
       )}

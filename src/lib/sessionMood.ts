@@ -85,3 +85,30 @@ export function lookupMood(code: string | null | undefined): MoodOption | null {
   if (!code) return null;
   return ALL_MOODS.find((m) => m.code === code) ?? null;
 }
+
+// ── Focus — a SEPARATE dimension from mood ───────────────────────────────────
+// Mood = how you feel; focus = how able you are to concentrate. They diverge
+// (low mood but able to focus; happy but scattered), so we capture both. The
+// focus scale is kind-agnostic. Codes are namespaced ('foc_*') so they never
+// collide with mood codes stored in a different column.
+export const FOCUS_LEVELS: MoodOption[] = [
+  { code: 'foc_laser',    label: 'Laser',    emoji: '🎯' },
+  { code: 'foc_sharp',    label: 'Sharp',    emoji: '🔎' },
+  { code: 'foc_steady',   label: 'Steady',   emoji: '🟢' },
+  { code: 'foc_drifting', label: 'Drifting', emoji: '🌀' },
+  { code: 'foc_foggy',    label: 'Foggy',    emoji: '🌫️' },
+];
+
+/** 1–5 score per focus code, for the admin focus heatmap (higher = sharper). */
+export const FOCUS_SCORES: Record<string, number> = {
+  foc_laser: 5, foc_sharp: 4, foc_steady: 3, foc_drifting: 2, foc_foggy: 1,
+};
+
+export function focusPrompt(when: 'before' | 'after'): string {
+  return when === 'before' ? 'How sharp is your focus?' : 'How was your focus?';
+}
+
+export function lookupFocus(code: string | null | undefined): MoodOption | null {
+  if (!code) return null;
+  return FOCUS_LEVELS.find((f) => f.code === code) ?? null;
+}

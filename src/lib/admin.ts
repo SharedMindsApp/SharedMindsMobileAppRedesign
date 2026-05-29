@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { FOCUS_SCORES } from './sessionMood';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -502,11 +503,14 @@ export interface CountryOption {
 
 export interface HeatmapAnalytics {
   moodCells: MoodTimeCell[];
+  /** Focus heatmap — same day × 3-hour grid as mood, avg focus score (1–5). */
+  focusCells: MoodTimeCell[];
   moodShifts: MoodShift[];
   dailyActivity: DailyActivity[];
   /** 0-23: which hour had the most sessions */
   peakHour: number;
   avgMoodScore: number | null;
+  avgFocusScore: number | null;
   /** All countries present in range (unfiltered) — drives the filter UI. */
   availableCountries: CountryOption[];
 }
@@ -526,7 +530,7 @@ export async function getHeatmapAnalytics(
   // Join the host profile's country so we can filter / bucket by country.
   let sessionsQuery = supabase
     .from('focus_sessions')
-    .select('id, start_mood, start_time, session_kind, profiles!user_id(country_code)')
+    .select('id, start_mood, start_focus, start_time, session_kind, profiles!user_id(country_code)')
     .not('start_time', 'is', null);
   if (since) sessionsQuery = sessionsQuery.gte('start_time', since);
   const { data: rawSessionsRaw } = await sessionsQuery;
@@ -535,6 +539,7 @@ export async function getHeatmapAnalytics(
   const rawSessions = (rawSessionsRaw ?? []).map((s: any) => ({
     id: s.id,
     start_mood: s.start_mood,
+    start_focus: s.start_focus,
     start_time: s.start_time,
     session_kind: s.session_kind,
     country: (s.profiles?.country_code as string | null) || 'unknown',
@@ -611,6 +616,25 @@ export async function getHeatmapAnalytics(
     return { day, bucket, count, avgScore: sum / count };
   });
 
+  // ── Build focus heatmap cells (same grid, avg focus score 1–5) ───────────
+  const focusMap = new Map<string, { sum: number; count: number }>();
+  let globalFocusSum = 0, globalFocusCount = 0;
+  for (const s of sessions ?? []) {
+    if (!s.start_focus || !s.start_time) continue;
+    const score = FOCUS_SCORES[s.start_focus as string];
+    if (!score) continue;
+    const d = new Date(s.start_time);
+    const key = `${d.getUTCDay()}-${Math.floor(d.getUTCHours() / 3)}`;
+    const cell = focusMap.get(key) ?? { sum: 0, count: 0 };
+    cell.sum += score; cell.count += 1;
+    focusMap.set(key, cell);
+    globalFocusSum += score; globalFocusCount += 1;
+  }
+  const focusCells: MoodTimeCell[] = Array.from(focusMap.entries()).map(([key, { sum, count }]) => {
+    const [day, bucket] = key.split('-').map(Number);
+    return { day, bucket, count, avgScore: sum / count };
+  });
+
   // ── Mood before/after shifts ──────────────────────────────────────────────
   const shiftMap = new Map<string, { startSum: number; endSum: number; count: number }>();
   for (const s of sessions ?? []) {
@@ -676,6 +700,8 @@ export async function getHeatmapAnalytics(
     dailyActivity,
     peakHour,
     avgMoodScore: globalMoodCount > 0 ? globalMoodSum / globalMoodCount : null,
+    avgFocusScore: globalFocusCount > 0 ? globalFocusSum / globalFocusCount : null,
+    focusCells,
     availableCountries,
   };
 }

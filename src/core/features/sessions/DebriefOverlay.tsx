@@ -24,6 +24,7 @@ import { TaskService } from '../../services/TaskService';
 import { CaptureService, type SessionCapture } from '../../services/CaptureService';
 import { SpaceService } from '../../services/SpaceService';
 import { MoodPicker } from './MoodPicker';
+import { FOCUS_LEVELS, focusPrompt } from '../../../lib/sessionMood';
 import type { SessionKind } from '../../../lib/sessionMood';
 
 const DEBRIEF_DURATION_S = 60;
@@ -60,6 +61,7 @@ export function DebriefOverlay({
   const [outcomes, setOutcomes] = useState<OutcomeWithProfile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [endMood, setEndMood] = useState<string | null>(null);
+  const [endFocus, setEndFocus] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(DEBRIEF_DURATION_S);
   const finalizedRef = useRef(false);
 
@@ -175,7 +177,7 @@ export function DebriefOverlay({
     if (submitting) return;
     setSubmitting(true);
     try {
-      await submitSessionOutcome({ sessionId, outcome, declaredGoal, endMood });
+      await submitSessionOutcome({ sessionId, outcome, declaredGoal, endMood, endFocus });
       // Propagate the outcome to the linked task — drives the auto-tick
       // and the "continue from where you left off" badge next session.
       if (taskId) {
@@ -271,6 +273,30 @@ export function DebriefOverlay({
         {!myOutcome && (
           <div className="mb-4">
             <MoodPicker kind={sessionKind} value={endMood} onChange={setEndMood} when="after" tone="dark" />
+          </div>
+        )}
+
+        {/* ── End-of-session focus (separate dimension from mood) ────── */}
+        {!myOutcome && (
+          <div className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2 text-white/60">{focusPrompt('after')}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {FOCUS_LEVELS.map((f) => {
+                const active = endFocus === f.code;
+                return (
+                  <button
+                    key={f.code}
+                    type="button"
+                    onClick={() => setEndFocus(active ? null : f.code)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                      active ? 'bg-primary text-white shadow-sm' : 'bg-white/10 text-white/80 hover:bg-white/20'
+                    }`}
+                  >
+                    <span>{f.emoji}</span>{f.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

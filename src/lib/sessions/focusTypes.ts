@@ -125,6 +125,8 @@ export interface FocusSession {
   session_kind?: 'do' | 'plan' | 'reflect' | null;
   /** Mood code captured at session start (interpreted via session_kind). */
   start_mood?: string | null;
+  /** Focus/concentration code captured at session start (separate from mood). */
+  start_focus?: string | null;
   /** Host's scheduled guided-wizard agenda. Fired client-side at relative
    *  moments + broadcast to participants. See migration 20260529000020. */
   planned_wizards?: PlannedWizard[] | null;

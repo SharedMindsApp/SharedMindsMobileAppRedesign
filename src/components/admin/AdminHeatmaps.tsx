@@ -486,6 +486,29 @@ export function AdminHeatmaps() {
           }
         </div>
 
+        {/* ── Panel 1b: Focus heatmap (separate dimension from mood) ─────── */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Focus Heatmap</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Average start-of-session focus (1–5) by day and time — how able people felt to
+                concentrate, independent of mood. Respects the country filter above.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-bold text-gray-900 tabular-nums">
+                {data?.avgFocusScore != null ? `${data.avgFocusScore.toFixed(1)} / 5` : '—'}
+              </p>
+              <p className="text-[11px] text-gray-400">avg focus</p>
+            </div>
+          </div>
+          {data && data.focusCells.length > 0
+            ? <MoodHeatmap cells={data.focusCells} />
+            : <p className="text-gray-400 text-sm">No focus data {countries.length > 0 ? 'for the selected countries ' : ''}in this range yet.</p>
+          }
+        </div>
+
         {/* ── Panel 2: Mood before/after ─────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="mb-4">
