@@ -25,6 +25,7 @@ import type { MusicCategory } from '../../services/SessionMusicService';
 import { useSessionWizards } from './SessionWizards/useSessionWizards';
 import { WizardLauncher } from './SessionWizards/WizardLauncher';
 import { WizardOverlay } from './SessionWizards/WizardOverlay';
+import { DeclareTaskSheet } from './DeclareTaskSheet';
 import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 
 // Sessions become joinable 5 minutes before their scheduled start.
@@ -598,31 +599,28 @@ export function ActiveSessionPage() {
   // ── Match-me-now: declare the task WHILE WAITING ───────────────
   // Open-to-match sessions start goal-less (the modal skips the goal step).
   // While the host waits for a partner, prompt them to note what they'll
-  // work on, so it's ready by the time someone drops in.
-  const [taskDraft, setTaskDraft] = useState('');
-  const [savingTask, setSavingTask] = useState(false);
+  // work on — via the task sheet (pick an existing task or write a new one) —
+  // so it's ready by the time someone drops in.
+  const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const needsTaskDeclaration =
     isPrimaryHost
     && session?.open_to_match === true
     && !session?.partner_user_id
     && currentGoal.trim().length === 0;
 
-  const handleDeclareTask = useCallback(async () => {
-    const goal = taskDraft.trim();
-    if (!session || !goal || savingTask) return;
-    setSavingTask(true);
+  const handleDeclareTask = useCallback(async (goalText: string, taskId?: string) => {
+    const goal = goalText.trim();
+    if (!session || !goal) return;
+    setTaskSheetOpen(false);
     try {
-      await updateSessionGoal(session.id, goal);
+      await updateSessionGoal(session.id, goal, taskId);
       setSessionGoal(goal);
-      setSession((s) => (s ? { ...s, session_goal: goal } : s));
-      setActiveSession({ ...(session as FocusSession), session_goal: goal });
-      setTaskDraft('');
+      setSession((s) => (s ? { ...s, session_goal: goal, session_task_id: taskId ?? s.session_task_id } : s));
+      setActiveSession({ ...(session as FocusSession), session_goal: goal, session_task_id: taskId ?? session.session_task_id });
     } catch (e) {
       console.warn('[ActiveSessionPage] declare task failed:', e);
-    } finally {
-      setSavingTask(false);
     }
-  }, [session, taskDraft, savingTask, setSessionGoal, setActiveSession]);
+  }, [session, setSessionGoal, setActiveSession]);
 
   // Matched = a live 1-on-1 with a partner present. Leaving a matched session
   // is "leave early" (the partner keeps going / can take over), distinct from
@@ -1012,38 +1010,27 @@ export function ActiveSessionPage() {
           />
 
           {/* Match-me-now waiting-room task prompt. The door's open and we're
-              waiting for a partner — capture what you'll work on now so it's
-              set the moment someone joins. Disappears once a goal is saved. */}
+              waiting for a partner — tap to declare what you'll work on (pick
+              an existing task or write a new one) so it's set the moment
+              someone joins. Disappears once a goal is saved. */}
           {needsTaskDeclaration && (
             <div className="absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-4">
-              <div className="w-full max-w-md rounded-2xl bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-2xl p-4">
-                <div className="flex items-center gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setTaskSheetOpen(true)}
+                className="w-full max-w-md rounded-2xl bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-2xl p-4 text-left active:scale-[0.99] transition-transform"
+              >
+                <div className="flex items-center gap-2 mb-1">
                   <Target size={15} className="text-amber-300 shrink-0" />
                   <p className="text-sm font-extrabold text-white">What will you work on?</p>
                 </div>
-                <p className="text-[11px] text-white/55 leading-snug mb-3">
+                <p className="text-[11px] text-white/55 leading-snug mb-2.5">
                   The door's open — note your task while you wait. Your partner sees it when they drop in.
                 </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={taskDraft}
-                    onChange={(e) => setTaskDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') void handleDeclareTask(); }}
-                    placeholder="e.g. Draft the pitch deck intro"
-                    autoFocus
-                    className="flex-1 min-w-0 rounded-xl bg-white/10 text-white placeholder-white/35 text-sm px-3 py-2.5 ring-1 ring-white/15 focus:ring-amber-400/50 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleDeclareTask()}
-                    disabled={!taskDraft.trim() || savingTask}
-                    className="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 rounded-xl bg-amber-500 text-amber-950 text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-transform"
-                  >
-                    {savingTask ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                  </button>
-                </div>
-              </div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-950 bg-amber-400 px-3 py-1.5 rounded-full">
+                  <Plus size={13} /> Choose a task
+                </span>
+              </button>
             </div>
           )}
 
@@ -1240,6 +1227,15 @@ export function ActiveSessionPage() {
         onLocalDismiss={wizards.dismissLocally}
         onBroadcastEnd={wizards.broadcastEnd}
       />
+
+      {/* Waiting-room task picker (match-me-now): pick an existing task or
+          write a new one. */}
+      {taskSheetOpen && (
+        <DeclareTaskSheet
+          onClose={() => setTaskSheetOpen(false)}
+          onChoose={(title, taskId) => { void handleDeclareTask(title, taskId); }}
+        />
+      )}
 
       {/* Mid-session state recheck — only for users who control music,
           only when music is currently audible, only past the 60-min mark. */}
