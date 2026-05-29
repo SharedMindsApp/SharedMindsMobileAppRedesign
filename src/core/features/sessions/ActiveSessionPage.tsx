@@ -625,33 +625,11 @@ export function ActiveSessionPage() {
     }
   }, [session, setSessionGoal, setActiveSession]);
 
-  // ── Session plan step (music + breaks) ─────────────────────────
-  // Once the task is known, host gets a one-time, skippable setup sheet to
-  // pick music + a duration-adaptive break/breath agenda. Remembered per
-  // session so it doesn't re-pop on refresh.
-  const [planSheetOpen, setPlanSheetOpen] = useState(false);
-  const planAutoShownRef = useRef(false);
-
-  useEffect(() => {
-    if (!session || !isPrimaryHost || session.status !== 'active') return;
-    if (needsTaskDeclaration) return;                  // task prompt comes first
-    if (!moodResolved) return;                         // mood check comes before the plan
-    if (currentGoal.trim().length === 0) return;       // no task yet
-    if (taskSheetOpen || planAutoShownRef.current) return;
-    try { if (localStorage.getItem(`sm_plan_done_${session.id}`)) { planAutoShownRef.current = true; return; } } catch { /* ignore */ }
-    planAutoShownRef.current = true;
-    setPlanSheetOpen(true);
-  }, [session?.id, session?.status, isPrimaryHost, needsTaskDeclaration, currentGoal, taskSheetOpen, moodResolved]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const closePlan = useCallback(() => {
-    setPlanSheetOpen(false);
-    try { if (session) localStorage.setItem(`sm_plan_done_${session.id}`, '1'); } catch { /* ignore */ }
-  }, [session]);
-
   // ── Start-of-session mood check ────────────────────────────────
   // A focused, skippable single-question step (was buried in the declare
   // modal). Fires once for the session owner, only on a fresh start (not a
-  // mid-session refresh), and only if no mood was recorded yet.
+  // mid-session refresh), and only if no mood was recorded yet. Declared
+  // before the plan step because the plan auto-open waits on moodResolved.
   const [moodStepOpen, setMoodStepOpen] = useState(false);
   const [moodResolved, setMoodResolved] = useState(false);
   const moodHandledRef = useRef(false);
@@ -693,6 +671,29 @@ export function ActiveSessionPage() {
       console.warn('[ActiveSessionPage] start mood save failed:', e);
     }
   }, [session, resolveMood, setActiveSession]);
+
+  // ── Session plan step (music + breaks) ─────────────────────────
+  // Once the task is known, host gets a one-time, skippable setup sheet to
+  // pick music + a duration-adaptive break/breath agenda. Remembered per
+  // session so it doesn't re-pop on refresh.
+  const [planSheetOpen, setPlanSheetOpen] = useState(false);
+  const planAutoShownRef = useRef(false);
+
+  useEffect(() => {
+    if (!session || !isPrimaryHost || session.status !== 'active') return;
+    if (needsTaskDeclaration) return;                  // task prompt comes first
+    if (!moodResolved) return;                         // mood check comes before the plan
+    if (currentGoal.trim().length === 0) return;       // no task yet
+    if (taskSheetOpen || planAutoShownRef.current) return;
+    try { if (localStorage.getItem(`sm_plan_done_${session.id}`)) { planAutoShownRef.current = true; return; } } catch { /* ignore */ }
+    planAutoShownRef.current = true;
+    setPlanSheetOpen(true);
+  }, [session?.id, session?.status, isPrimaryHost, needsTaskDeclaration, currentGoal, taskSheetOpen, moodResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closePlan = useCallback(() => {
+    setPlanSheetOpen(false);
+    try { if (session) localStorage.setItem(`sm_plan_done_${session.id}`, '1'); } catch { /* ignore */ }
+  }, [session]);
 
   const handleApplyPlan = useCallback((next: PlannedWizard[], music: string | null) => {
     // Preserve already-fired/cancelled history; replace the 'planned' set.
