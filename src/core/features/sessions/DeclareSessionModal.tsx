@@ -857,22 +857,26 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         <div className="flex-1 overflow-y-auto min-h-0">
 
         {/* ── Selected-goal recap (shown atop step 2) ───────── */}
-        <div className="shrink-0 px-5 pb-2">
-          <div className="rounded-2xl bg-primary/5 ring-1 ring-primary/15 px-3 py-2 flex items-center gap-2">
-            <Target size={13} className="text-primary shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest mb-0.5">Focus</p>
-              <p className="text-sm font-semibold stitch-text-primary truncate">{resolvedGoal}</p>
+        {/* Hidden for match-me-now: there's no goal step to recap or edit —
+            the task is declared in the waiting room after the door opens. */}
+        {!startOpenToMatch && (
+          <div className="shrink-0 px-5 pb-2">
+            <div className="rounded-2xl bg-primary/5 ring-1 ring-primary/15 px-3 py-2 flex items-center gap-2">
+              <Target size={13} className="text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold stitch-text-secondary uppercase tracking-widest mb-0.5">Focus</p>
+                <p className="text-sm font-semibold stitch-text-primary truncate">{resolvedGoal}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWizardStep('goal')}
+                className="shrink-0 text-[10px] font-bold text-primary hover:opacity-70 transition-opacity uppercase tracking-wider"
+              >
+                Edit
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setWizardStep('goal')}
-              className="shrink-0 text-[10px] font-bold text-primary hover:opacity-70 transition-opacity uppercase tracking-wider"
-            >
-              Edit
-            </button>
           </div>
-        </div>
+        )}
 
         {/* ── When picker ──────────────────────────────────── */}
         <div className="shrink-0 px-5 pt-3">
