@@ -171,7 +171,7 @@ export function ProfileSettingsPage() {
                 <Pencil size={12} /> Edit profile
               </button>
             </div>
-            <ProfilePage />
+            <ProfilePage onEdit={() => setEditingProfile(true)} />
           </div>
         )
       )}

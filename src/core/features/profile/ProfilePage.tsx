@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Loader2, Flame, Check, Clock, Edit2, X, MapPin, Sparkles, Camera,
-  MessageCircle, Trophy, Users, Calendar, Timer, ArrowRight, Rocket,
+  Loader2, Flame, Check, Clock, MapPin, Sparkles, Camera,
+  MessageCircle, Trophy, Users, Calendar, Timer, ArrowRight, Rocket, Plus,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -37,7 +37,6 @@ import {
   fetchPublicProfile,
   fetchProfileStats,
   fetchRecentShips,
-  updateProfileBio,
   uploadAvatar,
   AvatarRejectedError,
   type PublicProfile,
@@ -148,7 +147,7 @@ function ShipCard({ ship }: { ship: RecentShip }) {
   );
 }
 
-export function ProfilePage() {
+export function ProfilePage({ onEdit }: { onEdit?: () => void } = {}) {
   const { userId } = useParams<{ userId?: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -161,10 +160,6 @@ export function ProfilePage() {
   const [ships, setShips] = useState<RecentShip[]>([]);
   const [connections, setConnections] = useState<ConnectionWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [editingBio, setEditingBio] = useState(false);
-  const [bioValue, setBioValue] = useState('');
-  const [savingBio, setSavingBio] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -208,24 +203,9 @@ export function ProfilePage() {
       setStats(s);
       setShips(sh);
       setConnections(conns);
-      setBioValue(p?.bio ?? '');
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [targetId, isOwn]);
-
-  async function handleSaveBio() {
-    if (savingBio) return;
-    setSavingBio(true);
-    try {
-      await updateProfileBio(bioValue);
-      setProfile((p) => p ? { ...p, bio: bioValue } : p);
-      setEditingBio(false);
-    } catch {
-      // ignore
-    } finally {
-      setSavingBio(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -248,115 +228,93 @@ export function ProfilePage() {
 
   const [avatarBg] = avatarClasses(profile.display_name);
 
-  return (
-    <div className="space-y-5">
+  const locationLabel = formatLocation(profile.country_code, profile.city) || profile.location;
+  const country = findCountry(profile.country_code);
+  const workTypes = getWorkTypes(profile);
 
-      {/* ── Profile header ─────────────────────────────────── */}
-      <div className="flex items-start gap-4">
-        {isOwn ? (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadingAvatar}
-            className="relative w-16 h-16 rounded-2xl shrink-0 overflow-hidden group focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
-            aria-label="Change profile photo"
-          >
-            {profile.avatar_url ? (
-              <img
-                src={profile.avatar_url}
-                alt={profile.display_name}
-                className="w-full h-full object-cover"
-              />
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+
+      {/* ── Hero ───────────────────────────────────────────── */}
+      <div className="rounded-3xl overflow-hidden ring-1 ring-surface-container bg-surface">
+        {/* Cover */}
+        <div className="h-24 bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500" />
+        <div className="px-5 pb-5">
+          <div className="-mt-12 flex items-end justify-between gap-3">
+            {/* Avatar (overlaps the cover) */}
+            {isOwn ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="relative w-24 h-24 rounded-3xl shrink-0 overflow-hidden group ring-4 ring-surface focus:outline-none transition-all"
+                aria-label="Change profile photo"
+              >
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt={profile.display_name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className={`w-full h-full ${avatarBg} flex items-center justify-center text-3xl font-extrabold`}>
+                    {profile.display_name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                  {uploadingAvatar
+                    ? <Loader2 size={22} className="animate-spin text-white" />
+                    : <Camera size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={2.25} />}
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarFile} className="hidden" />
+              </button>
+            ) : profile.avatar_url ? (
+              <img src={profile.avatar_url} alt={profile.display_name} className="w-24 h-24 rounded-3xl object-cover shrink-0 ring-4 ring-surface" />
             ) : (
-              <div className={`w-full h-full ${avatarBg} flex items-center justify-center text-2xl font-extrabold`}>
+              <div className={`w-24 h-24 rounded-3xl ring-4 ring-surface ${avatarBg} flex items-center justify-center shrink-0 text-3xl font-extrabold`}>
                 {profile.display_name.charAt(0).toUpperCase()}
               </div>
             )}
-            {/* Hover overlay */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-              {uploadingAvatar ? (
-                <Loader2 size={20} className="animate-spin text-white" />
-              ) : (
-                <Camera
-                  size={18}
-                  className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  strokeWidth={2.25}
-                />
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleAvatarFile}
-              className="hidden"
-            />
-          </button>
-        ) : profile.avatar_url ? (
-          <img
-            src={profile.avatar_url}
-            alt={profile.display_name}
-            className="w-16 h-16 rounded-2xl object-cover shrink-0"
-          />
-        ) : (
-          <div className={`w-16 h-16 rounded-2xl ${avatarBg} flex items-center justify-center shrink-0 text-2xl font-extrabold`}>
-            {profile.display_name.charAt(0).toUpperCase()}
+
+            {/* CTAs (public view), aligned to the avatar's baseline */}
+            {!isOwn && (
+              <div className="flex items-center gap-2 pb-1">
+                <ConnectButton otherUserId={profile.id} />
+                <MessageButton otherUserId={profile.id} />
+              </div>
+            )}
           </div>
-        )}
-        <div className="flex-1 min-w-0 pt-1">
-          <h1 className="stitch-headline text-xl font-extrabold tracking-tight leading-tight">
-            {profile.display_name}
-          </h1>
-          {profile.headline && (
-            <p className="text-[13px] font-semibold stitch-text-primary/90 leading-snug mt-0.5">
-              {profile.headline}
-            </p>
-          )}
-          {(() => {
-            const country = findCountry(profile.country_code);
-            const locationLabel =
-              formatLocation(profile.country_code, profile.city) || profile.location;
-            if (!locationLabel) return null;
-            return (
-              <p className="text-xs stitch-text-secondary mt-1 flex items-center gap-1.5 truncate">
-                {country ? (
-                  <span className="text-sm leading-none">{country.flag}</span>
-                ) : (
-                  <MapPin size={10} />
-                )}
-                <span className="truncate">{locationLabel}</span>
-              </p>
-            );
-          })()}
-          {(() => {
-            const types = getWorkTypes(profile);
-            if (types.length === 0) return null;
-            return (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {types.map((t) => {
+
+          {/* Identity */}
+          <div className="mt-3">
+            <h1 className="stitch-headline text-2xl font-extrabold tracking-tight leading-tight">{profile.display_name}</h1>
+            {profile.headline ? (
+              <p className="text-sm font-semibold stitch-text-primary/90 leading-snug mt-1">{profile.headline}</p>
+            ) : isOwn && onEdit ? (
+              <button onClick={onEdit} className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary/80 hover:text-primary transition-colors">
+                <Plus size={12} /> Add a headline — one line that makes people curious
+              </button>
+            ) : null}
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs stitch-text-secondary">
+              {locationLabel && (
+                <span className="inline-flex items-center gap-1">
+                  {country ? <span className="text-sm leading-none">{country.flag}</span> : <MapPin size={11} />}
+                  {locationLabel}
+                </span>
+              )}
+              <span className="opacity-70">Member since {formatMemberSince(profile.created_at)}</span>
+            </div>
+
+            {workTypes.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {workTypes.map((t) => {
                   const meta = WORK_TYPE_META[t] ?? { label: t, emoji: '✨' };
                   return (
-                    <span
-                      key={t}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold"
-                    >
-                      <span className="text-xs leading-none">{meta.emoji}</span>
-                      {meta.label}
+                    <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
+                      <span className="text-xs leading-none">{meta.emoji}</span>{meta.label}
                     </span>
                   );
                 })}
               </div>
-            );
-          })()}
-          <p className="text-[10px] stitch-text-secondary mt-2 opacity-70">
-            Member since {formatMemberSince(profile.created_at)}
-          </p>
-          {!isOwn && (
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <ConnectButton otherUserId={profile.id} />
-              <MessageButton otherUserId={profile.id} />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -368,70 +326,31 @@ export function ProfilePage() {
       )}
 
       {/* ── Bio ────────────────────────────────────────────── */}
-      {isOwn ? (
-        editingBio ? (
-          <div className="space-y-2">
-            <textarea
-              value={bioValue}
-              onChange={(e) => setBioValue(e.target.value)}
-              placeholder="Tell the community what you're working on..."
-              maxLength={200}
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl bg-surface-container-low stitch-text-primary text-sm font-medium placeholder:stitch-text-secondary border-0 outline-none focus:ring-2 focus:ring-primary/30 resize-none transition-all"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleSaveBio}
-                disabled={savingBio}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl stitch-btn--primary text-white text-xs font-bold disabled:opacity-50"
-              >
-                {savingBio ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} strokeWidth={3} />}
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEditingBio(false); setBioValue(profile.bio ?? ''); }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-surface-container-low stitch-text-secondary text-xs font-bold"
-              >
-                <X size={11} /> Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditingBio(true)}
-            className="w-full text-left group"
-          >
-            {profile.bio ? (
-              <p className="text-sm stitch-text-secondary leading-relaxed group-hover:stitch-text-primary transition-colors">
-                {profile.bio}
-                <Edit2 size={11} className="inline ml-1.5 opacity-40 group-hover:opacity-70 transition-opacity" />
-              </p>
-            ) : (
-              <p className="text-sm stitch-text-secondary italic opacity-60 flex items-center gap-1.5 hover:opacity-100 transition-opacity">
-                <Edit2 size={12} /> Add a bio
-              </p>
-            )}
-          </button>
-        )
-      ) : profile.bio ? (
-        <p className="text-sm stitch-text-secondary leading-relaxed">{profile.bio}</p>
+      {profile.bio ? (
+        <p className="text-sm stitch-text-secondary leading-relaxed px-1">{profile.bio}</p>
+      ) : isOwn && onEdit ? (
+        <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-1 text-xs font-semibold stitch-text-secondary hover:text-primary transition-colors">
+          <Plus size={12} /> Add a short bio
+        </button>
       ) : null}
 
       {/* ── Right now (current focus) ──────────────────────── */}
-      {profile.current_focus && (
+      {profile.current_focus ? (
         <div className="rounded-2xl bg-gradient-to-r from-violet-50 to-blue-50 ring-1 ring-violet-200/50 px-4 py-3">
           <p className="text-[10px] font-bold tracking-widest uppercase text-violet-700 mb-1 flex items-center gap-1.5">
             <Rocket size={11} /> Right now
           </p>
           <p className="text-sm font-semibold stitch-text-primary leading-snug">{profile.current_focus}</p>
         </div>
-      )}
+      ) : isOwn && onEdit ? (
+        <button onClick={onEdit} className="w-full text-left rounded-2xl border border-dashed border-violet-200 px-4 py-3 hover:bg-violet-50/50 transition-colors">
+          <p className="text-[10px] font-bold tracking-widest uppercase text-violet-700/70 mb-1 flex items-center gap-1.5"><Rocket size={11} /> Right now</p>
+          <p className="text-xs stitch-text-secondary">+ Say what you're working on — people reach out about what you're building.</p>
+        </button>
+      ) : null}
 
       {/* ── Open to (opportunity signals) ──────────────────── */}
-      {profile.open_to && profile.open_to.length > 0 && (
+      {profile.open_to && profile.open_to.length > 0 ? (
         <section>
           <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-2">Open to</p>
           <div className="flex flex-wrap gap-1.5">
@@ -446,7 +365,11 @@ export function ProfilePage() {
             })}
           </div>
         </section>
-      )}
+      ) : isOwn && onEdit ? (
+        <button onClick={onEdit} className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700/80 hover:text-emerald-700 transition-colors">
+          <Plus size={12} /> Add what you're open to — let the right people know they can reach out
+        </button>
+      ) : null}
 
       {/* ── Looking for / Can help with (the get & the give) ── */}
       {((profile.seeking?.length ?? 0) > 0 || (profile.offering?.length ?? 0) > 0) && (
