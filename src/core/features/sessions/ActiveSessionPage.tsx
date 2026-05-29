@@ -720,6 +720,9 @@ export function ActiveSessionPage() {
   // we never nag. The prompt is shown at most once per session.
   const [showLowMatchTime, setShowLowMatchTime] = useState(false);
   const [addBreakOnExtend, setAddBreakOnExtend] = useState(false);
+  // When a +30 would cross the hour, we pre-tick the break and ask the host
+  // to confirm before applying (rather than extending instantly).
+  const [confirmingExtend30, setConfirmingExtend30] = useState(false);
   const lowMatchShownRef = useRef(false);
   const isOpenUnmatchedHost =
     isPrimaryHost && session?.open_to_match === true && !session?.partner_user_id && session?.status === 'active';
@@ -735,6 +738,7 @@ export function ActiveSessionPage() {
 
   const handleMatchGoSolo = useCallback(async () => {
     setShowLowMatchTime(false);
+    setConfirmingExtend30(false);
     if (!session) return;
     try {
       await closeTheDoor(session.id);
@@ -761,7 +765,19 @@ export function ActiveSessionPage() {
       if (!hasBreak) void persistPlanned([...cur, { id, wizardId: 'break_3min', at: 'halfway', status: 'planned' }]);
     }
     setAddBreakOnExtend(false);
+    setConfirmingExtend30(false);
   }, [addBreakOnExtend, session, persistPlanned]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Tap +30. If it crosses the hour, pre-tick the break and ask to confirm;
+   *  otherwise extend straight away. */
+  const handleTapExtend30 = useCallback(() => {
+    if (extendCrossesHour) {
+      setAddBreakOnExtend(true);
+      setConfirmingExtend30(true);
+    } else {
+      void handleMatchExtend(30);
+    }
+  }, [extendCrossesHour, handleMatchExtend]);
 
   // Matched = a live 1-on-1 with a partner present. Leaving a matched session
   // is "leave early" (the partner keeps going / can take over), distinct from
@@ -1422,51 +1438,76 @@ export function ActiveSessionPage() {
               </h2>
             </div>
             <p className="text-sm stitch-text-secondary leading-snug mb-4">
-              Not much time for someone to join and get value. Add more time to keep the door open, or close it and finish solo.
+              {confirmingExtend30
+                ? "That'll take you over an hour — we've added a short break midway to keep it sustainable. Confirm to apply."
+                : 'Not much time for someone to join and get value. Add more time to keep the door open, or close it and finish solo.'}
             </p>
-            <div className="space-y-2">
-              <div className="flex gap-2">
+
+            {!confirmingExtend30 ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleMatchExtend(15)}
+                    className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+                  >
+                    +15 min
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTapExtend30}
+                    className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+                  >
+                    +30 min
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => void handleMatchExtend(15)}
-                  className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+                  onClick={() => void handleMatchGoSolo()}
+                  className="w-full py-3 rounded-2xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
                 >
-                  +15 min
+                  Close the door · finish solo
                 </button>
+              </div>
+            ) : (
+              /* +30 confirm view — break pre-ticked, host can untick + confirm. */
+              <div className="space-y-2">
+                <div className="rounded-xl bg-surface-container-low p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold stitch-text-primary">Add 30 minutes</span>
+                    <span className="text-xs font-semibold stitch-text-secondary tabular-nums">
+                      → {(session?.intended_duration_minutes ?? 50) + 30} min total
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAddBreakOnExtend((v) => !v)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${
+                      addBreakOnExtend ? 'bg-primary/10 ring-2 ring-primary/30' : 'bg-surface ring-1 ring-surface-container'
+                    }`}
+                  >
+                    <div className={`w-8 h-5 rounded-full p-0.5 transition-colors shrink-0 ${addBreakOnExtend ? 'bg-primary' : 'bg-surface-container'}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${addBreakOnExtend ? 'translate-x-3' : 'translate-x-0'}`} />
+                    </div>
+                    <span className="text-xs font-bold stitch-text-primary leading-snug">3-min break midway</span>
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => void handleMatchExtend(30)}
-                  className="flex-1 py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
+                  className="w-full py-3 rounded-2xl stitch-btn--primary text-white text-sm font-bold active:scale-[0.98] transition-transform"
                 >
-                  +30 min
+                  Confirm{addBreakOnExtend ? ' · +30 min & a break' : ' · +30 min'}
                 </button>
-              </div>
-              {/* Long-session nudge: past the hour mark, offer to bake in a
-                  short mid-session break with the extension. */}
-              {extendCrossesHour && (
                 <button
                   type="button"
-                  onClick={() => setAddBreakOnExtend((v) => !v)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all ${
-                    addBreakOnExtend ? 'bg-primary/10 ring-2 ring-primary/30' : 'bg-surface-container-low hover:bg-surface-container'
-                  }`}
+                  onClick={() => setConfirmingExtend30(false)}
+                  className="w-full py-2.5 rounded-2xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
                 >
-                  <div className={`w-8 h-5 rounded-full p-0.5 transition-colors shrink-0 ${addBreakOnExtend ? 'bg-primary' : 'bg-surface-container'}`}>
-                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${addBreakOnExtend ? 'translate-x-3' : 'translate-x-0'}`} />
-                  </div>
-                  <span className="text-xs font-bold stitch-text-primary leading-snug">
-                    Add a 3-min break midway <span className="font-semibold stitch-text-secondary">· you'll be going over an hour</span>
-                  </span>
+                  Back
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void handleMatchGoSolo()}
-                className="w-full py-3 rounded-2xl bg-surface-container-low stitch-text-primary text-sm font-bold hover:bg-surface-container active:scale-[0.98] transition-all"
-              >
-                Close the door · finish solo
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body,
