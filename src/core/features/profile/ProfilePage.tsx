@@ -14,7 +14,7 @@ import { findCountry, formatLocation } from '../../../lib/countries';
 import { findSkillCategory } from '../../../lib/skills';
 import { openToMeta } from '../../../lib/openTo';
 import { WorkCreditsSection } from './WorkCredits';
-import { BuildingSection } from './BuildingProjects';
+import { WorkingOnSection } from './BuildingProjects';
 import { fetchConnections, type ConnectionWithProfile } from '../../services/ConnectionService';
 
 const WORK_TYPE_META: Record<string, { label: string; emoji: string }> = {
@@ -418,8 +418,8 @@ export function ProfilePage({ onEdit, onSetup }: { onEdit?: () => void; onSetup?
         </section>
       )}
 
-      {/* ── Building (featured projects) ───────────────────── */}
-      <BuildingSection userId={targetId} />
+      {/* ── Working on (featured projects, typed) ──────────── */}
+      <WorkingOnSection userId={targetId} isOwn={isOwn} />
 
       {/* ── Skills ─────────────────────────────────────────── */}
       {profile.skills && profile.skills.length > 0 && (

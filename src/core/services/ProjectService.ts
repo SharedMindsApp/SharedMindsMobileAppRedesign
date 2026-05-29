@@ -11,8 +11,12 @@ export interface Project {
     color: string | null;
     icon: string | null;
     is_private: boolean;
-    /** Featured on the owner's public profile ("Building"). */
+    /** Featured on the owner's public profile ("Working on"). */
     show_on_profile?: boolean;
+    /** Nature of the project — see lib/projectTypes.ts. */
+    project_type?: string;
+    /** Limited owner-written blurb for the public overview. */
+    public_summary?: string | null;
     starts_on: string | null;
     target_date: string | null;
     completed_at: string | null;
@@ -176,6 +180,19 @@ export const ProjectService = {
         const { error } = await supabase
             .from('projects')
             .update({ show_on_profile: show, updated_at: new Date().toISOString() })
+            .eq('id', projectId);
+        if (error) throw error;
+    },
+
+    /** Update the profile-facing metadata for a project (type, public summary,
+     *  and/or featured toggle). Owner-only via RLS. */
+    async setProjectProfileMeta(
+        projectId: string,
+        patch: { project_type?: string; public_summary?: string | null; show_on_profile?: boolean },
+    ): Promise<void> {
+        const { error } = await supabase
+            .from('projects')
+            .update({ ...patch, updated_at: new Date().toISOString() })
             .eq('id', projectId);
         if (error) throw error;
     },

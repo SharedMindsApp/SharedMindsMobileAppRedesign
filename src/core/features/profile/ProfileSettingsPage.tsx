@@ -649,10 +649,10 @@ function EditTab() {
       {/* ── Building (feature projects on profile) ────────── */}
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">
-          <span className="flex items-center gap-1.5"><Building2 size={10} /> Building</span>
+          <span className="flex items-center gap-1.5"><Building2 size={10} /> Working on</span>
         </p>
         <p className="text-xs stitch-text-secondary mb-4">
-          Feature the projects you're working on so people see what you're building. Toggles save instantly.
+          Feature projects on your profile. Set each one's type and a public summary — the rest of the project stays private. Saves instantly.
         </p>
         <BuildingEditor />
       </SurfaceCard>
