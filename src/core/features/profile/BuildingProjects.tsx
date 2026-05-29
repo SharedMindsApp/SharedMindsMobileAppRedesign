@@ -169,7 +169,7 @@ export function BuildingEditor() {
                   <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-1">Type</p>
                   <div className="flex flex-wrap gap-1.5">
                     {PROJECT_TYPES.map((t) => {
-                      const active = (p.project_type ?? 'building') === t.id;
+                      const active = p.project_type === t.id;
                       return (
                         <button key={t.id} type="button" onClick={() => void save(p, { project_type: t.id })}
                           className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold transition-colors ${active ? 'stitch-btn--primary text-white' : 'bg-surface stitch-text-primary hover:bg-surface-container ring-1 ring-surface-container'}`}>
