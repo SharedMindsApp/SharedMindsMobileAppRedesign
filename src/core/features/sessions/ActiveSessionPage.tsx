@@ -29,6 +29,7 @@ import { DeclareTaskSheet } from './DeclareTaskSheet';
 import { SessionPlanSheet } from './SessionPlanSheet';
 import { StartMoodSheet } from './StartMoodSheet';
 import type { SessionKind } from '../../../lib/sessionMood';
+import { useCoreData } from '../../data/CoreDataContext';
 import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 
 // Sessions become joinable 5 minutes before their scheduled start.
@@ -91,6 +92,7 @@ export function ActiveSessionPage() {
   const location = useLocation();
   const { profile, user } = useAuth();
   const { activeSession, sessionGoal, sessionProject, timerSecondsRemaining, setActiveSession, setSessionGoal, clearSession } = useFocusSession();
+  const { state: { tasks } } = useCoreData();
   // Music category is now driven by the user's ARRIVAL STATE, not the
   // task's cognitive load — the old deep/medium/light axis confused the
   // two. Default to 'flow' (neutral/ready target). The user picks their
@@ -1361,7 +1363,9 @@ export function ActiveSessionPage() {
       {moodStepOpen && session && (
         <StartMoodSheet
           kind={(session.session_kind ?? 'do') as SessionKind}
+          demandingTask={tasks.find((t) => t.id === session.session_task_id)?.energy === 'deep'}
           onSubmit={(mood, focus) => { void handleSubmitCheckIn(mood, focus); }}
+          onSwapTask={() => { resolveMood(); setTaskSheetOpen(true); }}
           onSkip={resolveMood}
         />
       )}

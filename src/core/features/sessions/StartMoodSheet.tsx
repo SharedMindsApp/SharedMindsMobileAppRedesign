@@ -7,20 +7,34 @@
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Check } from 'lucide-react';
+import { X, Check, AlertTriangle } from 'lucide-react';
 import type { SessionKind } from '../../../lib/sessionMood';
 import { moodOptionsForKind, moodPromptForKind, FOCUS_LEVELS, focusPrompt } from '../../../lib/sessionMood';
 
+/** Low-end focus codes, and the dragging-mood codes across both axes. */
+const LOW_FOCUS = new Set(['foc_drifting', 'foc_foggy']);
+const LOW_MOOD = new Set(['low', 'brainfog', 'distracted', 'foggy', 'scattered']);
+
 interface Props {
   kind: SessionKind;
+  /** True when the linked task is a 'deep' (demanding) one. Drives the
+   *  "maybe pick something easier" nudge when focus/mood is low. */
+  demandingTask?: boolean;
   onSubmit: (mood: string | null, focus: string | null) => void;
+  /** Optional — offered in the low-focus warning to swap to a lighter task. */
+  onSwapTask?: () => void;
   onSkip: () => void;
 }
 
-export function StartMoodSheet({ kind, onSubmit, onSkip }: Props) {
+export function StartMoodSheet({ kind, demandingTask = false, onSubmit, onSwapTask, onSkip }: Props) {
   const moodOptions = moodOptionsForKind(kind);
   const [mood, setMood] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
+
+  // Mismatch nudge: a demanding task + low focus (or low mood) = likely a
+  // grind. Surface it as gentle, dismissable feedback — never a block.
+  const lowState = (focus !== null && LOW_FOCUS.has(focus)) || (mood !== null && LOW_MOOD.has(mood));
+  const showMismatch = demandingTask && lowState;
 
   return createPortal(
     <div className="fixed inset-0 z-[130] overflow-y-auto bg-gradient-to-br from-slate-950 via-indigo-950 to-purple-950 text-white">
@@ -66,12 +80,34 @@ export function StartMoodSheet({ kind, onSubmit, onSkip }: Props) {
           </div>
         </section>
 
+        {/* Task ↔ state mismatch nudge */}
+        {showMismatch && (
+          <div className="mb-3 rounded-2xl bg-amber-400/10 ring-1 ring-amber-300/30 p-3.5 text-left">
+            <p className="text-sm font-bold text-amber-200 inline-flex items-center gap-1.5">
+              <AlertTriangle size={14} /> Big task, low fuel
+            </p>
+            <p className="text-[12px] text-amber-100/70 leading-snug mt-1">
+              You've picked a demanding task but your focus is low right now. That's a recipe for
+              a grind — consider a lighter task or a shorter block. Totally fine to push on, though.
+            </p>
+            {onSwapTask && (
+              <button
+                type="button"
+                onClick={onSwapTask}
+                className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-extrabold text-amber-950 bg-amber-300 px-3 py-1.5 rounded-full active:scale-[0.98] transition-transform"
+              >
+                Pick a lighter task
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => onSubmit(mood, focus)}
           className="w-full inline-flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white text-slate-900 text-base font-extrabold active:scale-[0.98] transition-transform"
         >
-          <Check size={17} /> Start session
+          <Check size={17} /> {showMismatch ? 'Start anyway' : 'Start session'}
         </button>
         <button
           type="button"
