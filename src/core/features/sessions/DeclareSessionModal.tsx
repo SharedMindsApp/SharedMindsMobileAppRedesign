@@ -71,9 +71,13 @@ interface Props {
    *  starting solo — see open_to_match column comment in migration
    *  20260527000015). */
   startOpenToMatch?: boolean;
+  /** Pre-selects the match-me-now purpose. Used by the purpose-first
+   *  Match-me-now sheet: the purpose the user picked there carries straight
+   *  into the door they open here (e.g. picking "Plan" opens a plan door). */
+  initialIntent?: SessionIntent;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint, startOpenToMatch }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint, startOpenToMatch, initialIntent }: Props) {
   const navigate = useNavigate();
   const { state: { tasks, projects, activeProjectId }, addTaskAsync, deleteTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
@@ -188,7 +192,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [sessionKind, setSessionKind] = useState<SessionKind>('do');
   /** Purpose for match-me-now doors — plan/connect/meditate any length, work
    *  45+ only. Drives framing + match pairing. Default 'plan'. */
-  const [intent, setIntent] = useState<SessionIntent>('plan');
+  const [intent, setIntent] = useState<SessionIntent>(initialIntent ?? 'plan');
   /** Optional "before" mood, captured for immediate sessions only (a
    *  scheduled session's start mood is captured when it actually begins). */
   const [startMood, setStartMood] = useState<string | null>(null);

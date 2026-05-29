@@ -80,6 +80,7 @@ import { deriveMomentum } from './momentum';
 import { QuickRestartCard } from './QuickRestartCard';
 import { CommunityFeedStrip } from './CommunityFeedStrip';
 import { supabase } from '../../../lib/supabase';
+import type { SessionIntent } from '../../../lib/sessionIntent';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
 
@@ -440,6 +441,9 @@ export function DashboardPage() {
    *  opening from the Match-me-now CTA so the user lands on a solo
    *  session that's discoverable for drop-ins. */
   const [declareOpenToMatch, setDeclareOpenToMatch] = useState(false);
+  /** Purpose the user picked in the Match-me-now sheet — carried into the
+   *  door they open so it matches what they chose. */
+  const [declareIntent, setDeclareIntent] = useState<SessionIntent | undefined>(undefined);
   const [showSchedule, setShowSchedule] = useState(false);
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
@@ -926,12 +930,14 @@ export function DashboardPage() {
             setDeclareSmallerHint(false);
             setDeclareOpenToMatch(false);
             setDeclareProjectId(undefined);
+            setDeclareIntent(undefined);
           }}
           initialGoal={declareGoal}
           initialDuration={templateDuration}
           initialProjectId={declareProjectId}
           startWithSmallerHint={declareSmallerHint}
           startOpenToMatch={declareOpenToMatch}
+          initialIntent={declareIntent}
         />
       )}
       {showSchedule && <ScheduleSessionModal onClose={() => setShowSchedule(false)} />}
@@ -943,9 +949,10 @@ export function DashboardPage() {
       {showMatchSheet && (
         <MatchMeNowSheet
           onClose={() => setShowMatchSheet(false)}
-          onOpenOwnDoor={() => {
+          onOpenOwnDoor={(intent) => {
             setShowMatchSheet(false);
             setDeclareOpenToMatch(true);
+            setDeclareIntent(intent);
             setShowDeclare(true);
           }}
         />
