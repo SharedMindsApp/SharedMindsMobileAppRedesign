@@ -11,6 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
 import { PresenceGatedMeeting } from './PresenceGatedMeeting';
+import { CameraGatedMeeting } from './CameraGatedMeeting';
 import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
@@ -1510,28 +1511,52 @@ export function ActiveSessionPage() {
         </div>
       ) : (
         <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
-          <PresenceGatedMeeting
-            currentUserId={user?.id ?? session.id}
-            lobby={() => (
-              <VideoLobby goal={currentGoal} secondsRemaining={timerSecondsRemaining} />
-            )}
-            roomName={roomName}
-            displayName={profile?.display_name ?? 'Member'}
-            isModerator={isModerator}
-            startAudioMuted={isQuiet || isSilentVibe}
-            startVideoMuted={false}
-            avatarVerified={profile?.avatar_status === 'approved'}
-            focusSessionId={session.id}
-            muteAudioSignal={muteAudioSignal}
-            onParticipantJoined={() => {
-              setPartnerJoined(true);
-              setShowNoShowBanner(false);
-            }}
-            // Just-leave-the-call: navigate this user out without ending
-            // the session for everyone else. The host uses the top-bar
-            // "End" button (handleEnd) to trigger the debrief.
-            onLeave={() => navigate('/sessions')}
-          />
+          {isOneOnOne ? (
+            /* 1-on-1 / match: local preview + "Share my camera" — Daily only
+               spins up once someone present opts into video. */
+            <CameraGatedMeeting
+              currentUserId={user?.id ?? session.id}
+              goal={currentGoal}
+              secondsRemaining={timerSecondsRemaining}
+              roomName={roomName}
+              displayName={profile?.display_name ?? 'Member'}
+              isModerator={isModerator}
+              startAudioMuted={isQuiet || isSilentVibe}
+              avatarVerified={profile?.avatar_status === 'approved'}
+              focusSessionId={session.id}
+              muteAudioSignal={muteAudioSignal}
+              onParticipantJoined={() => {
+                setPartnerJoined(true);
+                setShowNoShowBanner(false);
+              }}
+              onLeave={() => navigate('/sessions')}
+            />
+          ) : (
+            /* Group coworking: auto-on the moment a 2nd person is present
+               (preserves the ambient drop-in feel). */
+            <PresenceGatedMeeting
+              currentUserId={user?.id ?? session.id}
+              lobby={() => (
+                <VideoLobby goal={currentGoal} secondsRemaining={timerSecondsRemaining} />
+              )}
+              roomName={roomName}
+              displayName={profile?.display_name ?? 'Member'}
+              isModerator={isModerator}
+              startAudioMuted={isQuiet || isSilentVibe}
+              startVideoMuted={false}
+              avatarVerified={profile?.avatar_status === 'approved'}
+              focusSessionId={session.id}
+              muteAudioSignal={muteAudioSignal}
+              onParticipantJoined={() => {
+                setPartnerJoined(true);
+                setShowNoShowBanner(false);
+              }}
+              // Just-leave-the-call: navigate this user out without ending
+              // the session for everyone else. The host uses the top-bar
+              // "End" button (handleEnd) to trigger the debrief.
+              onLeave={() => navigate('/sessions')}
+            />
+          )}
           {/* Group/1-on-1 debrief renders over the live video so everyone
               sees each other's answers while still in the call */}
           {showDebrief && user && (
