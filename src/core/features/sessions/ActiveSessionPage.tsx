@@ -10,7 +10,7 @@ import { ReportModal } from '../moderation/ReportModal';
 import { supabase } from '../../../lib/supabase';
 import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTypes';
 import type { WizardId } from './SessionWizards/types';
-import { DailyMeeting } from './DailyMeeting';
+import { PresenceGatedMeeting } from './PresenceGatedMeeting';
 import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
@@ -1474,7 +1474,11 @@ export function ActiveSessionPage() {
                 </p>
               </div>
               <div className="absolute inset-0 top-12">
-                <DailyMeeting
+                <PresenceGatedMeeting
+                  currentUserId={user.id}
+                  lobby={() => (
+                    <VideoLobby goal="" secondsRemaining={timerSecondsRemaining} bodyDouble />
+                  )}
                   roomName="sharedminds-bodydouble"
                   displayName={profile.display_name ?? 'Member'}
                   isModerator={false}
@@ -1506,7 +1510,11 @@ export function ActiveSessionPage() {
         </div>
       ) : (
         <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
-          <DailyMeeting
+          <PresenceGatedMeeting
+            currentUserId={user?.id ?? session.id}
+            lobby={() => (
+              <VideoLobby goal={currentGoal} secondsRemaining={timerSecondsRemaining} />
+            )}
             roomName={roomName}
             displayName={profile?.display_name ?? 'Member'}
             isModerator={isModerator}
@@ -2187,6 +2195,54 @@ function IntroPhaseOverlay({
 // Distraction-free presentation for solo sessions: ambient gradient,
 // big circular progress, the goal in the centre. No Jitsi, no peers.
 // The top bar (with goal, timer, end button) is still rendered above this.
+
+/**
+ * VideoLobby — shown while we're waiting for a second person before spinning
+ * up the Daily.co room. Pure local timer + "waiting" affordance; makes zero
+ * video-API calls. PresenceGatedMeeting swaps this out for <DailyMeeting> the
+ * moment another person is present.
+ */
+function VideoLobby({
+  goal,
+  secondsRemaining,
+  bodyDouble = false,
+}: {
+  goal: string;
+  secondsRemaining: number;
+  bodyDouble?: boolean;
+}) {
+  return (
+    <div className="absolute inset-0 bg-[#1a1a2e] flex flex-col items-center justify-center text-center px-6 gap-5">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(139,92,246,0.18),transparent_60%)]" />
+      <div className="relative flex flex-col items-center gap-5">
+        <div className="relative w-16 h-16 grid place-items-center">
+          <span className="absolute inset-0 rounded-2xl bg-violet-500/20 animate-ping" />
+          <span className="relative w-16 h-16 rounded-2xl bg-white/5 grid place-items-center">
+            <Users size={28} className="text-violet-300" />
+          </span>
+        </div>
+        <div>
+          <p className="text-base font-bold text-white/90">
+            {bodyDouble ? 'Waiting for others to join' : "You're the first one here"}
+          </p>
+          <p className="text-xs text-white/50 max-w-[260px] leading-relaxed mt-1.5">
+            Video starts automatically the moment someone else arrives. Until then you're flying solo — no call running.
+          </p>
+        </div>
+        {goal && (
+          <p className="text-sm text-white/70 max-w-md leading-snug">{goal}</p>
+        )}
+        <p className="text-5xl font-extrabold text-white tabular-nums leading-none">
+          {formatRemaining(secondsRemaining)}
+        </p>
+        <div className="flex items-center gap-2 text-[11px] text-white/40">
+          <Loader2 size={12} className="animate-spin" />
+          Holding your spot
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SoloFocusView({
   goal,

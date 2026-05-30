@@ -232,7 +232,7 @@ export function DailyMeeting({
 
         daily.on('left-meeting', () => {
           if (cancelled) return;
-          cbHangupRef.current?.();
+          cbLeaveRef.current?.();
         });
 
         daily.on('camera-error', (evt) => {
@@ -288,8 +288,8 @@ export function DailyMeeting({
     if (callRef.current) {
       callRef.current.leave().catch(() => { /* ignore */ });
     }
-    // onHangup fires via 'left-meeting' but call it directly too for snappy UX
-    cbHangupRef.current?.();
+    // onLeave fires via 'left-meeting' but call it directly too for snappy UX
+    cbLeaveRef.current?.();
   }
 
   return (
