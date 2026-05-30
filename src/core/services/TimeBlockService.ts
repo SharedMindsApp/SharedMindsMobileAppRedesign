@@ -9,6 +9,22 @@ import { supabase } from '../../lib/supabase';
 
 export type BlockType = 'focus' | 'deep' | 'admin' | 'break' | 'personal';
 
+/** A session mode a block segment runs as. */
+export type SegmentMode = 'group' | 'solo' | 'match';
+
+/** One queued session within a block (Group → Solo → Match …). */
+export interface BlockSegment {
+  id: string;
+  block_id: string;
+  user_id: string;
+  sort_order: number;
+  mode: SegmentMode;
+  duration_mins: number;
+  status: 'planned' | 'active' | 'done' | 'skipped';
+  session_id: string | null;
+  created_at: string;
+}
+
 export interface TimeBlock {
   id: string;
   user_id: string;
@@ -135,5 +151,46 @@ export const TimeBlockService = {
       .eq('block_id', blockId)
       .eq('task_id', taskId);
     if (error) throw error;
+  },
+
+  // ── Segments (multiple sessions queued within a block) ─────────────
+
+  async fetchBlockSegments(blockIds: string[]): Promise<Record<string, BlockSegment[]>> {
+    if (blockIds.length === 0) return {};
+    const { data, error } = await supabase
+      .from('time_block_segments')
+      .select('*')
+      .in('block_id', blockIds)
+      .order('sort_order', { ascending: true });
+    if (error || !data) return {};
+    const out: Record<string, BlockSegment[]> = {};
+    for (const r of data as BlockSegment[]) (out[r.block_id] ??= []).push(r);
+    return out;
+  },
+
+  async addSegment(blockId: string, mode: SegmentMode, durationMins: number): Promise<BlockSegment | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { count } = await supabase
+      .from('time_block_segments')
+      .select('id', { count: 'exact', head: true })
+      .eq('block_id', blockId);
+    const { data, error } = await supabase
+      .from('time_block_segments')
+      .insert({ block_id: blockId, user_id: user.id, mode, duration_mins: durationMins, sort_order: count ?? 0 })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as BlockSegment;
+  },
+
+  async removeSegment(id: string): Promise<void> {
+    const { error } = await supabase.from('time_block_segments').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  async reorderSegments(orderedIds: string[]): Promise<void> {
+    await Promise.all(orderedIds.map((id, i) =>
+      supabase.from('time_block_segments').update({ sort_order: i }).eq('id', id)));
   },
 };

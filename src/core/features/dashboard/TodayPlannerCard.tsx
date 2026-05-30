@@ -29,7 +29,16 @@ import {
 } from 'lucide-react';
 import { FindSessionsSheet } from './FindSessionsSheet';
 import { PlannerSettingsSheet } from './PlannerSettingsSheet';
-import { TimeBlockService, type TimeBlock, type BlockType } from '../../services/TimeBlockService';
+import { TimeBlockService, type TimeBlock, type BlockType, type BlockSegment, type SegmentMode } from '../../services/TimeBlockService';
+
+/** Display meta for a block segment's session mode. */
+const SEGMENT_MODES: { mode: SegmentMode; label: string; emoji: string; hex: string }[] = [
+  { mode: 'group', label: 'Group',  emoji: '👥', hex: '#3b82f6' },
+  { mode: 'solo',  label: 'Solo',   emoji: '🎧', hex: '#f43f5e' },
+  { mode: 'match', label: 'Match',  emoji: '⚡', hex: '#8b5cf6' },
+];
+const segmentMeta = (m: SegmentMode) => SEGMENT_MODES.find((x) => x.mode === m) ?? SEGMENT_MODES[0];
+const SEGMENT_DURATIONS = [25, 50, 90];
 import {
   ReflectionService, mondayOf, estimateSessions,
   type ReflectionWithIntentions, type WeeklyIntentionWithMicrotasks,
@@ -261,7 +270,7 @@ function nextFreeSlot(blocks: TimeBlock[], dayStart = DEFAULT_PLANNER_START, day
 // ── BlockCard ──────────────────────────────────────────────────────
 
 function BlockCard({
-  block, onToggle, onStart, onDelete, onEdit, projectName, heightPx, taskCount = 0,
+  block, onToggle, onStart, onDelete, onEdit, projectName, heightPx, taskCount = 0, segmentModes = [],
 }: {
   block: TimeBlock;
   onToggle: (b: TimeBlock) => void;
@@ -275,6 +284,8 @@ function BlockCard({
   heightPx?: number;
   /** Number of tasks attached to the block (badge). */
   taskCount?: number;
+  /** Queued session modes within the block, in order (mode dots). */
+  segmentModes?: SegmentMode[];
 }) {
   const s    = BLOCK_STYLES[block.block_type];
   const done = !!block.completed_at;
@@ -308,6 +319,13 @@ function BlockCard({
             )}
             {taskCount > 0 && (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-bold stitch-text-secondary">· <Layers size={9} /> {taskCount}</span>
+            )}
+            {segmentModes.length > 0 && (
+              <span className="inline-flex items-center gap-1 ml-0.5">
+                {segmentModes.map((m, i) => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: segmentMeta(m).hex }} title={segmentMeta(m).label} />
+                ))}
+              </span>
             )}
           </div>
         </button>
@@ -481,6 +499,24 @@ function BlockEditPopover({
     try { await TimeBlockService.removeTaskFromBlock(block.id, taskId); } catch { /* ignore */ }
   }
 
+  // Sessions queued within this block (Group → Solo → Match …).
+  const [segments, setSegments] = useState<BlockSegment[]>([]);
+  const [addingSegMode, setAddingSegMode] = useState<SegmentMode>('group');
+  const [addingSegDur, setAddingSegDur] = useState(50);
+  useEffect(() => {
+    TimeBlockService.fetchBlockSegments([block.id]).then((m) => setSegments(m[block.id] ?? [])).catch(() => {});
+  }, [block.id]);
+  async function addSegment() {
+    try {
+      const seg = await TimeBlockService.addSegment(block.id, addingSegMode, addingSegDur);
+      if (seg) setSegments((s) => [...s, seg]);
+    } catch { /* ignore */ }
+  }
+  async function removeSegment(id: string) {
+    setSegments((s) => s.filter((x) => x.id !== id));
+    try { await TimeBlockService.removeSegment(id); } catch { /* ignore */ }
+  }
+
   function handleSave() {
     if (!title.trim()) return;
     const opt = LENGTH_OPTIONS.find((o) => o.key === lengthKey) ?? LENGTH_OPTIONS[1];
@@ -584,6 +620,47 @@ function BlockEditPopover({
               ))}
             </div>
           )}
+        </div>
+
+        {/* Sessions queued in this block */}
+        <div className="mb-4">
+          <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase flex items-center gap-1.5 mb-1.5"><Play size={10} /> Sessions in this block</p>
+          {segments.length > 0 && (
+            <div className="space-y-1 mb-2">
+              {segments.map((seg, i) => {
+                const m = segmentMeta(seg.mode);
+                return (
+                  <div key={seg.id} className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2.5 py-1.5">
+                    <span className="text-[10px] font-bold stitch-text-secondary tabular-nums w-4">{i + 1}</span>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: m.hex }} />
+                    <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{m.emoji} {m.label}</span>
+                    <span className="text-[10px] font-semibold stitch-text-secondary">{seg.duration_mins}m</span>
+                    <button type="button" onClick={() => void removeSegment(seg.id)} aria-label="Remove" className="w-5 h-5 grid place-items-center rounded stitch-text-secondary hover:bg-surface-container"><X size={11} /></button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* Add a segment */}
+          <div className="flex items-center gap-1.5">
+            <div className="flex gap-1">
+              {SEGMENT_MODES.map((m) => (
+                <button key={m.mode} type="button" onClick={() => setAddingSegMode(m.mode)}
+                  className={`px-2 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${addingSegMode === m.mode ? 'text-white' : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container'}`}
+                  style={addingSegMode === m.mode ? { background: m.hex } : undefined}>
+                  {m.emoji} {m.label}
+                </button>
+              ))}
+            </div>
+            <select value={addingSegDur} onChange={(e) => setAddingSegDur(parseInt(e.target.value, 10))}
+              className="text-[11px] font-semibold stitch-text-secondary bg-surface-container-low rounded-lg px-2 py-1.5 outline-none ring-1 ring-surface-container-high">
+              {SEGMENT_DURATIONS.map((d) => (<option key={d} value={d}>{d}m</option>))}
+            </select>
+            <button type="button" onClick={() => void addSegment()} className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline">
+              <Plus size={12} /> Add
+            </button>
+          </div>
+          <p className="text-[10px] stitch-text-secondary/80 mt-1.5 leading-snug">Queue different sessions across the block — they'll run in order. (Auto-start coming soon.)</p>
         </div>
 
         <button
@@ -1069,6 +1146,7 @@ export function TodayPlannerCard({
   // ── Time blocks ────────────────────────────────────────────────
   const [blocks,          setBlocks]          = useState<TimeBlock[]>([]);
   const [blockTaskCounts, setBlockTaskCounts] = useState<Record<string, number>>({});
+  const [blockSegments,   setBlockSegments]   = useState<Record<string, BlockSegment[]>>({});
   const [weekBlocks,      setWeekBlocks]      = useState<TimeBlock[]>([]);
   const [weekBlockCounts, setWeekBlockCounts] = useState<Record<string, { done: number; total: number }>>({});
   const [mutating,        setMutating]        = useState(false);
@@ -1113,6 +1191,7 @@ export function TodayPlannerCard({
       for (const [bid, arr] of Object.entries(m)) counts[bid] = arr.length;
       setBlockTaskCounts(counts);
     }).catch(() => {});
+    TimeBlockService.fetchBlockSegments(ids).then((m) => { if (alive) setBlockSegments(m); }).catch(() => {});
     return () => { alive = false; };
   }, [blocks]);
 
@@ -1670,6 +1749,7 @@ export function TodayPlannerCard({
                                 block={block}
                                 heightPx={spanH}
                                 taskCount={blockTaskCounts[block.id] ?? 0}
+                                segmentModes={(blockSegments[block.id] ?? []).map((s) => s.mode)}
                                 projectName={block.project_id ? projectNameById.get(block.project_id) : null}
                                 onToggle={handleToggle}
                                 onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
