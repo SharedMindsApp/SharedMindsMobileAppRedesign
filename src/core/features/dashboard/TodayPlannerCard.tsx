@@ -261,7 +261,7 @@ function nextFreeSlot(blocks: TimeBlock[], dayStart = DEFAULT_PLANNER_START, day
 // ── BlockCard ──────────────────────────────────────────────────────
 
 function BlockCard({
-  block, onToggle, onStart, onDelete, onEdit, projectName, heightPx,
+  block, onToggle, onStart, onDelete, onEdit, projectName, heightPx, taskCount = 0,
 }: {
   block: TimeBlock;
   onToggle: (b: TimeBlock) => void;
@@ -273,6 +273,8 @@ function BlockCard({
   /** When set, the block fills this height (so it spans its duration on the
    *  timeline) and its content top-aligns instead of vertically centering. */
   heightPx?: number;
+  /** Number of tasks attached to the block (badge). */
+  taskCount?: number;
 }) {
   const s    = BLOCK_STYLES[block.block_type];
   const done = !!block.completed_at;
@@ -303,6 +305,9 @@ function BlockCard({
             <span className="text-[10px] font-semibold stitch-text-secondary">· {block.duration_mins}m</span>
             {projectName && (
               <span className="text-[10px] font-bold stitch-text-secondary truncate">· {projectName}</span>
+            )}
+            {taskCount > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold stitch-text-secondary">· <Layers size={9} /> {taskCount}</span>
             )}
           </div>
         </button>
@@ -454,6 +459,28 @@ function BlockEditPopover({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const done = !!block.completed_at;
 
+  // Tasks attached to this block (micromanage what it contains).
+  const { state: { tasks } } = useCoreData();
+  const [attachedIds, setAttachedIds] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  useEffect(() => {
+    TimeBlockService.fetchBlockTaskIds([block.id]).then((m) => setAttachedIds(m[block.id] ?? [])).catch(() => {});
+  }, [block.id]);
+  const attachedTasks = tasks.filter((t) => attachedIds.includes(t.id));
+  const addableTasks = tasks.filter(
+    (t) => (t.status === 'active' || t.status === 'inbox')
+      && !attachedIds.includes(t.id)
+      && (!projectId || t.projectId === projectId),
+  );
+  async function attachTask(taskId: string) {
+    setAttachedIds((a) => [...a, taskId]); setPickerOpen(false);
+    try { await TimeBlockService.addTaskToBlock(block.id, taskId); } catch { /* ignore */ }
+  }
+  async function detachTask(taskId: string) {
+    setAttachedIds((a) => a.filter((x) => x !== taskId));
+    try { await TimeBlockService.removeTaskFromBlock(block.id, taskId); } catch { /* ignore */ }
+  }
+
   function handleSave() {
     if (!title.trim()) return;
     const opt = LENGTH_OPTIONS.find((o) => o.key === lengthKey) ?? LENGTH_OPTIONS[1];
@@ -518,6 +545,44 @@ function BlockEditPopover({
               <option value="">No project</option>
               {projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
             </select>
+          )}
+        </div>
+
+        {/* Tasks in this block */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase flex items-center gap-1.5"><Layers size={11} /> Tasks</p>
+            {addableTasks.length > 0 && (
+              <button type="button" onClick={() => setPickerOpen((o) => !o)} className="text-[11px] font-bold text-primary hover:underline">
+                {pickerOpen ? 'Close' : '+ Add task'}
+              </button>
+            )}
+          </div>
+
+          {attachedTasks.length > 0 ? (
+            <div className="space-y-1">
+              {attachedTasks.map((t) => (
+                <div key={t.id} className="flex items-center gap-2 rounded-lg bg-surface-container-low px-2.5 py-1.5">
+                  <Circle size={11} className="stitch-text-secondary shrink-0" />
+                  <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{t.title}</span>
+                  <button type="button" onClick={() => void detachTask(t.id)} aria-label="Remove" className="w-5 h-5 grid place-items-center rounded stitch-text-secondary hover:bg-surface-container"><X size={11} /></button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] stitch-text-secondary italic">Pull existing tasks into this block to plan it out.</p>
+          )}
+
+          {pickerOpen && (
+            <div className="mt-1.5 max-h-40 overflow-y-auto rounded-lg ring-1 ring-surface-container divide-y divide-surface-container/60">
+              {addableTasks.map((t) => (
+                <button key={t.id} type="button" onClick={() => void attachTask(t.id)}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-surface-container-low">
+                  <Plus size={11} className="text-primary shrink-0" />
+                  <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{t.title}</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -1003,6 +1068,7 @@ export function TodayPlannerCard({
 
   // ── Time blocks ────────────────────────────────────────────────
   const [blocks,          setBlocks]          = useState<TimeBlock[]>([]);
+  const [blockTaskCounts, setBlockTaskCounts] = useState<Record<string, number>>({});
   const [weekBlocks,      setWeekBlocks]      = useState<TimeBlock[]>([]);
   const [weekBlockCounts, setWeekBlockCounts] = useState<Record<string, { done: number; total: number }>>({});
   const [mutating,        setMutating]        = useState(false);
@@ -1036,6 +1102,20 @@ export function TodayPlannerCard({
   useEffect(() => { void reloadSessions(); }, [reloadSessions]);
 
   // Sessions on the day-view's selected day (parse YYYY-MM-DD as local).
+  // Attached-task counts for the day's blocks (shown as a badge on each block).
+  useEffect(() => {
+    const ids = blocks.map((b) => b.id);
+    if (ids.length === 0) { setBlockTaskCounts({}); return; }
+    let alive = true;
+    TimeBlockService.fetchBlockTaskIds(ids).then((m) => {
+      if (!alive) return;
+      const counts: Record<string, number> = {};
+      for (const [bid, arr] of Object.entries(m)) counts[bid] = arr.length;
+      setBlockTaskCounts(counts);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [blocks]);
+
   const daySessions = useMemo(() => {
     const [yy, mm, dd] = selectedDateStr.split('-').map(Number);
     const sel = new Date(yy, mm - 1, dd);
@@ -1589,6 +1669,7 @@ export function TodayPlannerCard({
                               <BlockCard
                                 block={block}
                                 heightPx={spanH}
+                                taskCount={blockTaskCounts[block.id] ?? 0}
                                 projectName={block.project_id ? projectNameById.get(block.project_id) : null}
                                 onToggle={handleToggle}
                                 onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}

@@ -102,4 +102,38 @@ export const TimeBlockService = {
       completed_at: block.completed_at ? null : new Date().toISOString(),
     });
   },
+
+  // ── Tasks attached to blocks ───────────────────────────────────────
+
+  /** Map of block id → attached task ids, for a set of blocks. */
+  async fetchBlockTaskIds(blockIds: string[]): Promise<Record<string, string[]>> {
+    if (blockIds.length === 0) return {};
+    const { data, error } = await supabase
+      .from('time_block_tasks')
+      .select('block_id, task_id, sort_order')
+      .in('block_id', blockIds)
+      .order('sort_order', { ascending: true });
+    if (error || !data) return {};
+    const out: Record<string, string[]> = {};
+    for (const r of data as any[]) (out[r.block_id] ??= []).push(r.task_id);
+    return out;
+  },
+
+  async addTaskToBlock(blockId: string, taskId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from('time_block_tasks')
+      .upsert({ block_id: blockId, task_id: taskId, user_id: user.id }, { onConflict: 'block_id,task_id' });
+    if (error) throw error;
+  },
+
+  async removeTaskFromBlock(blockId: string, taskId: string): Promise<void> {
+    const { error } = await supabase
+      .from('time_block_tasks')
+      .delete()
+      .eq('block_id', blockId)
+      .eq('task_id', taskId);
+    if (error) throw error;
+  },
 };
