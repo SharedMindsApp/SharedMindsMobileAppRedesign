@@ -53,8 +53,28 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
   next (additive + idempotent, today-onward by default), or adopt a curated
   starter preset by mapping its project slots to your real projects and
   naming it. Applying reloads the planner grid in place.
+- **Time blocks that fill their hours** — a block now spans its full duration
+  on the planner grid (a 9am–12pm block visually occupies all three hours
+  instead of a single slot), and covered hours hide their "add" affordance.
+- **Attach tasks + queue sessions inside a block** — the block editor now lets
+  you pull existing tasks into a block and queue multiple sessions within it
+  (e.g. Group for hour one → Solo for hour two → Match for hour three).
+  **Migrations required:** `20260530000150_time_block_tasks`,
+  `20260530000160_time_block_segments`.
+- **"Week commencing" on templates** — adopting a starter template now lets you
+  pick whether it starts **this week or next**, and materialises the blocks
+  into that week on create so they actually appear then.
 
 ### Changed
+- **Video only spins up when someone wants it** — Daily.co rooms used to be
+  created the moment the first person opened a session, so a solo waiter sat
+  in an empty live room burning minutes. Now the room is deferred until
+  there's real intent, gated per mode: **1-on-1 / match** shows a free local
+  camera preview + a **"Share my camera"** button (one person opting in starts
+  the call; the other joins camera-off); **group** sits everyone in a lobby
+  with their own preview until the **host** taps **"Start session"**;
+  **body-double** still auto-starts once a second person is present. Signalled
+  over the existing realtime presence channel — no migration, no new backend.
 - **Match me now is always 1-on-1** — the declare modal no longer shows the
   Solo / 1-on-1 / Group picker (or the solo-only body-double toggle, or the
   redundant "open the door" switch) when started from Match me now. You just
@@ -104,6 +124,10 @@ explicit opt-in to cross the v1.0.0 boundary on launch day.
 - **Week planner project tags** — fixed a scope bug where the week grid
   couldn't resolve project names for time blocks (the lookup map is now
   threaded into the week timeline).
+- **Leaving a video call threw instead of exiting** — the custom Daily UI's
+  Leave button (and the "left-meeting" handler) referenced an undeclared
+  variable left over from the old Jitsi component, so leaving errored instead
+  of navigating you out. Now wired to the correct leave callback.
 
 
 ## [v0.6.0] — 2026-05-28
