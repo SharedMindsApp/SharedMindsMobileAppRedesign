@@ -13,6 +13,7 @@ import type { WizardId } from './SessionWizards/types';
 import { PresenceGatedMeeting } from './PresenceGatedMeeting';
 import { CameraGatedMeeting } from './CameraGatedMeeting';
 import { HostGatedMeeting } from './HostGatedMeeting';
+import { useWakeLock } from '../../../lib/useWakeLock';
 import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
@@ -1014,6 +1015,11 @@ export function ActiveSessionPage() {
   // the clock hits the start time it marks the row active and re-fetches.
   const isPreStart = session?.status === 'scheduled';
   const [waitingRoomDismissed, setWaitingRoomDismissed] = useState(false);
+
+  // Keep the phone screen awake for the duration of a live session (works
+  // with or without the camera) — once it's started and not in the
+  // pre-start lobby. Released automatically when the user leaves the page.
+  useWakeLock(!!session && !isPreStart);
 
   // When the parent of the waiting room signals "session started", we flip
   // the local copy to status='active' so DailyMeeting takes over without
