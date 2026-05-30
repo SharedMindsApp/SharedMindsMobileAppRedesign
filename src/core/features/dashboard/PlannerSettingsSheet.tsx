@@ -88,7 +88,7 @@ export function PlannerSettingsSheet({
   const [msg, setMsg] = useState<string | null>(null);
 
   // Adopt-a-starter flow. null = browsing the list.
-  const [adopt, setAdopt] = useState<{ starter: TimeBlockStarter; name: string; slots: Record<number, string | null> } | null>(null);
+  const [adopt, setAdopt] = useState<{ starter: TimeBlockStarter; name: string; slots: Record<number, string | null>; weekStart: Date } | null>(null);
   const [saving, setSaving] = useState(false);
   // Template-editor view. null = browsing the list.
   const [editing, setEditing] = useState<TimeBlockTemplate | null>(null);
@@ -131,7 +131,7 @@ export function PlannerSettingsSheet({
   function startAdopt(starter: TimeBlockStarter) {
     const slots: Record<number, string | null> = {};
     for (let s = 1; s <= starter.projectSlots; s++) slots[s] = projects[s - 1]?.id ?? null;
-    setAdopt({ starter, name: starter.name, slots });
+    setAdopt({ starter, name: starter.name, slots, weekStart: mondayOf(new Date()) });
   }
 
   async function confirmAdopt() {
@@ -139,6 +139,11 @@ export function PlannerSettingsSheet({
     setSaving(true);
     try {
       const tpl = await TimeBlockTemplateService.adoptStarter(adopt.starter, adopt.name.trim() || adopt.starter.name, adopt.slots);
+      // Materialise it into the chosen week so it actually starts then.
+      try {
+        await TimeBlockTemplateService.applyToWeek(tpl.id, adopt.weekStart);
+        onApplied();
+      } catch (e) { console.warn('[Templates] apply on create failed:', e); }
       setAdopt(null);
       await reload();
       // Drop straight into the editor so the preset is theirs to customise.
@@ -234,6 +239,27 @@ export function PlannerSettingsSheet({
               </div>
             )}
 
+            {/* Week commencing — when the template's blocks start */}
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest stitch-text-secondary mb-1.5">Week commencing</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ key: 'this', mon: thisMon, label: 'This week' }, { key: 'next', mon: nextMon, label: 'Next week' }].map((opt) => {
+                  const active = adopt.weekStart.getTime() === opt.mon.getTime();
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setAdopt({ ...adopt, weekStart: opt.mon })}
+                      className={`flex flex-col items-start px-3 py-2 rounded-xl ring-1 transition-all ${active ? 'bg-primary/10 ring-primary/40' : 'bg-surface-container-low ring-surface-container hover:bg-surface-container'}`}
+                    >
+                      <span className={`text-xs font-bold ${active ? 'text-primary' : 'stitch-text-primary'}`}>{opt.label}</span>
+                      <span className="text-[10px] stitch-text-secondary tabular-nums">Mon {weekLabel(opt.mon)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={confirmAdopt}
@@ -241,7 +267,7 @@ export function PlannerSettingsSheet({
               className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-primary text-white text-sm font-bold active:scale-[0.98] transition-transform disabled:opacity-50"
             >
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} strokeWidth={3} />}
-              Create & customise
+              Create & start {adopt.weekStart.getTime() === thisMon.getTime() ? 'this week' : 'next week'}
             </button>
           </div>
         ) : (
