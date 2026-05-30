@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, Trophy, Clock, AlertTriangle, Bell, TrendingUp, ArrowRight, Home, CheckCircle2, CircleDashed, CloudOff, Zap, RotateCcw, Flame, Sparkles } from 'lucide-react';
-import { getFocusSessionSummary, endFocusSession } from '../../lib/sessions/focus';
-import { endCommunitySession, fetchSessionOutcomes, type DebriefOutcome } from '../../core/services/SessionService';
+import { getFocusSessionSummary } from '../../lib/sessions/focus';
+import { endCommunitySession, markSessionEnded, fetchSessionOutcomes, type DebriefOutcome } from '../../core/services/SessionService';
 import { DeclareSessionModal } from '../../core/features/sessions/DeclareSessionModal';
 import { supabase } from '../../lib/supabase';
 import type { FocusSessionSummary, SessionOutcome } from '../../lib/sessions/focusTypes';
@@ -76,7 +76,7 @@ export function SessionSummaryPage() {
       const sessionSummary = await getFocusSessionSummary(id);
 
       if (!sessionSummary || !sessionSummary.session) {
-        navigate('/guardrails/dashboard');
+        navigate('/home');
         return;
       }
 
@@ -86,11 +86,13 @@ export function SessionSummaryPage() {
       }
 
       if (sessionSummary.session.status === 'active' || sessionSummary.session.status === 'paused') {
-        // For community sessions (session_goal set), don't call endFocusSession —
-        // endCommunitySession will handle status when outcome is submitted.
-        // For legacy guardrails sessions, end as before.
+        // For community sessions (session_goal set), endCommunitySession
+        // handles status when the outcome is submitted. For goal-less
+        // sessions, finalize status here with the current schema-safe path
+        // (markSessionEnded) — the old endFocusSession wrote to retired
+        // guardrails tables and 406'd.
         if (!sessionSummary.session.session_goal) {
-          await endFocusSession(id);
+          await markSessionEnded(id);
         }
         const updatedSummary = await getFocusSessionSummary(id);
         setSummary(updatedSummary);
@@ -99,7 +101,7 @@ export function SessionSummaryPage() {
       }
     } catch (error) {
       console.error('Failed to load session summary:', error);
-      navigate('/guardrails/dashboard');
+      navigate('/home');
     } finally {
       setLoading(false);
     }
