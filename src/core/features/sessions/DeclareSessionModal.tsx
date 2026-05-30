@@ -173,6 +173,9 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
     if (!startOpenToMatch) return;
     fetchMatchWaitStats().then(setMatchWait).catch(() => { /* non-fatal */ });
   }, [startOpenToMatch]);
+  /** Purpose for match-me-now doors — plan/connect/meditate any length, work
+   *  45+ only. Drives framing + match pairing. Default 'plan'. */
+  const [intent, setIntent] = useState<SessionIntent>(initialIntent ?? 'plan');
   // If they pick 'work' then shorten below the work threshold, fall back to
   // 'plan' so the purpose stays valid.
   useEffect(() => {
@@ -190,9 +193,6 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [submitting, setSubmitting] = useState(false);
   /** What this session is FOR — drives the mood axis. Defaults to 'do'. */
   const [sessionKind, setSessionKind] = useState<SessionKind>('do');
-  /** Purpose for match-me-now doors — plan/connect/meditate any length, work
-   *  45+ only. Drives framing + match pairing. Default 'plan'. */
-  const [intent, setIntent] = useState<SessionIntent>(initialIntent ?? 'plan');
   /** Optional "before" mood, captured for immediate sessions only (a
    *  scheduled session's start mood is captured when it actually begins). */
   const [startMood, setStartMood] = useState<string | null>(null);
