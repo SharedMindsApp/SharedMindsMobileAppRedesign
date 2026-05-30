@@ -139,6 +139,7 @@ export async function syncQueuedActions(): Promise<SyncResult> {
 
   let syncedCount = 0;
   let failedActionId: string | undefined;
+  let failedActionType: string | undefined;
   let error: string | undefined;
 
   // Process actions sequentially
