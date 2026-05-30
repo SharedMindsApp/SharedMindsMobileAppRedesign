@@ -14,6 +14,7 @@ import { PresenceGatedMeeting } from './PresenceGatedMeeting';
 import { CameraGatedMeeting } from './CameraGatedMeeting';
 import { HostGatedMeeting } from './HostGatedMeeting';
 import { useWakeLock } from '../../../lib/useWakeLock';
+import { showToast } from '../../../components/Toast';
 import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
@@ -707,7 +708,11 @@ export function ActiveSessionPage() {
       // Best-effort — the row was at least flagged via the outcome insert
     }
     clearSession();
-    navigate(`/session/${session.id}/summary`, { replace: true });
+    // No standalone summary page — just drop straight back Home with a
+    // light confirmation. (The old guardrails Focus-Score/drift summary was
+    // retired; it showed nothing meaningful for coworking.)
+    showToast('success', 'Nice work — session complete 🎉');
+    navigate('/home', { replace: true });
   }, [session, ending, navigate, clearSession]);
 
   const currentGoal = sessionGoal ?? session?.session_goal ?? '';

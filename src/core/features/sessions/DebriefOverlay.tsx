@@ -183,17 +183,18 @@ export function DebriefOverlay({
       if (taskId) {
         await TaskService.applyOutcomeToTask(taskId, outcome);
       }
-      // Solo sessions: no peers to wait for. Finalize the moment the
-      // user picks an outcome so the timer surface auto-dismisses
-      // straight to the summary page.
-      if (skipWait && !finalizedRef.current) {
-        finalizedRef.current = true;
-        onFinalized();
-      }
     } catch (err) {
       console.error('[Debrief] submit failed:', err);
     } finally {
       setSubmitting(false);
+      // Solo sessions: no peers to wait for. Finalize the moment the user
+      // picks an outcome so the session ends immediately — even if the
+      // outcome write failed (otherwise it'd silently fall into the 60s
+      // "waiting for everyone" countdown and feel stuck).
+      if (skipWait && !finalizedRef.current) {
+        finalizedRef.current = true;
+        onFinalized();
+      }
     }
   }
 

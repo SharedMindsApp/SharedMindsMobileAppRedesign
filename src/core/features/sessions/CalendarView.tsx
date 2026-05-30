@@ -62,6 +62,7 @@ import {
 } from '../../services/SessionService';
 import { lookupMood, kindMeta, type SessionKind } from '../../../lib/sessionMood';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
+import { showToast } from '../../../components/Toast';
 
 // ── Grid constants ──────────────────────────────────────────────
 
@@ -323,7 +324,8 @@ export function CalendarView() {
       // Best-effort — navigate to summary anyway so the user can pick an outcome
     }
     clearSession();
-    navigate(`/session/${activeSession.id}/summary`);
+    showToast('success', 'Nice work — session complete 🎉');
+    navigate('/home');
   }
 
   const { sessions: active } = useCommunitySessionsSubscription();

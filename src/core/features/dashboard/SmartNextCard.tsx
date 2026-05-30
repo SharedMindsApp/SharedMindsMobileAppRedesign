@@ -23,7 +23,8 @@ import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask, CoreProject } from '../../data/CoreDataContext';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
-import type { ScheduledSessionWithProfile } from '../../services/SessionService';
+import { markSessionEnded, type ScheduledSessionWithProfile } from '../../services/SessionService';
+import { showToast } from '../../../components/Toast';
 
 type Suggestion =
   | { kind: 'active'; sessionId: string; goal: string | null; secondsLeft: number; duration: number }
@@ -127,7 +128,7 @@ export function SmartNextCard({
   onSchedule: () => void;
 }) {
   const navigate = useNavigate();
-  const { activeSession, sessionGoal, timerSecondsRemaining } = useFocusSession();
+  const { activeSession, sessionGoal, timerSecondsRemaining, clearSession } = useFocusSession();
   const { state: { projects, tasks, activeProjectId } } = useCoreData();
 
   const suggestion = useMemo(
@@ -169,7 +170,11 @@ export function SmartNextCard({
             </button>
             <button
               type="button"
-              onClick={() => navigate(`/session/${suggestion.sessionId}/summary`)}
+              onClick={async () => {
+                try { await markSessionEnded(suggestion.sessionId); } catch { /* best-effort */ }
+                clearSession();
+                showToast('success', 'Nice work — session complete 🎉');
+              }}
               className="shrink-0 flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-bold px-3 py-2 rounded-full transition-all active:scale-95"
             >
               <StopCircle size={13} /> End
