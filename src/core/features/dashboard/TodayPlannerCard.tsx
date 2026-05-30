@@ -261,7 +261,7 @@ function nextFreeSlot(blocks: TimeBlock[], dayStart = DEFAULT_PLANNER_START, day
 // ── BlockCard ──────────────────────────────────────────────────────
 
 function BlockCard({
-  block, onToggle, onStart, onDelete, onEdit, projectName,
+  block, onToggle, onStart, onDelete, onEdit, projectName, heightPx,
 }: {
   block: TimeBlock;
   onToggle: (b: TimeBlock) => void;
@@ -270,17 +270,22 @@ function BlockCard({
   /** Tap the body to edit the block (title, length, type, project). */
   onEdit:   (b: TimeBlock) => void;
   projectName?: string | null;
+  /** When set, the block fills this height (so it spans its duration on the
+   *  timeline) and its content top-aligns instead of vertically centering. */
+  heightPx?: number;
 }) {
   const s    = BLOCK_STYLES[block.block_type];
   const done = !!block.completed_at;
+  const spanned = typeof heightPx === 'number';
 
   return (
     <div
-      className={`relative rounded-xl pl-3 pr-2 py-2 mb-1 ring-1 group transition-all overflow-hidden ${s.bg} ${s.border} ${done ? 'opacity-55' : 'hover:shadow-md hover:-translate-y-px'}`}
+      className={`relative rounded-xl pl-3 pr-2 py-2 ring-1 group transition-all overflow-hidden ${spanned ? '' : 'mb-1'} ${s.bg} ${s.border} ${done ? 'opacity-55' : 'hover:shadow-md hover:-translate-y-px'}`}
+      style={spanned ? { height: heightPx } : undefined}
     >
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${s.stripe}`} />
 
-      <div className="flex items-center gap-2.5 pl-1">
+      <div className={`flex gap-2.5 pl-1 ${spanned ? 'items-start' : 'items-center'}`}>
         <button type="button" onClick={() => onToggle(block)} className="shrink-0">
           {done
             ? <CheckCircle2 size={16} className="text-emerald-600" strokeWidth={2.5} />
@@ -1548,6 +1553,13 @@ export function TodayPlannerCard({
                   const isAdding   = addingAtHour === hour;
                   const hasBlocks  = blocksHere.length > 0;
                   const sessHere   = daySessions.filter((ps) => ps.startsAt.getHours() === hour);
+                  // A block that started in an earlier hour and spans into this
+                  // one "covers" it — so we don't offer add-here and the spanning
+                  // block (rendered at its start hour) visually fills it.
+                  const isCovered  = blocks.some((b) => {
+                    const [bh, bm] = b.start_time.split(':').map((n) => parseInt(n, 10));
+                    return bh < hour && (bh * 60 + (bm || 0) + b.duration_mins) > hour * 60;
+                  });
 
                   return (
                     <div
@@ -1568,17 +1580,24 @@ export function TodayPlannerCard({
 
                       {/* Lane */}
                       <div className="flex-1 relative pl-2 border-l border-surface-container-high/40">
-                        {blocksHere.map((block) => (
-                          <BlockCard
-                            key={block.id}
-                            block={block}
-                            projectName={block.project_id ? projectNameById.get(block.project_id) : null}
-                            onToggle={handleToggle}
-                            onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
-                            onDelete={handleDelete}
-                            onEdit={(b) => setEditingBlock(b)}
-                          />
-                        ))}
+                        {/* Blocks span their full duration — positioned absolutely
+                            so a 9–12 (180m) block fills three hour rows. */}
+                        {blocksHere.map((block) => {
+                          const spanH = Math.max(HOUR_PX - 6, (block.duration_mins / 60) * HOUR_PX - 6);
+                          return (
+                            <div key={block.id} className="absolute left-2 right-0 top-0 z-10">
+                              <BlockCard
+                                block={block}
+                                heightPx={spanH}
+                                projectName={block.project_id ? projectNameById.get(block.project_id) : null}
+                                onToggle={handleToggle}
+                                onStart={(b) => onStartSession(b.title, nearestDuration(b.duration_mins))}
+                                onDelete={handleDelete}
+                                onEdit={(b) => setEditingBlock(b)}
+                              />
+                            </div>
+                          );
+                        })}
                         {/* Logged + booked sessions for this hour (read-only), tinted by project */}
                         {sessHere.map((ps) => {
                           const completed = ps.status === 'completed';
@@ -1619,7 +1638,7 @@ export function TodayPlannerCard({
                           />
                         )}
 
-                        {!isAdding && !hasBlocks && !isPast && (
+                        {!isAdding && !hasBlocks && !isPast && !isCovered && (
                           <button
                             type="button"
                             onClick={() => setAddingAtHour(hour)}
