@@ -12,6 +12,7 @@ import type { FocusSession, PlannedWizard } from '../../../lib/sessions/focusTyp
 import type { WizardId } from './SessionWizards/types';
 import { PresenceGatedMeeting } from './PresenceGatedMeeting';
 import { CameraGatedMeeting } from './CameraGatedMeeting';
+import { HostGatedMeeting } from './HostGatedMeeting';
 import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
@@ -1532,18 +1533,17 @@ export function ActiveSessionPage() {
               onLeave={() => navigate('/sessions')}
             />
           ) : (
-            /* Group coworking: auto-on the moment a 2nd person is present
-               (preserves the ambient drop-in feel). */
-            <PresenceGatedMeeting
+            /* Group: everyone waits in a lobby with their own camera preview;
+               the host activates the room and the group joins together. */
+            <HostGatedMeeting
               currentUserId={user?.id ?? session.id}
-              lobby={() => (
-                <VideoLobby goal={currentGoal} secondsRemaining={timerSecondsRemaining} />
-              )}
+              isHost={isModerator}
+              goal={currentGoal}
+              secondsRemaining={timerSecondsRemaining}
               roomName={roomName}
               displayName={profile?.display_name ?? 'Member'}
               isModerator={isModerator}
               startAudioMuted={isQuiet || isSilentVibe}
-              startVideoMuted={false}
               avatarVerified={profile?.avatar_status === 'approved'}
               focusSessionId={session.id}
               muteAudioSignal={muteAudioSignal}
