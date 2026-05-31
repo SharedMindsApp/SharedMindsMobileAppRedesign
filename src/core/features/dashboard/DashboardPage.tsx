@@ -56,7 +56,6 @@ import { DayZeroWelcome } from './DayZeroWelcome';
 import { TodayPlannerCard } from './TodayPlannerCard';
 import { UpcomingSessionCountdown } from './UpcomingSessionCountdown';
 import { UpcomingPublicSessionsStrip } from './UpcomingPublicSessionsStrip';
-import { LiveNowDropInStrip } from './LiveNowDropInStrip';
 import { OnboardingNudges } from './OnboardingNudges';
 import { ProfileCompletionModal } from './ProfileCompletionModal';
 import { SkillsPromptModal } from './SkillsPromptModal';
@@ -687,6 +686,7 @@ export function DashboardPage() {
       <HomeHero
         firstName={firstName}
         liveSessions={liveSessions}
+        excludeSessionId={activeSession?.id}
         onSchedule={() => openDeclare()}
         onMatch={handleMatchMeNow}
         onFind={() => setFindOpen(true)}
@@ -752,17 +752,8 @@ export function DashboardPage() {
       {/* Re-entry is auto-only now (morning login, post-break, session-soon) —
           no passive "what should I do?" button. See the trigger effect above. */}
 
-      {/* Live-now drop-in strip — surfaces open-to-match sessions on
-          the most-visited page so users passively notice when someone's
-          working with the door open. Hides itself entirely when:
-            • the user is already in a session (activeSession set), or
-            • when there are no open sessions to show.
-          Renders for both day-zero + returning users — discovery is
-          equally valuable across both states. */}
-      <LiveNowDropInStrip
-        excludeSessionId={activeSession?.id}
-        hidden={!!activeSession}
-      />
+      {/* Open "drop-in" doors are now merged into the HomeHero live list
+          (with Drop-in buttons) — single live surface, no separate strip. */}
 
       {/* Post-first-session nudges: "Plan a project" + "Complete your
           profile". Gated on sessionsCompleted >= 1 inside the component

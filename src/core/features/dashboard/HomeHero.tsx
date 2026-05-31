@@ -22,7 +22,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Search, Zap, Loader2, Clock, Users, UserPlus, User, ArrowRight } from 'lucide-react';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
-import type { ScheduledSessionWithProfile } from '../../services/SessionService';
+import { fetchOpenSessions, claimOpenSession, type ScheduledSessionWithProfile } from '../../services/SessionService';
+import { supabase } from '../../../lib/supabase';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -68,9 +69,13 @@ export function HomeHero({
   nextUpcoming,
   joinableSession,
   onJoin,
+  excludeSessionId,
 }: {
   firstName: string;
   liveSessions: CommunitySession[];
+  /** The viewer's own active session id, so their own open door isn't
+   *  listed as something to drop into. */
+  excludeSessionId?: string;
   /** Opens DeclareSessionModal — picks mode + time for a future session. */
   onSchedule: () => void;
   /** "Match me now" — instant 1-on-1 matchmaking. Caller handles the
@@ -104,6 +109,39 @@ export function HomeHero({
 }) {
   const navigate = useNavigate();
 
+  // ── Open "drop-in" doors (open-to-match solo sessions) ──────────────
+  // These are NOT in liveSessions (which excludes solo), so the hero fetches
+  // them itself and folds them into the live list with a "Drop in" button —
+  // a single live surface (replaces the old separate drop-in strip).
+  const [openDoors, setOpenDoors] = useState<CommunitySession[]>([]);
+  const [joining, setJoining] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      fetchOpenSessions()
+        .then((d) => { if (alive) setOpenDoors(d.filter((s) => s.id !== excludeSessionId)); })
+        .catch(() => {});
+    };
+    refresh();
+    const channel = supabase
+      .channel('home-hero-open-doors')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'focus_sessions' }, refresh)
+      .subscribe();
+    const poll = window.setInterval(refresh, 15_000); // fallback if realtime lags
+    return () => { alive = false; supabase.removeChannel(channel); window.clearInterval(poll); };
+  }, [excludeSessionId]);
+
+  async function handleDropIn(sessionId: string) {
+    if (joining) return;
+    setJoining(sessionId);
+    try {
+      const claimed = await claimOpenSession(sessionId);
+      if (claimed) navigate(`/session/${claimed.id}`);
+      else setOpenDoors((prev) => prev.filter((s) => s.id !== sessionId)); // slot gone
+    } catch { /* swallow — stale card just disappears on next refresh */ }
+    finally { setJoining(null); }
+  }
+
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', {
     weekday: 'long',
@@ -111,9 +149,14 @@ export function HomeHero({
     month: 'long',
   });
 
-  // Show up to 3 sessions in the panel; note the overflow count
-  const visible = liveSessions.slice(0, 3);
-  const overflow = liveSessions.length - visible.length;
+  // Merge open doors (droppable) + live sessions (focusing), de-duped.
+  const allLive: CommunitySession[] = [
+    ...openDoors,
+    ...liveSessions.filter((s) => !openDoors.some((d) => d.id === s.id)),
+  ];
+  // Show up to 3 in the panel; note the overflow count
+  const visible = allLive.slice(0, 3);
+  const overflow = allLive.length - visible.length;
 
   return (
     /* Negative margins cancel Layout's px-3 sm:px-4 md:px-6 lg:px-8 so
@@ -166,11 +209,11 @@ export function HomeHero({
                   liveSessions.length > 0 ? 'hover:opacity-80' : ''
                 }`}
               >
-                {liveSessions.length > 0 ? (
+                {allLive.length > 0 ? (
                   <>
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                     <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">
-                      {liveSessions.length} focusing right now
+                      {allLive.length} live now
                     </span>
                     <ArrowRight size={11} className="text-emerald-300/70 ml-auto" />
                   </>
@@ -215,8 +258,19 @@ export function HomeHero({
                         </p>
                       </div>
 
-                      {/* Join button (only for sessions with a join code) */}
-                      {s.join_code && (
+                      {/* Drop in (open-to-match door) takes priority; else
+                          Join (sessions with a join code). */}
+                      {s.open_to_match ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDropIn(s.id)}
+                          disabled={joining === s.id}
+                          className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-950 bg-emerald-400 hover:bg-emerald-300 active:scale-95 px-2.5 py-1 rounded-lg transition-all disabled:opacity-60"
+                        >
+                          {joining === s.id ? <Loader2 size={11} className="animate-spin" /> : null}
+                          Drop in
+                        </button>
+                      ) : s.join_code ? (
                         <button
                           type="button"
                           onClick={() => navigate(`/join/${s.join_code}`)}
@@ -224,7 +278,7 @@ export function HomeHero({
                         >
                           Join
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   ))}
                 </div>
