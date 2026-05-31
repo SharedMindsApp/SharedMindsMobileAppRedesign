@@ -42,6 +42,12 @@ export interface CameraGatedMeetingProps extends Omit<DailyMeetingProps, 'startV
   currentUserId: string;
   /** People required before video can start. Default 2. */
   minPeers?: number;
+  /** When true, connect immediately (bypass the "Share my camera" gate).
+   *  Used once a 1-on-1 is actually matched — both people explicitly paired
+   *  up to co-work, so we join the room straight away (camera-off by default;
+   *  they can share via the in-call controls). The share-gate only makes
+   *  sense while waiting alone. */
+  connectNow?: boolean;
   /** Declared goal, shown in the lobby. */
   goal: string;
   /** Live countdown seconds, shown in the lobby. */
@@ -51,6 +57,7 @@ export interface CameraGatedMeetingProps extends Omit<DailyMeetingProps, 'startV
 export function CameraGatedMeeting({
   currentUserId,
   minPeers = 2,
+  connectNow = false,
   goal,
   secondsRemaining,
   ...daily
@@ -95,6 +102,12 @@ export function CameraGatedMeeting({
       streamRef.current = null;
     };
   }, []);
+
+  // Matched → connect immediately (the partner explicitly paired up; no need
+  // to wait for a manual "Share my camera" tap).
+  useEffect(() => {
+    if (connectNow && !openRef.current) setOpen(true);
+  }, [connectNow]);
 
   // Attach the preview stream to the <video> element.
   useEffect(() => {

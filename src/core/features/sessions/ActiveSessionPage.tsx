@@ -1524,10 +1524,12 @@ export function ActiveSessionPage() {
       ) : (
         <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
           {isOneOnOne ? (
-            /* 1-on-1 / match: local preview + "Share my camera" — Daily only
-               spins up once someone present opts into video. */
+            /* 1-on-1 / match: while waiting alone, a local preview +
+               "Share my camera" gate (no Daily). Once actually matched, both
+               paired up to co-work — connect immediately (connectNow). */
             <CameraGatedMeeting
               currentUserId={user?.id ?? session.id}
+              connectNow={!!session.partner_user_id}
               goal={currentGoal}
               secondsRemaining={timerSecondsRemaining}
               roomName={roomName}
