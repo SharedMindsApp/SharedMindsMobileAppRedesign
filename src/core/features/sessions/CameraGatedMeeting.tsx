@@ -106,10 +106,21 @@ export function CameraGatedMeeting({
     };
   }, []);
 
+  // Stop the local preview camera. CRITICAL on iOS/iPad: the camera is an
+  // exclusive resource — if the lobby preview is still holding it, Daily
+  // can't acquire it and your video silently never turns on. So we release
+  // it synchronously the moment we commit to connecting (before Daily mounts),
+  // not just via the post-render effect below.
+  const releasePreview = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setPreviewStream(null);
+  };
+
   // Matched → connect immediately (the partner explicitly paired up; no need
   // to wait for a manual "Share my camera" tap).
   useEffect(() => {
-    if (connectNow && !openRef.current) setOpen(true);
+    if (connectNow && !openRef.current) { releasePreview(); setOpen(true); }
   }, [connectNow]);
 
   // Attach the preview stream to the <video> element.
@@ -142,6 +153,7 @@ export function CameraGatedMeeting({
       // Open once 2+ present AND (someone wants video, OR nobody has a camera
       // so there's nothing to wait on).
       if (keys.length >= minPeers && (anySharing || !anyCam) && !openRef.current) {
+        releasePreview();
         setOpen(true);
       }
     };
@@ -172,8 +184,9 @@ export function CameraGatedMeeting({
     sharedRef.current = true;
     // Broadcast intent; peers (and we) re-evaluate the open condition.
     channelRef.current?.track({ user_id: currentUserId, sharing: true, hasCam: hasCamRef.current });
-    // If a peer is already here, open immediately for us too.
-    if (presentCount >= minPeers) setOpen(true);
+    // If a peer is already here, open immediately for us too — releasing the
+    // preview camera first so Daily can acquire it (iOS exclusive-camera).
+    if (presentCount >= minPeers) { releasePreview(); setOpen(true); }
   }
 
   if (open) {

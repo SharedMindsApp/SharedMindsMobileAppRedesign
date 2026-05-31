@@ -93,13 +93,15 @@ export function HostGatedMeeting({
     if (videoRef.current && previewStream) videoRef.current.srcObject = previewStream;
   }, [previewStream]);
 
-  // Release the camera the instant we open Daily, so Daily can acquire it.
-  useEffect(() => {
-    if (!open) return;
+  // Release the local preview camera. Synchronous so iOS/iPad (exclusive
+  // camera) frees it before Daily tries to acquire it — otherwise video
+  // silently never turns on. Backed up by the open-effect below.
+  const releasePreview = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setPreviewStream(null);
-  }, [open]);
+  };
+  useEffect(() => { if (open) releasePreview(); }, [open]);
 
   // ── Presence channel: headcount + "has the host started?" ─────────────────
   useEffect(() => {
@@ -113,7 +115,7 @@ export function HostGatedMeeting({
       const keys = Object.keys(state);
       setPresentCount(keys.length);
       const started = keys.some((k) => (state[k] ?? []).some((e) => e?.started));
-      if (started && !openRef.current) setOpen(true);
+      if (started && !openRef.current) { releasePreview(); setOpen(true); }
     };
 
     channel
