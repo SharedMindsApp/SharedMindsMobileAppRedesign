@@ -16,7 +16,6 @@ import { HostGatedMeeting } from './HostGatedMeeting';
 import { useWakeLock } from '../../../lib/useWakeLock';
 import { showToast } from '../../../components/Toast';
 import { SessionChat } from './SessionChat';
-import { MessageSquare } from 'lucide-react';
 import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
@@ -174,9 +173,6 @@ export function ActiveSessionPage() {
   // Debrief is shown when the user clicks End OR the timer reaches 0.
   // It overlays the live video; only after it finalizes do we navigate.
   const [showDebrief, setShowDebrief] = useState(false);
-  // In-session chat (Zoom-style ephemeral panel) — non-solo sessions only.
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatUnread, setChatUnread] = useState(0);
   // Host-abandonment takeover (Option A): when the host disappears from the
   // session's realtime presence for a grace period, the remaining partner is
   // offered to take over as host (which re-opens the door for a new match).
@@ -1236,24 +1232,6 @@ export function ActiveSessionPage() {
             </div>
           )}
 
-          {/* In-session chat toggle (non-solo). Badge shows unread while closed. */}
-          {!isSolo && (
-            <button
-              type="button"
-              onClick={() => setChatOpen((v) => !v)}
-              title="Session chat"
-              aria-label="Session chat"
-              className="relative w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 grid place-items-center text-white/80 hover:text-white transition-colors"
-            >
-              <MessageSquare size={14} />
-              {chatUnread > 0 && !chatOpen && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold grid place-items-center leading-none">
-                  {chatUnread > 9 ? '9+' : chatUnread}
-                </span>
-              )}
-            </button>
-          )}
-
           {/* Minimize — keeps the session running in the background as
               a floating pill (FloatingTimerWidget in Layout) so the user
               can plan their next session, edit a project, etc. without
@@ -1892,9 +1870,6 @@ export function ActiveSessionPage() {
           currentUserId={user.id}
           displayName={profile?.display_name ?? 'Member'}
           avatarUrl={profile?.avatar_url ?? null}
-          open={chatOpen}
-          onClose={() => setChatOpen(false)}
-          onUnreadChange={setChatUnread}
         />
       )}
 
