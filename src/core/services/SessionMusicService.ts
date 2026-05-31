@@ -79,6 +79,37 @@ function publicUrlFor(filePath: string): string {
   return data.publicUrl;
 }
 
+/**
+ * Make a track name display-ready. A human title (it has a space, e.g.
+ * "Raga Dawn Halo") is trusted as-is. A slug / filename
+ * ("zen/raga-dawn-halo.mp3" or "raga-dawn-halo") is stripped of its folder
+ * + extension, de-hyphenated, and Title-Cased → "Raga Dawn Halo". Idempotent
+ * and safe for apostrophes (those titles already contain spaces, so they're
+ * returned untouched).
+ */
+export function prettifyTrackTitle(raw: string | null | undefined): string {
+  const input = (raw ?? '').trim();
+  if (!input) return 'Untitled';
+  // Strip any folder prefix + file extension (in case a file_path slips in).
+  const base = input.split('/').pop()!.replace(/\.[a-z0-9]+$/i, '');
+  // Already a human title (contains a space) → trust it verbatim.
+  if (base.includes(' ')) return base;
+  // Slug → words + Title Case.
+  return base
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+/** Map a raw DB row → SessionTrack with a public URL + display-ready title. */
+function toTrack(row: Record<string, unknown>): SessionTrack {
+  return {
+    ...(row as Omit<SessionTrack, 'url' | 'title'>),
+    title: prettifyTrackTitle((row.title as string) || (row.file_path as string)),
+    url: publicUrlFor(row.file_path as string),
+  } as SessionTrack;
+}
+
 export const SessionMusicService = {
   /**
    * List all active tracks in a category, ordered by sort_weight DESC. The
@@ -95,10 +126,7 @@ export const SessionMusicService = {
       console.error('[SessionMusicService] listActiveTracks', error);
       return [];
     }
-    return (data ?? []).map((row: any) => ({
-      ...row,
-      url: publicUrlFor(row.file_path),
-    })) as SessionTrack[];
+    return (data ?? []).map(toTrack);
   },
 
   /**
@@ -193,7 +221,7 @@ export const SessionMusicService = {
       .eq('id', id)
       .maybeSingle();
     if (error || !data) return null;
-    return { ...data, url: publicUrlFor(data.file_path) } as SessionTrack;
+    return toTrack(data);
   },
 
   /**
@@ -211,10 +239,7 @@ export const SessionMusicService = {
       console.error('[SessionMusicService] listAllActiveTracks', error);
       return [];
     }
-    return (data ?? []).map((row: any) => ({
-      ...row,
-      url: publicUrlFor(row.file_path),
-    })) as SessionTrack[];
+    return (data ?? []).map(toTrack);
   },
 };
 
