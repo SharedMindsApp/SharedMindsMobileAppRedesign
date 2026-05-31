@@ -10,9 +10,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useDaily, useLocalParticipant, useScreenShare } from '@daily-co/daily-react';
+import { createPortal } from 'react-dom';
+import { useDaily, useLocalParticipant, useScreenShare, useDevices } from '@daily-co/daily-react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, PhoneOff, ShieldAlert, X, Sparkles, Waves } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, PhoneOff, ShieldAlert, X, Aperture, Waves, MoreHorizontal, Volume2, Check, Camera } from 'lucide-react';
 
 interface MeetingControlsProps {
   onLeave: () => void;
@@ -30,6 +31,7 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
   const localParticipant = useLocalParticipant();
   const { isSharingScreen, startScreenShare, stopScreenShare } = useScreenShare();
   const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ── Background blur + noise suppression (local processors) ─────────────────
   // Blur defaults OFF (people opt in); Krisp noise-cancellation defaults ON
@@ -134,19 +136,11 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
           {isSharingScreen ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
         </ControlButton>
 
-        {/* Background blur — opt-in, hides your room. */}
-        {blurSupported && (
-          <ControlButton onClick={toggleBlur} active={blurOn} variant="accent" label={blurOn ? 'Turn off background blur' : 'Blur my background'}>
-            <Sparkles size={18} />
-          </ControlButton>
-        )}
-
-        {/* Noise suppression (Krisp) — on by default; quiet wins for home coworking. */}
-        {denoiseSupported && (
-          <ControlButton onClick={toggleDenoise} active={denoiseOn} variant="accent" label={denoiseOn ? 'Turn off noise suppression' : 'Suppress background noise'}>
-            <Waves size={18} />
-          </ControlButton>
-        )}
+        {/* Session settings — blur, noise suppression, camera/mic/speaker.
+            Keeps the bar to the essentials (mic / cam / share / leave). */}
+        <ControlButton onClick={() => setSettingsOpen(true)} active label="Session settings" variant="accent">
+          <MoreHorizontal size={18} />
+        </ControlButton>
 
         <button
           type="button"
@@ -159,10 +153,162 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
         </button>
       </div>
 
+      {settingsOpen && (
+        <SessionSettingsSheet
+          blurOn={blurOn}
+          blurSupported={blurSupported}
+          onToggleBlur={toggleBlur}
+          denoiseOn={denoiseOn}
+          denoiseSupported={denoiseSupported}
+          onToggleDenoise={toggleDenoise}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
       {showAvatarModal && (
         <AvatarRequiredModal onClose={() => setShowAvatarModal(false)} />
       )}
     </>
+  );
+}
+
+// ── Session settings sheet ────────────────────────────────────────────────────
+// Bottom sheet on mobile, centred card on desktop. Houses the secondary
+// controls that don't need to be one tap away: video effects + device pickers.
+
+function SessionSettingsSheet({
+  blurOn, blurSupported, onToggleBlur,
+  denoiseOn, denoiseSupported, onToggleDenoise,
+  onClose,
+}: {
+  blurOn: boolean;
+  blurSupported: boolean;
+  onToggleBlur: () => void;
+  denoiseOn: boolean;
+  denoiseSupported: boolean;
+  onToggleDenoise: () => void;
+  onClose: () => void;
+}) {
+  const { cameras, microphones, speakers, currentCam, currentMic, currentSpeaker, setCamera, setMicrophone, setSpeaker } = useDevices();
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full sm:max-w-sm max-h-[85dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[#1a1a2e] ring-1 ring-white/10 shadow-2xl p-5"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sm:hidden flex justify-center -mt-2 mb-2"><span className="w-9 h-1 rounded-full bg-white/20" /></div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-extrabold text-white">Session settings</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full grid place-items-center text-white/60 hover:bg-white/10">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Effects */}
+        {(blurSupported || denoiseSupported) && (
+          <section className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-2">Effects</p>
+            <div className="space-y-1.5">
+              {blurSupported && (
+                <SettingToggle
+                  icon={<Aperture size={16} />}
+                  label="Blur my background"
+                  hint="Hide your room — keep the focus on you"
+                  on={blurOn}
+                  onToggle={onToggleBlur}
+                />
+              )}
+              {denoiseSupported && (
+                <SettingToggle
+                  icon={<Waves size={16} />}
+                  label="Suppress background noise"
+                  hint="Filter out keyboard clatter, traffic, hum"
+                  on={denoiseOn}
+                  onToggle={onToggleDenoise}
+                />
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Devices */}
+        <section className="space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Devices</p>
+          {cameras.length > 1 && (
+            <DeviceSelect icon={<Camera size={15} />} label="Camera" value={currentCam?.device.deviceId}
+              options={cameras.map((d) => ({ id: d.device.deviceId, label: d.device.label }))}
+              onChange={(id) => void setCamera(id)} />
+          )}
+          {microphones.length > 1 && (
+            <DeviceSelect icon={<Mic size={15} />} label="Microphone" value={currentMic?.device.deviceId}
+              options={microphones.map((d) => ({ id: d.device.deviceId, label: d.device.label }))}
+              onChange={(id) => void setMicrophone(id)} />
+          )}
+          {speakers.length > 1 && (
+            <DeviceSelect icon={<Volume2 size={15} />} label="Speaker" value={currentSpeaker?.device.deviceId}
+              options={speakers.map((d) => ({ id: d.device.deviceId, label: d.device.label }))}
+              onChange={(id) => void setSpeaker(id)} />
+          )}
+          {cameras.length <= 1 && microphones.length <= 1 && speakers.length <= 1 && (
+            <p className="text-xs text-white/40 leading-snug">Only one camera, mic and speaker detected — nothing to switch between.</p>
+          )}
+        </section>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function SettingToggle({
+  icon, label, hint, on, onToggle,
+}: { icon: React.ReactNode; label: string; hint: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={on}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-left transition-colors"
+    >
+      <span className={`w-9 h-9 shrink-0 rounded-full grid place-items-center ${on ? 'bg-violet-500 text-white' : 'bg-white/10 text-white/70'}`}>{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-sm font-bold text-white">{label}</span>
+        <span className="block text-[11px] text-white/45 leading-snug">{hint}</span>
+      </span>
+      {/* Pill switch */}
+      <span className={`shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors ${on ? 'bg-violet-500' : 'bg-white/15'}`}>
+        <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${on ? 'translate-x-4' : ''}`} />
+      </span>
+    </button>
+  );
+}
+
+function DeviceSelect({
+  icon, label, value, options, onChange,
+}: { icon: React.ReactNode; label: string; value?: string; options: { id: string; label: string }[]; onChange: (id: string) => void }) {
+  return (
+    <label className="flex items-center gap-3">
+      <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center bg-white/10 text-white/70">{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[10px] font-bold uppercase tracking-wider text-white/40 mb-0.5">{label}</span>
+        <span className="relative flex items-center">
+          <select
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full appearance-none text-sm font-semibold text-white bg-white/5 rounded-lg pl-2.5 pr-7 py-2 ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-violet-400/40"
+          >
+            {options.map((o) => (
+              <option key={o.id} value={o.id} className="bg-[#1a1a2e]">{o.label || 'Unnamed device'}</option>
+            ))}
+          </select>
+          <Check size={13} className="absolute right-2.5 text-white/30 pointer-events-none" />
+        </span>
+      </span>
+    </label>
   );
 }
 

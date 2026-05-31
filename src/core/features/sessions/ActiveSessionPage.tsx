@@ -193,6 +193,9 @@ export function ActiveSessionPage() {
   // hides the app nav + session header + intro banner so the video fills the
   // viewport (an immersive co-working view). Same toggle works on mobile.
   const [focusMode, setFocusMode] = useState(false);
+  // Whether the right-side chat drawer is open — on desktop we shrink the
+  // video area to its left so a centred participant is never hidden behind it.
+  const [chatOpen, setChatOpen] = useState(false);
   // Leave-early confirm + report (matched 1-on-1 only).
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -1567,7 +1570,13 @@ export function ActiveSessionPage() {
           )}
         </div>
       ) : (
-        <div style={{ flex: '1 1 0', minHeight: 0, position: 'relative' }}>
+        <div
+          // Reflow for the chat drawer: on desktop (sm+) the chat is a 360px
+          // right drawer, so shrink the video to its left — the partner's tile
+          // re-centres in the remaining space instead of hiding behind chat.
+          // On mobile the chat is a full-screen overlay, so no margin there.
+          className={`relative min-h-0 flex-1 transition-[margin] duration-300 ${chatOpen ? 'sm:mr-[360px]' : ''}`}
+        >
           {isOneOnOne ? (
             /* 1-on-1 / match: while waiting alone, a local preview +
                "Share my camera" gate (no Daily). Once actually matched, both
@@ -1892,6 +1901,7 @@ export function ActiveSessionPage() {
           currentUserId={user.id}
           displayName={profile?.display_name ?? 'Member'}
           avatarUrl={profile?.avatar_url ?? null}
+          onOpenChange={setChatOpen}
         />
       )}
 

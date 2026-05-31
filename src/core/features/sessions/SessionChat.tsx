@@ -30,9 +30,13 @@ interface SessionChatProps {
   currentUserId: string;
   displayName: string;
   avatarUrl?: string | null;
+  /** Fires whenever the panel opens/closes, so the page can reflow the video
+   *  (on desktop the panel is a right drawer that would otherwise cover a
+   *  centred participant). */
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function SessionChat({ sessionId, currentUserId, displayName, avatarUrl = null }: SessionChatProps) {
+export function SessionChat({ sessionId, currentUserId, displayName, avatarUrl = null, onOpenChange }: SessionChatProps) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [unread, setUnread] = useState(0);
@@ -43,6 +47,9 @@ export function SessionChat({ sessionId, currentUserId, displayName, avatarUrl =
   const openRef = useRef(open); openRef.current = open;
   const listEndRef = useRef<HTMLDivElement | null>(null);
   const seqRef = useRef(0);
+
+  // Tell the parent when we open/close so it can reflow the video layout.
+  useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
 
   // Subscribe once; stays up while the panel is closed so unread keeps counting.
   useEffect(() => {
