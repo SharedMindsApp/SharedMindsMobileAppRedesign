@@ -853,6 +853,29 @@ export function ActiveSessionPage() {
   const isOpenUnmatchedHost =
     isPrimaryHost && session?.open_to_match === true && !session?.partner_user_id && session?.status === 'active';
 
+  // ── Got claimed? Poll our own row while waiting ────────────────────
+  // The claim RPC sets partner_user_id on the HOST's row, but the host only
+  // learns via realtime postgres_changes — which can silently not deliver
+  // (publication/RLS quirks), leaving the host stuck "open for a match" while
+  // the joiner sits alone and sees "partner stepped out". Poll our own row as
+  // a robust fallback: the moment a partner appears, adopt the full row →
+  // matched → the 1-on-1 video connects (connectNow).
+  useEffect(() => {
+    if (!isOpenUnmatchedHost || !session?.id) return;
+    const sid = session.id;
+    let cancelled = false;
+    const check = async () => {
+      const { data } = await supabase.from('focus_sessions').select('*').eq('id', sid).maybeSingle();
+      if (cancelled || !data) return;
+      if ((data as FocusSession).partner_user_id) {
+        setSession(data as FocusSession);
+        playJoinChime();
+      }
+    };
+    const t = window.setInterval(() => { void check(); }, 4000);
+    return () => { cancelled = true; window.clearInterval(t); };
+  }, [isOpenUnmatchedHost, session?.id]);
+
   useEffect(() => {
     if (!isOpenUnmatchedHost) { setShowLowMatchTime(false); return; }
     if (lowMatchShownRef.current) return;        // one-shot — never re-nag
@@ -1294,11 +1317,11 @@ export function ActiveSessionPage() {
           Taking over makes them the host and re-opens the door for a new
           match. Hidden during the debrief. */}
       {showTakeover && !showDebrief && (
-        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-amber-500/15 ring-1 ring-amber-400/40 px-4 py-3 flex items-center gap-3">
-          <AlertTriangle size={18} className="text-amber-300 shrink-0" />
+        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-amber-50 ring-1 ring-amber-300 shadow-sm px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-amber-600 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white leading-tight">Your partner stepped out</p>
-            <p className="text-[11px] text-white/70 leading-snug mt-0.5">
+            <p className="text-sm font-bold text-amber-900 leading-tight">Your partner stepped out</p>
+            <p className="text-[11px] text-amber-800 leading-snug mt-0.5">
               Keep going — take over as host and the door re-opens for a new match.
             </p>
           </div>
@@ -1316,11 +1339,11 @@ export function ActiveSessionPage() {
 
       {/* ── Partner-left prompt (host side, matched 1-on-1) ──────────── */}
       {showPartnerLeft && !showDebrief && (
-        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-amber-500/15 ring-1 ring-amber-400/40 px-4 py-3 flex items-center gap-3">
-          <AlertTriangle size={18} className="text-amber-300 shrink-0" />
+        <div className="shrink-0 mx-3 sm:mx-4 mt-2 rounded-2xl bg-amber-50 ring-1 ring-amber-300 shadow-sm px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-amber-600 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white leading-tight">Your partner left</p>
-            <p className="text-[11px] text-white/70 leading-snug mt-0.5">
+            <p className="text-sm font-bold text-amber-900 leading-tight">Your partner left</p>
+            <p className="text-[11px] text-amber-800 leading-snug mt-0.5">
               Re-open the door to match with someone new, or keep going solo.
             </p>
           </div>
@@ -1329,7 +1352,7 @@ export function ActiveSessionPage() {
               type="button"
               onClick={handleKeepSolo}
               disabled={reopening}
-              className="inline-flex items-center text-white/80 hover:text-white text-xs font-bold px-2.5 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
+              className="inline-flex items-center text-amber-800 hover:text-amber-950 text-xs font-bold px-2.5 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60"
             >
               Keep solo
             </button>
@@ -2199,20 +2222,20 @@ function IntroPhaseOverlay({
 
   return (
     <div className="shrink-0 px-4 pt-2 pb-1">
-      <div className="rounded-2xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 ring-1 ring-amber-300/30 backdrop-blur-sm px-4 py-2.5 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-amber-400/20 ring-1 ring-amber-300/40 grid place-items-center shrink-0">
+      <div className="rounded-2xl bg-amber-50 ring-1 ring-amber-300 shadow-sm px-4 py-2.5 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-100 ring-1 ring-amber-300 grid place-items-center shrink-0">
           <span className="text-base">👋</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-extrabold uppercase tracking-widest text-amber-200 leading-none">
+          <p className="text-[11px] font-extrabold uppercase tracking-widest text-amber-700 leading-none">
             Say hi · intro phase
           </p>
-          <p className="text-[11px] text-amber-100/80 leading-tight mt-0.5 truncate">
+          <p className="text-[11px] text-amber-800 leading-tight mt-0.5 truncate">
             {vibeCopy}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-lg font-extrabold tabular-nums text-white">
+          <span className="text-lg font-extrabold tabular-nums text-amber-900">
             {minutes}:{String(seconds).padStart(2, '0')}
           </span>
           <button
@@ -2220,7 +2243,7 @@ function IntroPhaseOverlay({
             onClick={handleSkip}
             disabled={skipping}
             title="Skip the intro and start focusing now"
-            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-100 hover:text-white bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-full transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-900 bg-amber-500/20 hover:bg-amber-500/35 px-2.5 py-1.5 rounded-full transition-colors disabled:opacity-50"
           >
             {skipping ? <Loader2 size={10} className="animate-spin" /> : null}
             Start working
