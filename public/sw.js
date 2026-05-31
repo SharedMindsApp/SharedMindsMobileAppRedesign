@@ -64,6 +64,14 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Only ever touch same-origin http(s) GETs. Browser extensions inject
+  // requests with schemes like chrome-extension:// which the Cache API can't
+  // store — cache.put on those throws "Request scheme is unsupported". Let the
+  // browser handle anything that isn't a plain http(s) request we own.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return; // not respondWith → default network handling, never cached
+  }
+
   // Phase 8B: Handle navigation requests (page loads, refreshes, deep links)
   // Always serve index.html for navigation requests to ensure SPA routing works
   if (request.mode === 'navigate') {
