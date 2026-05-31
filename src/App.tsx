@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 
 const CoreApp = lazy(() => import('./core/CoreApp'));
 
@@ -24,8 +25,14 @@ function AppLoadingScreen() {
 
 export default function App() {
   return (
-    <Suspense fallback={<AppLoadingScreen />}>
-      <CoreApp />
-    </Suspense>
+    <>
+      <Suspense fallback={<AppLoadingScreen />}>
+        <CoreApp />
+      </Suspense>
+      {/* Vercel Web Analytics — privacy-friendly page-view + visitor counts.
+          Covers the landing/marketing routes and the app. Only collects once
+          Web Analytics is enabled for the project in the Vercel dashboard. */}
+      <Analytics />
+    </>
   );
 }
