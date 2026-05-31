@@ -43,13 +43,15 @@ import { MidSessionStateRecheck } from './MidSessionStateRecheck';
 // Sessions become joinable 5 minutes before their scheduled start.
 const JOIN_WINDOW_MS = 5 * 60 * 1000;
 
-// Daily shared room — everyone in a group session today joins the same Jitsi room.
+// Per-session Daily room — UNIQUE to one session so only the people who
+// actually open THAT session share a room. (Previously group sessions used a
+// single shared "coworking-<date>" room for the whole day, which meant two
+// people who independently created separate group sessions landed in the same
+// room and instantly saw each other — looked like an automatic connection.)
 function dailyRoomName(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `sharedminds-coworking-${y}-${m}-${day}`;
+  // Fallback only — used before a session has loaded. Real rooms are keyed by
+  // session id below.
+  return 'sharedminds-coworking-lobby';
 }
 
 // 1-on-1 room — per-session unique name so only the host + claimed partner share it.
@@ -57,6 +59,14 @@ function oneOnOneRoomName(sessionId: string): string {
   // Strip non-alphanumerics for a clean Jitsi room slug.
   const safeId = sessionId.replace(/[^a-zA-Z0-9]/g, '');
   return `sharedminds-1on1-${safeId}`;
+}
+
+// Group room — per-session unique name. Everyone who joins this specific
+// session (host + anyone who opens /session/<id>) shares it; separate
+// sessions never collide.
+function groupRoomName(sessionId: string): string {
+  const safeId = sessionId.replace(/[^a-zA-Z0-9]/g, '');
+  return `sharedminds-group-${safeId}`;
 }
 
 const PROJECT_CHIP_HEX: Record<string, string> = {
@@ -1021,7 +1031,7 @@ export function ActiveSessionPage() {
   const peers = (isSolo || isOneOnOne) ? [] : otherSessions.filter((s) => s.id !== session?.id);
 
   const roomName = session
-    ? (isOneOnOne ? oneOnOneRoomName(session.id) : dailyRoomName())
+    ? (isOneOnOne ? oneOnOneRoomName(session.id) : groupRoomName(session.id))
     : dailyRoomName();
 
   // Session creator is always the moderator; they can admit/mute/remove others
