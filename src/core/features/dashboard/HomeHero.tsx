@@ -419,7 +419,7 @@ function UpNextPill({
       type="button"
       onClick={onClick}
       title={`Next: ${title}`}
-      className={`inline-flex items-center gap-3 max-w-full sm:max-w-[300px] mt-2 sm:mt-0 px-3.5 py-2.5 rounded-xl backdrop-blur-sm ring-1 hover:bg-white/15 active:scale-[0.98] transition-all text-left ${toneClasses}`}
+      className={`inline-flex items-center gap-3 max-w-full sm:max-w-[480px] mt-2 sm:mt-0 px-3.5 py-2.5 rounded-xl backdrop-blur-sm ring-1 hover:bg-white/15 active:scale-[0.98] transition-all text-left ${toneClasses}`}
     >
       {/* Countdown — the visual hero. tabular-nums so the digits don't
           shift width as the seconds tick (otherwise the whole pill
