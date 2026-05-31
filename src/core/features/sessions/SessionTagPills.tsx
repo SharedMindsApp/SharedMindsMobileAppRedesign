@@ -20,6 +20,8 @@ type SessionMode = 'group' | 'one_on_one' | 'solo';
 export interface SessionTagPillsProps {
   mode: SessionMode;
   quietMode: boolean;
+  /** Camera required (body-double mode). Shows a "Camera on" pill. */
+  bodyDouble?: boolean;
   /** True when this is a 1-on-1 and the partner slot is unclaimed. */
   partnerOpen?: boolean;
   /** Show a live/scheduled status pill. Usually only in detail views. */
@@ -55,6 +57,7 @@ function projectHex(token: string | null | undefined): string {
 export function SessionTagPills({
   mode,
   quietMode,
+  bodyDouble = false,
   partnerOpen = false,
   status,
   durationMinutes,
@@ -104,6 +107,14 @@ export function SessionTagPills({
         <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full ${textCls} ${padCls} bg-slate-50 text-slate-600`}>
           <span className={emojiCls}>🔇</span>
           Quiet mode
+        </span>
+      )}
+
+      {/* ── Camera required (body-double) ── */}
+      {bodyDouble && (
+        <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full ${textCls} ${padCls} bg-indigo-50 text-indigo-700`}>
+          <span className={emojiCls}>📷</span>
+          Camera on
         </span>
       )}
 

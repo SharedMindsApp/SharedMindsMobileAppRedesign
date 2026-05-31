@@ -20,10 +20,11 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Search, Zap, Loader2, Clock, Users, UserPlus, User, ArrowRight } from 'lucide-react';
+import { Calendar, Search, Zap, Loader2, Users, UserPlus, User, ArrowRight } from 'lucide-react';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { fetchOpenSessions, claimOpenSession, type ScheduledSessionWithProfile } from '../../services/SessionService';
 import { supabase } from '../../../lib/supabase';
+import { SessionTagPills } from '../sessions/SessionTagPills';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -248,7 +249,7 @@ export function HomeHero({
                         </div>
                       )}
 
-                      {/* Goal + name */}
+                      {/* Goal + name + at-a-glance attribute pills */}
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-xs font-semibold truncate leading-tight">
                           {s.session_goal ?? 'Deep focus'}
@@ -256,6 +257,17 @@ export function HomeHero({
                         <p className="text-white/50 text-[10px]">
                           {s.display_name} · {formatDuration(s.start_time)}
                         </p>
+                        <div className="mt-1">
+                          <SessionTagPills
+                            size="sm"
+                            // An open-to-match solo door becomes a 1-on-1 when
+                            // claimed — show the type it'll be, not "Solo".
+                            mode={s.open_to_match && s.session_mode === 'solo' ? 'one_on_one' : (s.session_mode ?? 'group')}
+                            quietMode={!!s.quiet_mode}
+                            bodyDouble={!!s.body_double}
+                            partnerOpen={!!s.open_to_match}
+                          />
+                        </div>
                       </div>
 
                       {/* Drop in (open-to-match door) takes priority; else

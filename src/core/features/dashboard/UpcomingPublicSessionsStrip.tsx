@@ -173,6 +173,7 @@ export function UpcomingPublicSessionsStrip({
               <SessionTagPills
                 mode={isOneOnOne ? 'one_on_one' : 'group'}
                 quietMode={isQuiet}
+                bodyDouble={!!(s as any).body_double}
                 partnerOpen={partnerOpen}
                 durationMinutes={s.intended_duration_minutes}
                 size="sm"
