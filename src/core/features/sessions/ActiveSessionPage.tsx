@@ -93,8 +93,6 @@ function avatarClass(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-/** Seconds before two compatible waiting hosts are auto-connected. */
-const MERGE_COUNTDOWN_START = 6;
 
 export function ActiveSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -183,11 +181,11 @@ export function ActiveSessionPage() {
   // door) or carry on solo.
   const [showPartnerLeft, setShowPartnerLeft] = useState(false);
   const [reopening, setReopening] = useState(false);
-  // Auto-connect: when two compatible hosts are both waiting, the later opener
-  // (this user) is offered a cancelable countdown to merge into the earlier
-  // "anchor" door. mergeAnchor is the door we'd join; mergeSecs counts down.
+  // Match invite: when two compatible hosts are both waiting, the later opener
+  // (this user) is *offered* the earlier "anchor" door — but connecting always
+  // requires an explicit tap. We never auto-join someone into a call they
+  // didn't accept. mergeAnchor is the door we'd join if they choose to.
   const [mergeAnchor, setMergeAnchor] = useState<CommunitySession | null>(null);
-  const [mergeSecs, setMergeSecs] = useState(MERGE_COUNTDOWN_START);
   const [merging, setMerging] = useState(false);
   const mergeAnchorIdRef = useRef<string | null>(null);
   const mergeDismissedRef = useRef<Set<string>>(new Set());
@@ -952,10 +950,7 @@ export function ActiveSessionPage() {
 
       if (cancelled) return;
       if (anchor) {
-        if (mergeAnchorIdRef.current !== anchor.id) {
-          mergeAnchorIdRef.current = anchor.id;
-          setMergeSecs(MERGE_COUNTDOWN_START);
-        }
+        mergeAnchorIdRef.current = anchor.id;
         setMergeAnchor(anchor);
       } else {
         mergeAnchorIdRef.current = null;
@@ -968,13 +963,8 @@ export function ActiveSessionPage() {
     return () => { cancelled = true; clearInterval(t); };
   }, [isOpenUnmatchedHost, session?.id, session?.session_intent, session?.vibe, merging]);
 
-  // Countdown → auto-connect when it hits zero.
-  useEffect(() => {
-    if (!mergeAnchor || merging) return;
-    if (mergeSecs <= 0) { void handleMerge(mergeAnchor); return; }
-    const t = window.setTimeout(() => setMergeSecs((s) => s - 1), 1000);
-    return () => window.clearTimeout(t);
-  }, [mergeAnchor, mergeSecs, merging, handleMerge]);
+  // NOTE: connecting is opt-in only. There is deliberately NO countdown that
+  // auto-joins the anchor — the user must tap "Join now" on the invite below.
 
   // Would a 30-min extension push the session past the 1-hour mark? If so we
   // offer to pair it with an optional mid-session break.
@@ -1384,7 +1374,7 @@ export function ActiveSessionPage() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-white leading-tight truncate">{mergeAnchor.display_name ?? 'Someone'} is waiting too</p>
             <p className="text-[11px] text-white/70 leading-snug mt-0.5">
-              You both want {mergeLabel} — connecting in {mergeSecs}s…
+              You both want {mergeLabel} — want to connect?
             </p>
           </div>
           <div className="shrink-0 flex items-center gap-1.5">
