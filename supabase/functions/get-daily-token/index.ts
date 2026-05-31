@@ -113,10 +113,10 @@ async function createMeetingToken(
         user_name: displayName,
         user_id: userId,
         is_owner: isModerator && !bodyDouble,   // body-double has no owners
-        // Avatar URL is delivered to all participants via Daily's userData,
-        // so we can show profile pictures (with audio-reactive rings) when
-        // someone has their camera off.
-        user_data: { avatarUrl },
+        // NOTE: avatar URL is NOT set here — Daily's meeting-token API rejects
+        // a `user_data` property ("invalid property name"). The client sets it
+        // via callObject.setUserData({ avatarUrl }) after joining instead, so
+        // camera-off participants still render their profile picture.
         // Token valid for 4 hours — session can't legitimately run longer
         exp: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
         ...bodyDoublePermissions,

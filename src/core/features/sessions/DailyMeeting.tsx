@@ -77,6 +77,11 @@ export interface DailyMeetingProps {
    * profile photo first).
    */
   avatarVerified?: boolean;
+  /** The local user's avatar URL. Pushed to Daily via setUserData() after
+   *  join so other participants can render the profile picture when this
+   *  user's camera is off. (Can't go in the meeting token — Daily rejects a
+   *  `user_data` token property.) */
+  avatarUrl?: string | null;
   /**
    * Body-double mode: forces camera ON, locks mic OFF (via Daily token
    * permissions), and uses the shared persistent room.
@@ -121,6 +126,7 @@ export function DailyMeeting({
   startAudioMuted = false,
   startVideoMuted = false,
   avatarVerified = false,
+  avatarUrl = null,
   bodyDouble = false,
   chromeless = false,
   focusSessionId,
@@ -254,6 +260,9 @@ export function DailyMeeting({
         // ── Join ──────────────────────────────────────────────────────
         try {
           await daily.join({ url, token, startAudioOff: forceAudioOff, startVideoOff: forceVideoOff });
+          // Push avatar to peers via userData (camera-off tiles render it).
+          // Token can't carry it — Daily rejects a `user_data` token property.
+          try { daily.setUserData({ avatarUrl }); } catch { /* non-fatal */ }
           if (!cancelled) setCall(daily);
         } catch (err) {
           if (cancelled) return;

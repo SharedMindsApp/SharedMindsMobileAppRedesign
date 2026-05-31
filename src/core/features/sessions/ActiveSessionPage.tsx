@@ -1498,6 +1498,7 @@ export function ActiveSessionPage() {
                   startAudioMuted
                   startVideoMuted={false}
                   avatarVerified={profile.avatar_status === 'approved'}
+                  avatarUrl={profile.avatar_url ?? null}
                   bodyDouble
                   chromeless
                   onLeave={() => navigate('/sessions')}
@@ -1537,6 +1538,7 @@ export function ActiveSessionPage() {
               isModerator={isModerator}
               startAudioMuted={isQuiet || isSilentVibe}
               avatarVerified={profile?.avatar_status === 'approved'}
+              avatarUrl={profile?.avatar_url ?? null}
               focusSessionId={session.id}
               muteAudioSignal={muteAudioSignal}
               onParticipantJoined={() => {
@@ -1558,6 +1560,7 @@ export function ActiveSessionPage() {
               isModerator={isModerator}
               startAudioMuted={isQuiet || isSilentVibe}
               avatarVerified={profile?.avatar_status === 'approved'}
+              avatarUrl={profile?.avatar_url ?? null}
               focusSessionId={session.id}
               muteAudioSignal={muteAudioSignal}
               onParticipantJoined={() => {
