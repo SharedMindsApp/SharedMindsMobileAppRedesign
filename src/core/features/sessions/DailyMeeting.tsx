@@ -183,6 +183,15 @@ export function DailyMeeting({
   const cbCountRef  = useRef(onParticipantCountChanged);
   const cbJoinedRef = useRef(onParticipantJoined);
   const cbLeaveRef = useRef(onLeave);
+  // onLeave can be reached twice — directly from handleLeave (for snappy UX)
+  // and from Daily's 'left-meeting' event. Fire it at most once so parents
+  // don't double-navigate or double-write.
+  const leaveFiredRef = useRef(false);
+  const fireLeaveOnce = () => {
+    if (leaveFiredRef.current) return;
+    leaveFiredRef.current = true;
+    cbLeaveRef.current?.();
+  };
 
   // Auto-mute trigger — fires whenever the muteAudioSignal value changes
   // (and is non-zero, so the initial 0 → undefined mount doesn't mute).
@@ -275,7 +284,7 @@ export function DailyMeeting({
 
         daily.on('left-meeting', () => {
           if (cancelled) return;
-          cbLeaveRef.current?.();
+          fireLeaveOnce();
         });
 
         daily.on('camera-error', (evt) => {
@@ -353,8 +362,9 @@ export function DailyMeeting({
     if (callRef.current) {
       callRef.current.leave().catch(() => { /* ignore */ });
     }
-    // onLeave fires via 'left-meeting' but call it directly too for snappy UX
-    cbLeaveRef.current?.();
+    // Fire directly for snappy UX; the 'left-meeting' event would also fire it,
+    // but fireLeaveOnce() de-dupes so the parent only sees one leave.
+    fireLeaveOnce();
   }
 
   // "Live" = in the call, whether the link is solid or momentarily

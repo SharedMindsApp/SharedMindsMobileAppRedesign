@@ -1103,6 +1103,11 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
   // session (claim_open_session rejects self-claims), so showing it just
   // produces a misleading "that session filled up" when tapped.
   const me = await getAuthedUser();
+  // If auth is momentarily unresolved (token refresh in flight), bail rather
+  // than run the query without the self-exclusion filter — otherwise the
+  // user's own open door can surface and tapping it produces a misleading
+  // "that one just filled up" (self-claims are blocked at the DB).
+  if (!me) return [];
 
   // Only sessions whose time hasn't elapsed yet. We compute the cutoff as
   // now - max_reasonable_session (3h) so we always fetch at least something,

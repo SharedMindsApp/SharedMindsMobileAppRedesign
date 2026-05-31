@@ -81,7 +81,17 @@ export function CameraGatedMeeting({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // ── Local camera preview (free — no Daily) ────────────────────────────────
+  // CRITICAL: skip the preview entirely when we're connecting immediately
+  // (connectNow — the matched joiner). Otherwise this async getUserMedia would
+  // resolve AFTER the connectNow effect already ran releasePreview(), leaving
+  // a live camera stream leaked for the whole call. On iOS the OS holds the
+  // camera exclusively, so that leaked stream blocks Daily from ever acquiring
+  // the camera — the joiner taps "turn on camera" in the call and nothing
+  // happens. By not starting the preview at all on the connectNow path, Daily
+  // gets a clean, uncontended camera. connectNow is captured at mount via the
+  // [] deps, which is exactly what we want — the joiner has it true on mount.
   useEffect(() => {
+    if (connectNow) return;
     let cancelled = false;
     (async () => {
       try {
@@ -104,6 +114,7 @@ export function CameraGatedMeeting({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Stop the local preview camera. CRITICAL on iOS/iPad: the camera is an
@@ -270,9 +281,15 @@ export function CameraGatedMeeting({
             <button
               type="button"
               onClick={handleShare}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-violet-500 hover:bg-violet-600 text-white text-sm font-bold active:scale-95 transition-all"
+              // Disabled while camera detection is still resolving, so a
+              // premature tap can't broadcast hasCam:false to peers (which
+              // could flip the room into audio-only via the deadlock guard).
+              disabled={hasCam === null}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-violet-500 hover:bg-violet-600 text-white text-sm font-bold active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
             >
-              <Video size={15} /> Share my camera
+              {hasCam === null
+                ? <><Loader2 size={15} className="animate-spin" /> Checking camera…</>
+                : <><Video size={15} /> Share my camera</>}
             </button>
           )
         )}

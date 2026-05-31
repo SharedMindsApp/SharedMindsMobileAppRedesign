@@ -69,11 +69,16 @@ async function upsertRoom(roomName: string, bodyDouble: boolean): Promise<void> 
         exp: Math.floor(Date.now() / 1000) + (bodyDouble ? 30 * 86_400 : 86_400),
         // Body-double is drop-in (no lobby). All others gate via knocking.
         enable_knocking: !bodyDouble,
-        enable_chat: false,
-        enable_people_ui: false,
-        enable_screenshare: !bodyDouble,    // no screen-share in silent room
-        max_participants: bodyDouble ? 50 : 50,
-        enable_prejoin_ui: false,
+        // Correct REST property name (was `enable_screenshare`, which is not a
+        // valid room property and 400s on some plans). No screen-share in the
+        // silent body-double room.
+        enable_desktop_screenshare: !bodyDouble,
+        // NOTE: deliberately NOT sending enable_chat / enable_people_ui /
+        // max_participants / enable_prejoin_ui — those are either deprecated,
+        // Prebuilt-only UI flags, or plan-gated, and each one 400s room
+        // creation on the developer tier (which then blocks the token + the
+        // whole video handoff). We use a custom call object, so the Prebuilt
+        // UI flags are irrelevant anyway.
       },
     }),
   });
@@ -154,12 +159,16 @@ serve(async (req) => {
   }
 
   // ── Parse body ────────────────────────────────────────────────────────────
-  const { roomName, displayName, isModerator = false, bodyDouble = false } = await req.json() as {
-    roomName: string;
-    displayName: string;
-    isModerator?: boolean;
-    bodyDouble?: boolean;
-  };
+  // Wrap in try/catch — a malformed body would otherwise throw before CORS
+  // headers are attached, so the browser sees a confusing CORS error instead
+  // of a clean 400.
+  let parsed: { roomName: string; displayName: string; isModerator?: boolean; bodyDouble?: boolean };
+  try {
+    parsed = await req.json();
+  } catch {
+    return json({ error: 'Invalid request body' }, 400);
+  }
+  const { roomName, displayName, isModerator = false, bodyDouble = false } = parsed;
 
   if (!roomName || !displayName) {
     return json({ error: 'roomName and displayName are required' }, 400);
