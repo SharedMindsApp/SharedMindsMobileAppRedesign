@@ -18,7 +18,7 @@ import {
   useAudioTrack,
   useActiveSpeakerId,
 } from '@daily-co/daily-react';
-import { MicOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { PulsingRings } from './PulsingRings';
 import { SafetyMenu } from '../moderation/SafetyMenu';
 
@@ -151,7 +151,13 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
       {/* Name + mute badge */}
       <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 pointer-events-none">
         <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 max-w-full">
-          {isMuted && <MicOff size={10} className="text-red-400 shrink-0" />}
+          {/* Mic + camera state — at-a-glance icons. */}
+          {isMuted
+            ? <MicOff size={11} className="text-red-400 shrink-0" />
+            : <Mic size={11} className="text-white/70 shrink-0" />}
+          {hasVideo
+            ? <Video size={11} className="text-white/70 shrink-0" />
+            : <VideoOff size={11} className="text-white/40 shrink-0" />}
           <span className="text-[11px] font-bold text-white truncate">
             {isLocal ? `${userName ?? 'You'} (You)` : userName ?? 'Guest'}
           </span>

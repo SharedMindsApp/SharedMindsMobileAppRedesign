@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check, DoorOpen, DoorClosed, Target } from 'lucide-react';
+import { StopCircle, Clock, Users, User, UserPlus, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check, DoorOpen, DoorClosed, Target } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -1069,6 +1069,7 @@ export function ActiveSessionPage() {
   const isModerator = !!(session && user && session.user_id === user.id);
 
   const modeBadgeLabel = isSolo ? 'Solo' : isOneOnOne ? '1-on-1' : 'Group';
+  const ModeBadgeIcon = isSolo ? User : isOneOnOne ? UserPlus : Users;
 
   if (loadingSession) {
     return (
@@ -1152,7 +1153,7 @@ export function ActiveSessionPage() {
           <div className="flex items-center gap-1.5">
             {/* Mode + quiet badges */}
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/10 text-[9px] font-bold text-white/80 uppercase tracking-wider">
-              {modeBadgeLabel}
+              <ModeBadgeIcon size={9} /> {modeBadgeLabel}
             </span>
             {isQuiet && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-white/10 text-[9px] font-bold text-white/80 uppercase tracking-wider">
