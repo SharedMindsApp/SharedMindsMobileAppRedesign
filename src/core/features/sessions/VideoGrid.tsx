@@ -135,7 +135,10 @@ function GalleryStage({
 
   return (
     <div className="w-full h-full p-3 sm:p-4 overflow-y-auto">
-      <div className={`grid ${gridClass} gap-3 sm:gap-4 h-full`}>
+      {/* auto-rows-fr makes every row an equal fraction of the height, so a
+          single tile (or any count) fills the available space instead of
+          collapsing to its min-height and leaving a dead gap below. */}
+      <div className={`grid ${gridClass} auto-rows-fr gap-3 sm:gap-4 h-full`}>
         {ids.map((id) => (
           <ParticipantTile
             key={id}

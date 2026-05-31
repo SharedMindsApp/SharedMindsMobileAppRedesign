@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { StopCircle, Clock, Users, User, UserPlus, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Palette, Check, DoorOpen, DoorClosed, Target } from 'lucide-react';
+import { StopCircle, Clock, Users, User, UserPlus, ChevronDown, ChevronUp, Loader2, MicOff, AlertTriangle, X, Plus, Lock, Unlock, Crown, Leaf, Minimize2, Maximize2, Palette, Check, DoorOpen, DoorClosed, Target } from 'lucide-react';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
 import { useCommunitySessionsSubscription } from './useCommunitySessionsSubscription';
 import { ConnectButton } from '../connections/ConnectButton';
@@ -189,6 +189,10 @@ export function ActiveSessionPage() {
   const [merging, setMerging] = useState(false);
   const mergeAnchorIdRef = useRef<string | null>(null);
   const mergeDismissedRef = useRef<Set<string>>(new Set());
+  // Focus / full-screen mode. On the web this isn't OS fullscreen — it just
+  // hides the app nav + session header + intro banner so the video fills the
+  // viewport (an immersive co-working view). Same toggle works on mobile.
+  const [focusMode, setFocusMode] = useState(false);
   // Leave-early confirm + report (matched 1-on-1 only).
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -1121,14 +1125,15 @@ export function ActiveSessionPage() {
     <div
       style={{
         position: 'fixed',
-        top: 56,
+        // Focus mode rises over the global 56px nav for an edge-to-edge video.
+        top: focusMode ? 0 : 56,
         left: 0,
         right: 0,
         bottom: 0,
         backgroundColor: pageBackground,
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 55,
+        zIndex: focusMode ? 60 : 55,
         overflow: 'hidden',
       }}
     >
@@ -1136,8 +1141,8 @@ export function ActiveSessionPage() {
       {/* ── Top bar ─────────────────────────────────────────── */}
       {/* relative z-40 so header-anchored popovers (the wizard dropdown)
           render ABOVE the session body, which comes later in the DOM and
-          would otherwise paint over them. */}
-      <div className="relative z-40 shrink-0 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm">
+          would otherwise paint over them. Hidden in focus mode. */}
+      <div className={`relative z-40 shrink-0 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm ${focusMode ? 'hidden' : ''}`}>
         {/* Goal */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
@@ -1284,6 +1289,18 @@ export function ActiveSessionPage() {
             </div>
           )}
 
+          {/* Enter full-screen / focus — hides the nav + header + banner so
+              the video fills the screen. (Not OS fullscreen; just chrome.) */}
+          <button
+            type="button"
+            onClick={() => setFocusMode(true)}
+            className="w-7 h-7 rounded-full grid place-items-center bg-white/10 text-white hover:bg-white/15 transition-colors"
+            title="Full screen"
+            aria-label="Enter full screen"
+          >
+            <Maximize2 size={12} />
+          </button>
+
           <button
             type="button"
             onClick={() => (isMatched ? setConfirmingLeave(true) : handleEnd())}
@@ -1296,8 +1313,22 @@ export function ActiveSessionPage() {
         </div>
       </div>
 
+      {/* Exit full screen — only in focus mode. Floats top-center (clears the
+          VideoGrid layout toolbar at top-right and the now-bar at top-left). */}
+      {focusMode && (
+        <button
+          type="button"
+          onClick={() => setFocusMode(false)}
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-[70] inline-flex items-center gap-1.5 rounded-full bg-black/55 hover:bg-black/70 backdrop-blur-sm text-white/90 text-xs font-bold px-3 py-1.5 ring-1 ring-white/10 transition-colors active:scale-95"
+          title="Exit full screen"
+          aria-label="Exit full screen"
+        >
+          <Minimize2 size={13} /> Exit full screen
+        </button>
+      )}
+
       {/* ── Progress bar ────────────────────────────────────── */}
-      <div className="shrink-0 h-0.5 bg-white/10">
+      <div className={`shrink-0 h-0.5 bg-white/10 ${focusMode ? 'hidden' : ''}`}>
         <div
           className="h-full bg-primary transition-all duration-1000"
           style={{ width: `${progress * 100}%` }}
@@ -1403,7 +1434,7 @@ export function ActiveSessionPage() {
             matched pair are in their "say hi" window. Disappears when
             the timestamp passes OR either party taps "Start working".
             See migration 20260527000015 for intro-length rules. */}
-      {session?.intro_phase_ends_at && new Date(session.intro_phase_ends_at).getTime() > Date.now() && (
+      {!focusMode && session?.intro_phase_ends_at && new Date(session.intro_phase_ends_at).getTime() > Date.now() && (
         <IntroPhaseOverlay
           sessionId={session.id}
           endsAtIso={session.intro_phase_ends_at}
