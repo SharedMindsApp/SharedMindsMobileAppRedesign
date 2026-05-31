@@ -1104,12 +1104,20 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
   // produces a misleading "that session filled up" when tapped.
   const me = await getAuthedUser();
 
+  // Only sessions whose time hasn't elapsed yet. We compute the cutoff as
+  // now - max_reasonable_session (3h) so we always fetch at least something,
+  // then filter client-side on the actual (start_time + duration > now) check.
+  // Using a DB-side gte on start_time prevents returning hours-old zombie rows
+  // that are still technically "active" because nobody ended them.
+  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+
   let query = supabase
     .from('focus_sessions')
     .select('*, profiles!user_id(display_name, avatar_url, country_code, work_type), project:projects(id, title, color)')
     .eq('status', 'active')
     .eq('open_to_match', true)
     .is('partner_user_id', null)
+    .gte('start_time', cutoff)
     .order('start_time', { ascending: false })
     .limit(limit);
   if (me) query = query.neq('user_id', me.id);
