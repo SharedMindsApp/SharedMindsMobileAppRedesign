@@ -2671,7 +2671,8 @@ function WeekAgendaView({
 
   return (
     <div className="flex-1 min-h-0 rounded-2xl bg-surface overflow-hidden flex flex-col border border-surface-container/50">
-      <div className="flex-1 overflow-y-auto divide-y divide-surface-container/60">
+      {/* pb-24 keeps the last rows clear of the floating chat widget. */}
+      <div className="flex-1 overflow-y-auto divide-y divide-surface-container/60 pb-24">
         {days7.map((d) => {
           const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
           const items = byDay.get(k) ?? [];
@@ -2737,7 +2738,7 @@ function WeekAgendaRow({
   const time = session.startsAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const end = new Date(session.startsAt.getTime() + session.intended_duration_minutes * 60_000)
     .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const title = session.session_title ?? session.session_goal ?? (session.session_mode === 'solo' ? 'Solo focus' : 'Session');
+  const title = sessionLabelOr(session, session.session_mode === 'solo' ? 'Solo focus' : 'Session');
 
   const stripe =
     session.session_mode === 'solo' ? 'bg-rose-400' :
@@ -2747,9 +2748,20 @@ function WeekAgendaRow({
     session.session_mode === 'solo' ? 'bg-rose-50 hover:bg-rose-100/70 ring-rose-100' :
     session.session_mode === 'one_on_one' ? 'bg-violet-50 hover:bg-violet-100/70 ring-violet-100' :
     'bg-blue-50 hover:bg-blue-100/70 ring-blue-100';
+  const modeEmoji =
+    session.is_quick_timer ? '⏱️' :
+    session.session_mode === 'solo' ? '🎯' :
+    session.session_mode === 'one_on_one' ? '🤝' : '👥';
   const modeLabel =
+    session.is_quick_timer ? 'Timer' :
     session.session_mode === 'solo' ? 'Solo' :
     session.session_mode === 'one_on_one' ? '1-on-1' : 'Group';
+
+  // Going-in mood + focus (recorded at session start). The full before→after
+  // lives in the detail sheet; here we surface the at-a-glance state.
+  const mood = lookupMood(session.start_mood);
+  const focus = lookupFocus(session.start_focus);
+  const hasMeta = !!session.project_title || !!mood || !!focus;
 
   return (
     <button
@@ -2765,8 +2777,21 @@ function WeekAgendaRow({
         <span className="block text-sm font-bold stitch-text-primary truncate leading-tight">
           {title}
         </span>
+        {hasMeta && (
+          <span className="mt-0.5 flex items-center gap-2 text-[10px] font-semibold stitch-text-secondary">
+            {session.project_title && (
+              <span className="inline-flex items-center gap-1 min-w-0 max-w-[10rem]">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: projectDot(session.project_color) }} />
+                <span className="truncate">{session.project_title}</span>
+              </span>
+            )}
+            {mood && <span className="inline-flex items-center gap-0.5 shrink-0" title={`Going in: ${mood.label}`}><span>{mood.emoji}</span>{mood.label}</span>}
+            {focus && <span className="inline-flex items-center gap-0.5 shrink-0" title={`Focus: ${focus.label}`}><span>{focus.emoji}</span>{focus.label}</span>}
+          </span>
+        )}
       </span>
-      <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+      <span className="shrink-0 inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-widest stitch-text-secondary">
+        <span aria-hidden className="text-[11px]">{modeEmoji}</span>
         {modeLabel}
       </span>
     </button>

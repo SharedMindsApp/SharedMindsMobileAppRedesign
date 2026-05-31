@@ -140,7 +140,7 @@ export function SessionsListView({
   }, [sessions]);
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col mt-4 lg:mt-0 space-y-4">
+    <div className="flex-1 min-w-0 flex flex-col mt-4 lg:mt-0 space-y-4 pb-24">
       {/* ── Date strip ──────────────────────────────────────── */}
       <div className="flex gap-1.5 overflow-x-auto scrollbar-thin -mx-1 px-1 pb-1">
         {stripDays.map((d) => {
