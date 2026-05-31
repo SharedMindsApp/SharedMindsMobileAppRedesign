@@ -1040,6 +1040,24 @@ export function ActiveSessionPage() {
   const modeBadgeLabel = isSolo ? 'Solo' : isOneOnOne ? '1-on-1' : 'Group';
   const ModeBadgeIcon = isSolo ? User : isOneOnOne ? UserPlus : Users;
 
+  // Leaving the live call (the in-call red "Leave"). This is the common way
+  // people quit, so it MUST tidy up — otherwise the row stays status='active'
+  // and the user shows as "live" forever with nothing to rejoin.
+  //   • Always clear local session state (you stop showing as live).
+  //   • If you OWN an active session, end it (status=completed) so it doesn't
+  //     linger as a zombie for you or anyone else. A non-host partner just
+  //     leaves; the host's session keeps running.
+  //   • Scheduled (waiting-room) sessions aren't ended — you may come back.
+  const handleCallLeave = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('sm:music-stop'));
+    if (session && isModerator && session.status === 'active') {
+      void markSessionEnded(session.id).catch((e) =>
+        console.warn('[ActiveSessionPage] markSessionEnded on leave failed:', e));
+    }
+    clearSession();
+    navigate('/sessions', { replace: true });
+  }, [session, isModerator, clearSession, navigate]);
+
   if (loadingSession) {
     return (
       <div className="fixed inset-x-0 bottom-0 top-14 sm:top-16 bg-[#1a1a2e] flex items-center justify-center z-[55]">
@@ -1447,7 +1465,7 @@ export function ActiveSessionPage() {
             currentUserId={user.id}
             displayName={profile?.display_name ?? 'Member'}
             avatarUrl={profile?.avatar_url ?? null}
-            onLeave={() => navigate('/sessions')}
+            onLeave={handleCallLeave}
             onSessionStart={handleSessionStarted}
           />
         </div>
@@ -1522,7 +1540,7 @@ export function ActiveSessionPage() {
                   avatarUrl={profile.avatar_url ?? null}
                   bodyDouble
                   chromeless
-                  onLeave={() => navigate('/sessions')}
+                  onLeave={handleCallLeave}
                 />
               </div>
             </aside>
@@ -1570,7 +1588,7 @@ export function ActiveSessionPage() {
                 setPartnerJoined(true);
                 setShowNoShowBanner(false);
               }}
-              onLeave={() => navigate('/sessions')}
+              onLeave={handleCallLeave}
             />
           ) : isOneOnOne ? (
             /* 1-on-1 / match: while waiting alone, a local preview +
@@ -1593,7 +1611,7 @@ export function ActiveSessionPage() {
                 setPartnerJoined(true);
                 setShowNoShowBanner(false);
               }}
-              onLeave={() => navigate('/sessions')}
+              onLeave={handleCallLeave}
             />
           ) : (
             /* Group: everyone waits in a lobby with their own camera preview;
@@ -1618,7 +1636,7 @@ export function ActiveSessionPage() {
               // Just-leave-the-call: navigate this user out without ending
               // the session for everyone else. The host uses the top-bar
               // "End" button (handleEnd) to trigger the debrief.
-              onLeave={() => navigate('/sessions')}
+              onLeave={handleCallLeave}
             />
           )}
           {/* Group/1-on-1 debrief renders over the live video so everyone

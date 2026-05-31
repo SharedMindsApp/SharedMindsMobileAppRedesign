@@ -111,12 +111,13 @@ export function FocusSessionProvider({ children }: { children: ReactNode }) {
         }
 
         if (data && !cancelled && isMounted()) {
-          // Don't restore sessions that ended more than 30 minutes ago —
-          // these are stale/orphaned rows that were never properly closed.
-          // Auto-mark them completed so they don't block the user.
+          // Don't restore a session whose timer has already run out — it's
+          // effectively finished, so showing it as "live" with nothing to
+          // rejoin is the zombie-session bug. Auto-close it. A 90s grace lets
+          // a reload right at the buzzer still land on the debrief.
           const targetEnd = data.target_end_time ? new Date(data.target_end_time).getTime() : null;
-          const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
-          if (targetEnd && targetEnd < thirtyMinAgo) {
+          const expiredCutoff = Date.now() - 90 * 1000;
+          if (targetEnd && targetEnd < expiredCutoff) {
             console.warn('[FocusSessionContext] Found expired session, auto-closing:', data.id);
             supabase
               .from('focus_sessions')
