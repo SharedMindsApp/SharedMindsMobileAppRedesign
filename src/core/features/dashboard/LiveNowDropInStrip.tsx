@@ -67,7 +67,10 @@ export function LiveNowDropInStrip({ excludeSessionId, hidden }: Props) {
         table: 'focus_sessions',
       }, refresh)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    // Poll fallback (~15s) so a freshly-opened door still appears without a
+    // manual refresh even if realtime delivery lags. Query is cheap (≤12 rows).
+    const poll = window.setInterval(refresh, 15_000);
+    return () => { supabase.removeChannel(channel); window.clearInterval(poll); };
   }, [refresh]);
 
   async function handleDropIn(sessionId: string) {
