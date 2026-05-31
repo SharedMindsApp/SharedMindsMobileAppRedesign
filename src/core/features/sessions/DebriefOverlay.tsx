@@ -40,13 +40,9 @@ interface DebriefOverlayProps {
    * a "continue" badge for next time).
    */
   taskId: string | null;
-  /** Called once the local user has submitted AND the debrief is fully done
-      (timer expired OR everyone answered). Parent navigates to summary. */
+  /** Called once the local user submits their outcome (or the no-answer
+      timer expires). Parent ends the session + drops the user Home. */
   onFinalized: () => void;
-  /** Skip the "Waiting for everyone else" countdown — call onFinalized
-   *  immediately after the user picks an outcome. Used for solo
-   *  sessions where there is no "everyone else" to wait for. */
-  skipWait?: boolean;
   /** What the session was for — drives the end-of-session mood axis. */
   sessionKind?: SessionKind;
 }
@@ -56,7 +52,7 @@ type OutcomeWithProfile = SessionOutcomeRow & {
 };
 
 export function DebriefOverlay({
-  sessionId, declaredGoal, currentUserId, taskId, onFinalized, skipWait = false, sessionKind = 'do',
+  sessionId, declaredGoal, currentUserId, taskId, onFinalized, sessionKind = 'do',
 }: DebriefOverlayProps) {
   const [outcomes, setOutcomes] = useState<OutcomeWithProfile[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -187,11 +183,10 @@ export function DebriefOverlay({
       console.error('[Debrief] submit failed:', err);
     } finally {
       setSubmitting(false);
-      // Solo sessions: no peers to wait for. Finalize the moment the user
-      // picks an outcome so the session ends immediately — even if the
-      // outcome write failed (otherwise it'd silently fall into the 60s
-      // "waiting for everyone" countdown and feel stuck).
-      if (skipWait && !finalizedRef.current) {
+      // Submitting your outcome ends the session for you and drops you Home —
+      // no waiting on anyone else. Runs even if the outcome write failed, so
+      // you can never get stuck on the debrief.
+      if (!finalizedRef.current) {
         finalizedRef.current = true;
         onFinalized();
       }
@@ -325,7 +320,7 @@ export function DebriefOverlay({
                 {labelFor(myOutcome)}
               </p>
               <p className="text-xs text-white/50">
-                Waiting for everyone else — finishes in {secondsLeft}s
+                Nice work — wrapping up…
               </p>
             </div>
           </div>
