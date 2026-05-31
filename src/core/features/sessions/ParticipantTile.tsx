@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, memo } from 'react';
 import {
   useParticipantProperty,
-  useAudioLevel,
+  useAudioLevelObserver,
   useVideoTrack,
   useAudioTrack,
   useActiveSpeakerId,
@@ -53,14 +53,14 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
   const hasVideo = !!videoTrack?.persistentTrack && !videoOff;
   const isMuted  = audioMute === 'off' || audioMute === 'blocked';
 
-  // ── Audio level (0..1) drives the pulsing rings. Daily fires this
-  //    ~20 times/sec; we keep it in state but only re-render the rings
-  //    portion (PulsingRings is memoized).
+  // ── Audio level (0..1) drives the pulsing rings. useAudioLevelObserver
+  //    starts Daily's audio-level observer and reports levels by session id
+  //    (works for both the local mic and remote participants). The older
+  //    useAudioLevel(track) hook is deprecated and read 0 whenever its
+  //    internal Web-Audio context stayed suspended — which is why the
+  //    visualiser never pulsed.
   const [audioLevel, setAudioLevel] = useState(0);
-  useAudioLevel(
-    audioTrack?.persistentTrack ?? undefined,
-    (v) => setAudioLevel(v),
-  );
+  useAudioLevelObserver(sessionId, (v) => setAudioLevel(v));
 
   // ── Wire the video track into the <video> element
   useEffect(() => {
