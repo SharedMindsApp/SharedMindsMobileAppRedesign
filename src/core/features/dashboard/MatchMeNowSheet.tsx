@@ -265,7 +265,7 @@ export function MatchMeNowSheet({
             {videoBlocked ? (
               <p className="text-[10px] text-amber-700 mt-1.5 px-0.5 leading-snug">
                 You've used your free video sessions this week — audio-only until they reset.{' '}
-                <button type="button" onClick={() => { onClose(); navigate('/settings'); }} className="underline font-semibold">Upgrade for unlimited video →</button>
+                <button type="button" onClick={() => { onClose(); navigate('/upgrade'); }} className="underline font-semibold">Upgrade for unlimited video →</button>
               </p>
             ) : (
               <p className="text-[10px] stitch-text-secondary/80 mt-1.5 px-0.5">Audio-only is always free and matches faster.</p>
@@ -407,7 +407,7 @@ export function MatchMeNowSheet({
                         <button
                           key={d.value}
                           type="button"
-                          onClick={() => { if (locked) { onClose(); navigate('/settings'); } else setDurationMin(d.value); }}
+                          onClick={() => { if (locked) { onClose(); navigate('/upgrade'); } else setDurationMin(d.value); }}
                           title={locked ? 'Upgrade to unlock longer sessions' : undefined}
                           className={`inline-flex items-center gap-1 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                             active ? 'bg-surface shadow-sm stitch-text-primary'

@@ -1195,7 +1195,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                   <button
                     key={d.value}
                     type="button"
-                    onClick={() => { if (locked) { onClose(); navigate('/settings'); } else setDuration(d.value); }}
+                    onClick={() => { if (locked) { onClose(); navigate('/upgrade'); } else setDuration(d.value); }}
                     title={locked ? 'Upgrade to unlock longer sessions' : undefined}
                     className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all duration-200 ${
                       isActive
@@ -1628,7 +1628,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
             {videoBlocked && (
               <button
                 type="button"
-                onClick={() => { onClose(); navigate('/settings'); }}
+                onClick={() => { onClose(); navigate('/upgrade'); }}
                 className="mt-1.5 w-full text-center text-[11px] font-bold text-primary hover:underline"
               >
                 Upgrade for unlimited video →

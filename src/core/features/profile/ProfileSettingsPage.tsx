@@ -36,6 +36,7 @@ import { formatLocation } from '../../../lib/countries';
 import { OPEN_TO_OPTIONS, HEADLINE_MAX, CURRENT_FOCUS_MAX } from '../../../lib/openTo';
 import { uploadAvatar, AvatarRejectedError } from '../../services/ProfileService';
 import { exportMyData, deleteMyAccount } from '../../services/PrivacyService';
+import { getVideoAllowance, type VideoAllowance } from '../../services/SessionService';
 import { getPreferences, updatePreferences, type NotificationPreferences } from '../../services/NotificationService';
 import {
   isPushSupported, getPushPermission, subscribeToPush, unsubscribeFromPush, isSubscribed,
@@ -689,6 +690,19 @@ function AccountTab() {
   const [signingOut, setSigningOut] = useState(false);
   const [showPlanner, setShowPlanner] = useState(false);
 
+  // Account plan. Badge is driven by the FRESH allowance fetch — the same
+  // source the match-me-now gate reads — so Settings never disagrees with what
+  // the app enforces (a cached profile role can lag a DB edit).
+  const role = profile?.role ?? 'free';
+  const [allowance, setAllowance] = useState<VideoAllowance | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getVideoAllowance().then((a) => { if (alive) setAllowance(a); }).catch(() => {});
+    return () => { alive = false; };
+  }, [role]);
+  const isPaidPlan = allowance ? allowance.tier === 'paid' : (role === 'premium' || role === 'admin');
+  const planLabel = role === 'admin' ? 'Admin' : isPaidPlan ? 'Premium' : 'Free';
+
   const plannerActiveProjects = projects
     .filter((p) => p.status === 'active')
     .map((p) => ({ id: p.id, name: p.name }));
@@ -709,6 +723,40 @@ function AccountTab() {
 
   return (
     <div className="space-y-5">
+      {/* ── Plan ─────────────────────────────────────────── */}
+      <SurfaceCard>
+        <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Plan</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold stitch-text-primary">
+              {isPaidPlan
+                ? 'Unlimited video sessions'
+                : allowance
+                  ? `${allowance.remaining} of ${allowance.limit} weekly video sessions left`
+                  : 'Audio-only is always free'}
+            </p>
+            <p className="text-[11px] stitch-text-secondary mt-0.5">
+              {isPaidPlan ? 'Premium features unlocked.' : 'Free plan — longer sessions and unlimited video on Premium.'}
+            </p>
+          </div>
+          <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
+            isPaidPlan ? 'bg-violet-100 text-violet-700' : 'bg-surface-container stitch-text-secondary'
+          }`}>
+            {isPaidPlan && <Sparkles size={11} />}
+            {planLabel}
+          </span>
+        </div>
+        {!isPaidPlan && (
+          <button
+            type="button"
+            onClick={() => navigate('/upgrade')}
+            className="mt-3 w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-br from-violet-600 to-blue-500 text-white text-sm font-bold active:scale-[0.98] transition-transform"
+          >
+            <Sparkles size={14} /> Upgrade to Premium
+          </button>
+        )}
+      </SurfaceCard>
+
       {/* ── Appearance ───────────────────────────────────── */}
       <SurfaceCard>
         <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase mb-3">Appearance</p>

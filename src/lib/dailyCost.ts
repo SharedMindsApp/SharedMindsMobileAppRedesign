@@ -75,15 +75,21 @@ export interface CostSessionRow {
   user_id: string;
 }
 
-/** Best available duration for a session, clamped to a sane 8h ceiling so a
- *  stuck "active" row can't inflate the estimate. */
+/** Best available duration for a session, in minutes. Prefer the recorded
+ *  actual; fall back to wall-clock, then declared length. Capped at the
+ *  DECLARED duration (when known) so a zombie row left "active" for hours
+ *  can't bill 8h — a session rarely runs meaningfully past its declared end.
+ *  Falls back to an 8h hard ceiling only when no declared length exists. */
 export function sessionDurationMin(r: CostSessionRow): number {
   let mins = r.actual_duration_minutes ?? 0;
   if (!mins && r.ended_at && r.start_time) {
     mins = (new Date(r.ended_at).getTime() - new Date(r.start_time).getTime()) / 60_000;
   }
   if (!mins) mins = r.intended_duration_minutes ?? 0;
-  return Math.max(0, Math.min(mins, 480));
+  const ceiling = r.intended_duration_minutes && r.intended_duration_minutes > 0
+    ? r.intended_duration_minutes
+    : 480;
+  return Math.max(0, Math.min(mins, ceiling));
 }
 
 /**

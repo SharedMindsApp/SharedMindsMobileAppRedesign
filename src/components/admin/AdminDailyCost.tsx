@@ -10,9 +10,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DollarSign, Clock, Users, TrendingUp, Waves, AlertCircle, Info } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
-import { getCostSessions } from '../../lib/admin';
+import { getCostSessions, getDailyUsage, type DailyUsage } from '../../lib/admin';
 import {
-  summariseCost, projectMonthlyCost, fmtUSD, FREE_MINUTES,
+  summariseCost, projectMonthlyCost, graduatedCost, fmtUSD, FREE_MINUTES, VIDEO_BRACKETS,
   type CostSessionRow,
 } from '../../lib/dailyCost';
 
@@ -32,6 +32,10 @@ export function AdminDailyCost() {
   const [error, setError] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState(30);
   const [avgGroupSize, setAvgGroupSize] = useState(3);
+  // Real usage from Daily's API (the billing source of truth). null until
+  // loaded; stays null if the edge function isn't deployed yet.
+  const [usage, setUsage] = useState<DailyUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,6 +47,19 @@ export function AdminDailyCost() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [windowDays]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setUsageLoading(true);
+    getDailyUsage(windowDays)
+      .then((u) => { if (!cancelled) setUsage(u); })
+      .catch(() => { if (!cancelled) setUsage(null); })
+      .finally(() => { if (!cancelled) setUsageLoading(false); });
+    return () => { cancelled = true; };
+  }, [windowDays]);
+
+  const actualCost = usage ? graduatedCost(usage.participantMinutes, VIDEO_BRACKETS) : 0;
+  const actualFreePct = usage ? Math.min(100, (usage.participantMinutes / FREE_MINUTES) * 100) : 0;
 
   const summary = useMemo(
     () => (rows ? summariseCost(rows, avgGroupSize) : null),
@@ -104,24 +121,56 @@ export function AdminDailyCost() {
           </div>
         </div>
 
+        {/* ── ACTUAL usage from Daily (billing source of truth) ──────── */}
+        {usageLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 text-sm text-gray-500">Loading actual usage from Daily…</div>
+        ) : usage ? (
+          <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/40 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2"><Waves size={16} className="text-emerald-600" /> Actual usage from Daily</h3>
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Source of truth</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard icon={DollarSign} tint="emerald" label={`Actual cost · ${windowDays}d`} value={fmtUSD(actualCost)}
+                sub={actualCost === 0 ? 'within free allowance' : 'graduated video rate'} />
+              <StatCard icon={Clock} tint="blue" label="Participant-minutes" value={fmtMin(usage.participantMinutes)}
+                sub="real connected time" />
+              <StatCard icon={Users} tint="violet" label="Meetings" value={fmtMin(usage.meetingCount)}
+                sub={usage.ongoing ? `${usage.ongoing} ongoing now` : 'rooms that opened'} />
+              <StatCard icon={TrendingUp} tint="amber" label="Free allowance" value={`${actualFreePct.toFixed(0)}%`}
+                sub={`of ${fmtMin(FREE_MINUTES)} min/mo`} />
+            </div>
+          </div>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
+            <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[13px] text-amber-900 leading-snug">
+              <strong>Actual usage unavailable.</strong> Deploy the <code>daily-usage</code> edge function
+              (<code>supabase functions deploy daily-usage</code>) to pull real participant-minutes from Daily.
+              Until then, only the modelled estimate below is shown.
+            </p>
+          </div>
+        )}
+
         {/* Estimate disclaimer */}
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
           <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
           <p className="text-[13px] text-amber-900 leading-snug">
-            <strong>Estimate.</strong> Solo / offline sessions never open a Daily room (lazy creation), so they cost $0.
-            Group headcount isn't logged per-participant — tune the assumption below and calibrate against your Daily dashboard.
+            <strong>Modelled estimate (upper bound).</strong> The figures below estimate cost from declared
+            session <em>durations</em> × assumed headcount. Daily only bills for time participants are actually
+            connected, so this runs <em>higher</em> than the actuals above — use it for capacity planning, not billing.
           </p>
         </div>
 
-        {/* ── Top stat cards ─────────────────────────────────────── */}
+        {/* ── Top stat cards (modelled) ──────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={DollarSign} tint="emerald" label={`Est. cost · ${windowDays}d`} value={fmtUSD(summary.estCost)}
+          <StatCard icon={DollarSign} tint="emerald" label={`Modelled cost · ${windowDays}d`} value={fmtUSD(summary.estCost)}
             sub={`${fmtUSD(summary.blendedRate)}/min blended`} />
-          <StatCard icon={Clock} tint="blue" label="Participant-minutes" value={fmtMin(summary.participantMinutes)}
+          <StatCard icon={Clock} tint="blue" label="Modelled participant-min" value={fmtMin(summary.participantMinutes)}
             sub={`${summary.roomSessions} of ${summary.sessionCount} sessions billed`} />
           <StatCard icon={Users} tint="violet" label="Active users" value={fmtMin(summary.activeUsers)}
             sub={`${fmtMin(summary.avgVideoMinutesPerUser)} min/user`} />
-          <StatCard icon={TrendingUp} tint="amber" label="Cost / active user" value={fmtUSD(summary.costPerActiveUser)}
+          <StatCard icon={TrendingUp} tint="amber" label="Modelled cost / user" value={fmtUSD(summary.costPerActiveUser)}
             sub="this window" />
         </div>
 

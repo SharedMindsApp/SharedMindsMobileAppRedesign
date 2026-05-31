@@ -61,6 +61,8 @@ const AdminChangelog        = lazy(() => import('../components/admin/AdminChange
 const AdminHeatmaps         = lazy(() => import('../components/admin/AdminHeatmaps').then(m => ({ default: m.AdminHeatmaps })));
 const AdminDailyCost        = lazy(() => import('../components/admin/AdminDailyCost').then(m => ({ default: m.AdminDailyCost })));
 
+const UpgradePage           = lazy(() => import('./features/billing/UpgradePage').then(m => ({ default: m.UpgradePage })));
+const AdminWaitlist         = lazy(() => import('../components/admin/AdminWaitlist').then(m => ({ default: m.AdminWaitlist })));
 const TermsOfServicePage    = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.TermsOfServicePage })));
 const PrivacyPolicyPage     = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.PrivacyPolicyPage })));
 
@@ -218,6 +220,7 @@ function AppContent() {
             <Route path="session-invite/:token" element={<AcceptSessionInvitePage />} />
             <Route path="credit-invite/:token" element={<AcceptCreditInvitePage />} />
             <Route path="reflection" element={<ReflectionPage />} />
+            <Route path="upgrade" element={<UpgradePage />} />
             <Route path="calendar" element={<Navigate to="/sessions" replace />} />
             <Route
               path="pantry/*"
@@ -260,6 +263,7 @@ function AppContent() {
                     <Route path="analytics" element={<AdminAnalytics />} />
                     <Route path="heatmaps" element={<AdminHeatmaps />} />
                     <Route path="daily-cost" element={<AdminDailyCost />} />
+                    <Route path="waitlist" element={<AdminWaitlist />} />
                     <Route path="logs" element={<AdminLogs />} />
                     <Route path="changelog" element={<AdminChangelog />} />
                     <Route path="settings" element={<AdminSettings />} />

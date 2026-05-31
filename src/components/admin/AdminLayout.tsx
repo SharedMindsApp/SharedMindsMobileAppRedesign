@@ -17,6 +17,7 @@ import {
   FileText,
   Flame,
   DollarSign,
+  Sparkles,
 } from 'lucide-react';
 import { getOpenFlagCount } from '../../core/services/ModerationService';
 import { useAuth } from '../../core/auth/AuthProvider';
@@ -63,6 +64,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin/analytics',           icon: BarChart3,       label: 'Analytics',          badge: 0 },
     { path: '/admin/heatmaps',            icon: Flame,           label: 'Heatmaps',           badge: 0 },
     { path: '/admin/daily-cost',          icon: DollarSign,      label: 'Daily.co cost',      badge: 0 },
+    { path: '/admin/waitlist',            icon: Sparkles,        label: 'Premium waitlist',   badge: 0 },
     { path: '/admin/logs',                icon: ScrollText,      label: 'Activity Logs',      badge: 0 },
     { path: '/admin/changelog',           icon: FileText,        label: 'Release notes',      badge: 0 },
     { path: '/admin/settings',            icon: Settings,        label: 'Settings',           badge: 0 },

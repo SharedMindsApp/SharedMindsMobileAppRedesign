@@ -217,6 +217,26 @@ export async function getAnalytics(): Promise<{ summary: AnalyticsSummary }> {
  * We pull only the columns the cost model needs and compute the estimate
  * client-side (in lib/dailyCost) so the admin can tune assumptions live.
  */
+export interface DailyUsage {
+  participantMinutes: number;
+  meetingCount: number;
+  ongoing: number;
+  windowDays: number;
+  byDay: { date: string; minutes: number }[];
+}
+
+/** Real Daily.co usage (billing source of truth) via the daily-usage edge fn.
+ *  Returns null if the function isn't deployed / Daily key isn't set, so the
+ *  page can fall back to the modelled estimate. */
+export async function getDailyUsage(days = 30): Promise<DailyUsage | null> {
+  const { data, error } = await supabase.functions.invoke('daily-usage', { body: { days } });
+  if (error) {
+    console.warn('[getDailyUsage] edge function failed:', error.message);
+    return null;
+  }
+  return data as DailyUsage;
+}
+
 export async function getCostSessions(sinceDays = 30): Promise<import('./dailyCost').CostSessionRow[]> {
   const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
