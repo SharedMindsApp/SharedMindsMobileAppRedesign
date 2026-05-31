@@ -61,6 +61,7 @@ import {
   rsvpToSession,
   cancelRsvp,
   fetchMyRsvpedSessionIds,
+  fetchRsvpCounts,
   type ScheduledSessionWithProfile,
 } from '../../services/SessionService';
 import { lookupMood, kindMeta, type SessionKind } from '../../../lib/sessionMood';
@@ -1592,27 +1593,40 @@ export function SessionDetailSheet({
   // in their home countdown + reminders. Only meaningful for a future group
   // session they don't host.
   const canRsvp = !isMine && isScheduled && !isRecap && isGroup;
+  // Show the sign-up count on any upcoming group session — the host wants to
+  // see how many are coming, attendees want social proof.
+  const showGoing = isGroup && isScheduled && !isRecap;
   const [rsvped, setRsvped] = useState(false);
   const [rsvpBusy, setRsvpBusy] = useState(false);
+  const [goingCount, setGoingCount] = useState(0);
   useEffect(() => {
-    if (!canRsvp) return;
+    if (!showGoing) return;
     let cancelled = false;
-    fetchMyRsvpedSessionIds()
-      .then((ids) => { if (!cancelled) setRsvped(ids.has(session.id)); })
+    Promise.all([
+      canRsvp ? fetchMyRsvpedSessionIds() : Promise.resolve(new Set<string>()),
+      fetchRsvpCounts([session.id]),
+    ])
+      .then(([ids, counts]) => {
+        if (cancelled) return;
+        setRsvped(ids.has(session.id));
+        setGoingCount(counts[session.id] ?? 0);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [canRsvp, session.id]);
+  }, [showGoing, canRsvp, session.id]);
   async function toggleRsvp() {
     if (rsvpBusy) return;
     const next = !rsvped;
-    setRsvped(next);          // optimistic
+    setRsvped(next);                              // optimistic
+    setGoingCount((c) => Math.max(0, c + (next ? 1 : -1)));
     setRsvpBusy(true);
     try {
       if (next) await rsvpToSession(session.id);
       else await cancelRsvp(session.id);
-      onChanged?.();          // refresh home countdown / calendar
+      onChanged?.();                              // refresh home countdown / calendar
     } catch {
-      setRsvped(!next);       // revert on failure
+      setRsvped(!next);                           // revert on failure
+      setGoingCount((c) => Math.max(0, c + (next ? -1 : 1)));
     } finally {
       setRsvpBusy(false);
     }
@@ -2012,6 +2026,12 @@ export function SessionDetailSheet({
           )}
           {!isMine && !isActive && canRsvp && (
             <div className="space-y-2">
+              {goingCount > 0 && (
+                <div className="flex items-center justify-center gap-1.5 text-xs font-bold stitch-text-secondary">
+                  <Users size={13} />
+                  {goingCount} {goingCount === 1 ? 'person' : 'people'} going
+                </div>
+              )}
               <button
                 type="button"
                 onClick={toggleRsvp}
@@ -2044,6 +2064,15 @@ export function SessionDetailSheet({
           {/* Edit + Delete — only for the user's own scheduled sessions.
               Active sessions can't be edited (they're running); past
               sessions can't either (they're history). */}
+          {/* Host-facing sign-up count for an upcoming group session. */}
+          {isMine && showGoing && !editing && !confirmingDelete && (
+            <div className="flex items-center justify-center gap-1.5 text-xs font-bold stitch-text-secondary mb-1">
+              <Users size={13} />
+              {goingCount === 0
+                ? 'No sign-ups yet'
+                : `${goingCount} ${goingCount === 1 ? 'person has' : 'people have'} signed up`}
+            </div>
+          )}
           {isMine && isScheduled && !isRecap && !editing && !confirmingDelete && (
             <div className="grid grid-cols-2 gap-2">
               <button

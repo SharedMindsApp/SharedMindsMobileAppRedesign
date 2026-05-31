@@ -9,9 +9,10 @@
  * Tap a card → /sessions (calendar) at that day, or use join code if set.
  */
 
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, ArrowRight, Sparkles, Globe2 } from 'lucide-react';
-import type { ScheduledSessionWithProfile } from '../../services/SessionService';
+import { Calendar, Clock, ArrowRight, Sparkles, Globe2, Users } from 'lucide-react';
+import { fetchRsvpCounts, type ScheduledSessionWithProfile } from '../../services/SessionService';
 import { SessionTagPills } from '../sessions/SessionTagPills';
 
 const PURPOSE_META: Record<string, { label: string; cls: string; Icon: typeof Sparkles }> = {
@@ -81,6 +82,18 @@ export function UpcomingPublicSessionsStrip({
     })
     .slice(0, 6);
 
+  // "N going" social proof — aggregate sign-up counts for the shown sessions.
+  const [going, setGoing] = useState<Record<string, number>>({});
+  const idsKey = upcoming.map((s) => s.id).join(',');
+  useEffect(() => {
+    if (!idsKey) return;
+    let cancelled = false;
+    fetchRsvpCounts(idsKey.split(','))
+      .then((c) => { if (!cancelled) setGoing(c); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [idsKey]);
+
   if (upcoming.length === 0) return null;
 
   return (
@@ -130,6 +143,11 @@ export function UpcomingPublicSessionsStrip({
                     </span>
                   );
                 })()}
+                {(going[s.id] ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold stitch-text-secondary">
+                    <Users size={9} /> {going[s.id]} going
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2 mb-2.5">
