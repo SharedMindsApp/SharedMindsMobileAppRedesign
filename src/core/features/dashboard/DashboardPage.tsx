@@ -441,6 +441,7 @@ export function DashboardPage() {
    *  opening from the Match-me-now CTA so the user lands on a solo
    *  session that's discoverable for drop-ins. */
   const [declareOpenToMatch, setDeclareOpenToMatch] = useState(false);
+  const [declareForceSolo, setDeclareForceSolo] = useState(false);
   /** Purpose the user picked in the Match-me-now sheet — carried into the
    *  door they open so it matches what they chose. */
   const [declareIntent, setDeclareIntent] = useState<SessionIntent | undefined>(undefined);
@@ -666,9 +667,19 @@ export function DashboardPage() {
 
   // Quick-start templates pre-fill goal AND duration
   const [templateDuration, setTemplateDuration] = useState<25 | 50 | 90 | undefined>(undefined);
-  function openDeclareWithTemplate(goal: string, duration: 25 | 50 | 90) {
+  function openDeclareWithTemplate(
+    goal: string,
+    duration: 25 | 50 | 90,
+    opts?: { mode?: 'group' | 'solo' | 'match'; projectId?: string | null },
+  ) {
     setDeclareGoal(goal);
     setTemplateDuration(duration);
+    if (opts?.projectId) setDeclareProjectId(opts.projectId);
+    // A queued block segment carries its own mode → preselect it in the
+    // declare flow: solo skips the lobby, match opens an open-to-match door,
+    // group is the default.
+    setDeclareForceSolo(opts?.mode === 'solo');
+    setDeclareOpenToMatch(opts?.mode === 'match');
     setShowDeclare(true);
   }
 
@@ -936,6 +947,7 @@ export function DashboardPage() {
             setTemplateDuration(undefined);
             setDeclareSmallerHint(false);
             setDeclareOpenToMatch(false);
+            setDeclareForceSolo(false);
             setDeclareProjectId(undefined);
             setDeclareIntent(undefined);
           }}
@@ -944,6 +956,7 @@ export function DashboardPage() {
           initialProjectId={declareProjectId}
           startWithSmallerHint={declareSmallerHint}
           startOpenToMatch={declareOpenToMatch}
+          forceSoloMode={declareForceSolo}
           initialIntent={declareIntent}
         />
       )}

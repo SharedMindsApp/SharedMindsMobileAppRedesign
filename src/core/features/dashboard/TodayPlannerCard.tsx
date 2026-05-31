@@ -477,13 +477,16 @@ function AddBlockForm({
 // Tap a block to edit it: title, length/span, type, project, done, delete.
 
 function BlockEditPopover({
-  block, projects, onSave, onDelete, onToggleDone, onClose,
+  block, projects, onSave, onDelete, onToggleDone, onStartSegment, onClose,
 }: {
   block: TimeBlock;
   projects: { id: string; name: string }[];
   onSave: (patch: { title: string; duration_mins: number; block_type: BlockType; project_id: string | null; start_time?: string }) => void;
   onDelete: () => void;
   onToggleDone: () => void;
+  /** Launch a queued session segment — opens the declare flow pre-set to
+   *  the segment's mode + the block's goal/project/duration. */
+  onStartSegment: (seg: BlockSegment) => void;
   onClose: () => void;
 }) {
   const initialLengthKey = LENGTH_OPTIONS.find((o) => o.mins === block.duration_mins)?.key ?? '60';
@@ -495,9 +498,11 @@ function BlockEditPopover({
   const done = !!block.completed_at;
 
   // Tasks attached to this block (micromanage what it contains).
-  const { state: { tasks } } = useCoreData();
+  const { state: { tasks }, addTaskAsync } = useCoreData();
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [creatingTask, setCreatingTask] = useState(false);
   useEffect(() => {
     TimeBlockService.fetchBlockTaskIds([block.id]).then((m) => setAttachedIds(m[block.id] ?? [])).catch(() => {});
   }, [block.id]);
@@ -508,12 +513,24 @@ function BlockEditPopover({
       && (!projectId || t.projectId === projectId),
   );
   async function attachTask(taskId: string) {
-    setAttachedIds((a) => [...a, taskId]); setPickerOpen(false);
+    setAttachedIds((a) => [...a, taskId]);
     try { await TimeBlockService.addTaskToBlock(block.id, taskId); } catch { /* ignore */ }
   }
   async function detachTask(taskId: string) {
     setAttachedIds((a) => a.filter((x) => x !== taskId));
     try { await TimeBlockService.removeTaskFromBlock(block.id, taskId); } catch { /* ignore */ }
+  }
+  // Create a brand-new task (scoped to the block's project) and attach it —
+  // so you can decide what's in the block without leaving to the task list.
+  async function createAndAttach() {
+    const title = newTaskTitle.trim();
+    if (!title || creatingTask) return;
+    setCreatingTask(true);
+    try {
+      const id = await addTaskAsync(title, projectId);
+      setNewTaskTitle('');
+      await attachTask(id);
+    } catch { /* ignore */ } finally { setCreatingTask(false); }
   }
 
   // Sessions queued within this block (Group → Solo → Match …).
@@ -605,11 +622,9 @@ function BlockEditPopover({
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase flex items-center gap-1.5"><Layers size={11} /> Tasks</p>
-            {addableTasks.length > 0 && (
-              <button type="button" onClick={() => setPickerOpen((o) => !o)} className="text-[11px] font-bold text-primary hover:underline">
-                {pickerOpen ? 'Close' : '+ Add task'}
-              </button>
-            )}
+            <button type="button" onClick={() => setPickerOpen((o) => !o)} className="text-[11px] font-bold text-primary hover:underline">
+              {pickerOpen ? 'Close' : '+ Add task'}
+            </button>
           </div>
 
           {attachedTasks.length > 0 ? (
@@ -623,18 +638,43 @@ function BlockEditPopover({
               ))}
             </div>
           ) : (
-            <p className="text-[11px] stitch-text-secondary italic">Pull existing tasks into this block to plan it out.</p>
+            <p className="text-[11px] stitch-text-secondary italic">Add or pull in tasks to decide what this block is actually for.</p>
           )}
 
           {pickerOpen && (
-            <div className="mt-1.5 max-h-40 overflow-y-auto rounded-lg ring-1 ring-surface-container divide-y divide-surface-container/60">
-              {addableTasks.map((t) => (
-                <button key={t.id} type="button" onClick={() => void attachTask(t.id)}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-surface-container-low">
-                  <Plus size={11} className="text-primary shrink-0" />
-                  <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{t.title}</span>
+            <div className="mt-1.5 space-y-1.5">
+              {/* Create a new task inline */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void createAndAttach(); } }}
+                  maxLength={200}
+                  placeholder="New task…"
+                  className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary bg-surface-container-low rounded-lg px-2.5 py-1.5 outline-none ring-1 ring-surface-container focus:ring-2 focus:ring-primary/30"
+                />
+                <button
+                  type="button"
+                  onClick={() => void createAndAttach()}
+                  disabled={!newTaskTitle.trim() || creatingTask}
+                  className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-white bg-primary rounded-lg px-2.5 py-1.5 disabled:opacity-40 active:scale-95 transition"
+                >
+                  <Plus size={12} /> Add
                 </button>
-              ))}
+              </div>
+
+              {/* Pull in existing tasks */}
+              {addableTasks.length > 0 && (
+                <div className="max-h-40 overflow-y-auto rounded-lg ring-1 ring-surface-container divide-y divide-surface-container/60">
+                  {addableTasks.map((t) => (
+                    <button key={t.id} type="button" onClick={() => void attachTask(t.id)}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-surface-container-low">
+                      <Plus size={11} className="text-primary shrink-0" />
+                      <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{t.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -652,6 +692,15 @@ function BlockEditPopover({
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: m.hex }} />
                     <span className="flex-1 min-w-0 text-xs font-semibold stitch-text-primary truncate">{m.emoji} {m.label}</span>
                     <span className="text-[10px] font-semibold stitch-text-secondary">{seg.duration_mins}m</span>
+                    <button
+                      type="button"
+                      onClick={() => onStartSegment(seg)}
+                      aria-label={`Start this ${m.label} session`}
+                      title="Start this session"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 active:scale-95 transition"
+                    >
+                      <Play size={10} /> Start
+                    </button>
                     <button type="button" onClick={() => void removeSegment(seg.id)} aria-label="Remove" className="w-5 h-5 grid place-items-center rounded stitch-text-secondary hover:bg-surface-container"><X size={11} /></button>
                   </div>
                 );
@@ -677,7 +726,7 @@ function BlockEditPopover({
               <Plus size={12} /> Add
             </button>
           </div>
-          <p className="text-[10px] stitch-text-secondary/80 mt-1.5 leading-snug">Queue different sessions across the block — they'll run in order. (Auto-start coming soon.)</p>
+          <p className="text-[10px] stitch-text-secondary/80 mt-1.5 leading-snug">Queue the sessions you'll run in this block, then tap <span className="font-bold">Start</span> on each in turn. (Auto-advance coming soon.)</p>
         </div>
 
         <button
@@ -1119,7 +1168,11 @@ function WeekTimeline({
 export function TodayPlannerCard({
   onStartSession,
 }: {
-  onStartSession: (goal: string, duration: 25 | 50 | 90) => void;
+  onStartSession: (
+    goal: string,
+    duration: 25 | 50 | 90,
+    opts?: { mode?: SegmentMode; projectId?: string | null },
+  ) => void;
 }) {
   const { user, profile } = useAuth();
   // User-defined visible day window (same-day range), stored on the profile.
@@ -1898,6 +1951,14 @@ export function TodayPlannerCard({
           onSave={(patch) => handleSaveBlockEdit(editingBlock.id, patch)}
           onDelete={() => { handleDelete(editingBlock.id); setEditingBlock(null); }}
           onToggleDone={() => { handleToggle(editingBlock); setEditingBlock(null); }}
+          onStartSegment={(seg) => {
+            const b = editingBlock;
+            setEditingBlock(null);
+            onStartSession(b.title || 'Focus session', nearestDuration(seg.duration_mins), {
+              mode: seg.mode,
+              projectId: b.project_id,
+            });
+          }}
           onClose={() => setEditingBlock(null)}
         />
       )}
