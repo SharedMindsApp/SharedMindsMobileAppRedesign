@@ -59,6 +59,7 @@ const AdminModerationQueue  = lazy(() => import('../components/admin/AdminModera
 const AdminSafetyEscalation = lazy(() => import('../components/admin/AdminSafetyEscalation').then(m => ({ default: m.AdminSafetyEscalation })));
 const AdminChangelog        = lazy(() => import('../components/admin/AdminChangelog').then(m => ({ default: m.AdminChangelog })));
 const AdminHeatmaps         = lazy(() => import('../components/admin/AdminHeatmaps').then(m => ({ default: m.AdminHeatmaps })));
+const AdminDailyCost        = lazy(() => import('../components/admin/AdminDailyCost').then(m => ({ default: m.AdminDailyCost })));
 
 const TermsOfServicePage    = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.TermsOfServicePage })));
 const PrivacyPolicyPage     = lazy(() => import('./features/legal/LegalPages').then(m => ({ default: m.PrivacyPolicyPage })));
@@ -258,6 +259,7 @@ function AppContent() {
                     <Route path="recurring-sessions" element={<AdminRecurringSessions />} />
                     <Route path="analytics" element={<AdminAnalytics />} />
                     <Route path="heatmaps" element={<AdminHeatmaps />} />
+                    <Route path="daily-cost" element={<AdminDailyCost />} />
                     <Route path="logs" element={<AdminLogs />} />
                     <Route path="changelog" element={<AdminChangelog />} />
                     <Route path="settings" element={<AdminSettings />} />

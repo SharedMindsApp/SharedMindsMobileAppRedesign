@@ -212,6 +212,25 @@ export async function getAnalytics(): Promise<{ summary: AnalyticsSummary }> {
   return { summary };
 }
 
+/**
+ * Raw session rows for the Daily.co cost estimate, scoped to a window.
+ * We pull only the columns the cost model needs and compute the estimate
+ * client-side (in lib/dailyCost) so the admin can tune assumptions live.
+ */
+export async function getCostSessions(sinceDays = 30): Promise<import('./dailyCost').CostSessionRow[]> {
+  const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('focus_sessions')
+    .select('session_mode, partner_user_id, body_double, is_offline, quiet_mode, status, actual_duration_minutes, intended_duration_minutes, start_time, ended_at, user_id')
+    .gte('start_time', since)
+    .limit(50_000);
+  if (error) {
+    console.error('[getCostSessions] query failed:', error);
+    throw error;
+  }
+  return (data ?? []) as import('./dailyCost').CostSessionRow[];
+}
+
 /** Recent finished sessions for the dashboard activity feed. */
 export async function getRecentFinishedSessions(limit = 10): Promise<RecentFinishedSession[]> {
   const { data, error } = await supabase
