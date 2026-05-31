@@ -479,15 +479,18 @@ export async function setAcceptJoiners(
 
 export async function markSessionEnded(sessionId: string): Promise<void> {
   const now = new Date();
-  const { data: session, error: fetchError } = await supabase
+  // maybeSingle (not single): if the row isn't visible — already completed, or
+  // hidden by RLS — we get null instead of a 406 throw. We still issue the
+  // UPDATE (RLS gates it); the duration is best-effort when we can read start.
+  const { data: session } = await supabase
     .from('focus_sessions')
     .select('start_time')
     .eq('id', sessionId)
-    .single();
-  if (fetchError) throw fetchError;
+    .maybeSingle();
 
-  const startTime = new Date(session.start_time);
-  const actualMinutes = Math.round((now.getTime() - startTime.getTime()) / 60000);
+  const actualMinutes = session?.start_time
+    ? Math.round((now.getTime() - new Date(session.start_time).getTime()) / 60000)
+    : null;
 
   const { error } = await supabase
     .from('focus_sessions')
@@ -495,7 +498,7 @@ export async function markSessionEnded(sessionId: string): Promise<void> {
       status: 'completed',
       end_time: now.toISOString(),
       ended_at: now.toISOString(),
-      actual_duration_minutes: actualMinutes,
+      ...(actualMinutes != null ? { actual_duration_minutes: actualMinutes } : {}),
     })
     .eq('id', sessionId);
   if (error) throw error;
@@ -707,16 +710,15 @@ export async function endCommunitySession(input: {
 }): Promise<void> {
   const now = new Date();
 
-  const { data: session, error: fetchError } = await supabase
+  const { data: session } = await supabase
     .from('focus_sessions')
     .select('start_time')
     .eq('id', input.sessionId)
-    .single();
+    .maybeSingle();
 
-  if (fetchError) throw fetchError;
-
-  const startTime = new Date(session.start_time);
-  const actualMinutes = Math.round((now.getTime() - startTime.getTime()) / 60000);
+  const actualMinutes = session?.start_time
+    ? Math.round((now.getTime() - new Date(session.start_time).getTime()) / 60000)
+    : null;
 
   const { error } = await supabase
     .from('focus_sessions')
@@ -725,7 +727,7 @@ export async function endCommunitySession(input: {
       end_time: now.toISOString(),
       ended_at: now.toISOString(),
       session_outcome: input.outcome,
-      actual_duration_minutes: actualMinutes,
+      ...(actualMinutes != null ? { actual_duration_minutes: actualMinutes } : {}),
     })
     .eq('id', input.sessionId);
 
@@ -829,7 +831,7 @@ export async function updateScheduledSession(
       .from('focus_sessions')
       .select('start_time')
       .eq('id', sessionId)
-      .single();
+      .maybeSingle();
     if (existing?.start_time) {
       const startMs = new Date(existing.start_time).getTime();
       updates.target_end_time = new Date(startMs + patch.durationMinutes * 60 * 1000).toISOString();
