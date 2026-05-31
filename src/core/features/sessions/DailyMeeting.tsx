@@ -142,6 +142,23 @@ export function DailyMeeting({
   const [deviceWarning, setDeviceWarning] = useState<null | 'not_found' | 'permission_denied'>(null);
   const [deviceWarningDismissed, setDeviceWarningDismissed] = useState(false);
 
+  // ── Auto-hiding controls ──────────────────────────────────────────────────
+  // Like a video player: the controls bar fades out after 5s of inactivity and
+  // reappears on mouse-move / tap, so the video isn't obstructed while you work.
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const chromeTimerRef = useRef<number | null>(null);
+  const bumpChrome = () => {
+    setChromeVisible(true);
+    if (chromeTimerRef.current) window.clearTimeout(chromeTimerRef.current);
+    chromeTimerRef.current = window.setTimeout(() => setChromeVisible(false), 5000);
+  };
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+    bumpChrome(); // start the 5s countdown once we're in
+    return () => { if (chromeTimerRef.current) window.clearTimeout(chromeTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState]);
+
   // Stable refs for callbacks so we don't restart the effect on every render
   const cbCountRef  = useRef(onParticipantCountChanged);
   const cbJoinedRef = useRef(onParticipantJoined);
@@ -302,7 +319,13 @@ export function DailyMeeting({
   }
 
   return (
-    <div className="absolute inset-0 bg-[#1a1a2e] flex flex-col">
+    <div
+      className="absolute inset-0 bg-[#1a1a2e] flex flex-col"
+      onMouseMove={connectionState === 'connected' ? bumpChrome : undefined}
+      onTouchStart={connectionState === 'connected' ? bumpChrome : undefined}
+      onClick={connectionState === 'connected' ? bumpChrome : undefined}
+      style={connectionState === 'connected' && !chromeVisible ? { cursor: 'none' } : undefined}
+    >
       {/* ── Loading overlay ─────────────────────────────────────── */}
       {connectionState === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-30 gap-3 bg-[#1a1a2e]">
@@ -345,7 +368,13 @@ export function DailyMeeting({
             <VideoGrid focusSessionId={focusSessionId} />
           </div>
           {!chromeless && (
-            <MeetingControls onLeave={handleLeave} avatarVerified={avatarVerified} />
+            <div
+              className={`absolute bottom-0 inset-x-0 z-20 transition-all duration-300 ${
+                chromeVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+              }`}
+            >
+              <MeetingControls onLeave={handleLeave} avatarVerified={avatarVerified} />
+            </div>
           )}
         </DailyProvider>
       )}
