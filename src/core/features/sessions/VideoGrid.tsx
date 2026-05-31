@@ -210,6 +210,17 @@ function SpotlightStage({
 // bottom-right chat/music cluster.
 
 const PIP_STORAGE_KEY = 'sm_self_pip_pos';
+const PIP_SIZE_KEY = 'sm_self_pip_size';
+
+// Three thumbnail sizes the user can cycle through (desktop only). Fixed px so
+// drag-clamping is deterministic across the size transition.
+const PIP_SIZES = {
+  sm: { w: 112, h: 80 },
+  md: { w: 176, h: 112 },
+  lg: { w: 248, h: 152 },
+} as const;
+type PipSize = keyof typeof PIP_SIZES;
+const PIP_ORDER: PipSize[] = ['sm', 'md', 'lg'];
 
 function DraggablePiP({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -217,40 +228,66 @@ function DraggablePiP({ children }: { children: React.ReactNode }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  const clamp = useCallback((x: number, y: number) => {
-    const el = ref.current;
-    const parent = el?.parentElement;
-    if (!el || !parent) return { x, y };
-    const w = el.offsetWidth, h = el.offsetHeight;
-    return {
-      x: Math.max(8, Math.min(x, parent.clientWidth - w - 8)),
-      y: Math.max(8, Math.min(y, parent.clientHeight - h - 8)),
-    };
+  // Drag + resize are desktop affordances — on a phone the screen's too small
+  // to spare, so the self-view is just a fixed small thumbnail in the corner.
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)');
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, []);
+
+  const [size, setSize] = useState<PipSize>(() => {
+    try { const s = localStorage.getItem(PIP_SIZE_KEY) as PipSize | null; return s && PIP_SIZES[s] ? s : 'sm'; }
+    catch { return 'sm'; }
+  });
+  // Mobile is locked to the small size.
+  const dims = PIP_SIZES[isDesktop ? size : 'sm'];
+
+  const clamp = useCallback((x: number, y: number) => {
+    const parent = ref.current?.parentElement;
+    if (!parent) return { x, y };
+    return {
+      x: Math.max(8, Math.min(x, parent.clientWidth - dims.w - 8)),
+      y: Math.max(8, Math.min(y, parent.clientHeight - dims.h - 8)),
+    };
+  }, [dims.w, dims.h]);
 
   // Initial placement: restore the saved spot, else default bottom-left above
   // the control bar.
   useEffect(() => {
-    const el = ref.current;
-    const parent = el?.parentElement;
-    if (!el || !parent) return;
+    const parent = ref.current?.parentElement;
+    if (!parent) return;
     let initial: { x: number; y: number } | null = null;
     try {
       const s = localStorage.getItem(PIP_STORAGE_KEY);
       if (s) initial = JSON.parse(s);
     } catch { /* ignore */ }
-    if (!initial) initial = { x: 16, y: parent.clientHeight - el.offsetHeight - 84 };
+    if (!initial || !isDesktop) initial = { x: 16, y: parent.clientHeight - dims.h - 84 };
     setPos(clamp(initial.x, initial.y));
-  }, [clamp]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDesktop]);
 
-  // Keep it on-screen if the viewport / layout changes (focus toggle, resize).
+  // Keep it on-screen when the viewport / layout / size changes.
   useEffect(() => {
+    setPos((p) => (p ? clamp(p.x, p.y) : p));
     const onResize = () => setPos((p) => (p ? clamp(p.x, p.y) : p));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [clamp]);
 
+  function cycleSize() {
+    setSize((s) => {
+      const next = PIP_ORDER[(PIP_ORDER.indexOf(s) + 1) % PIP_ORDER.length];
+      try { localStorage.setItem(PIP_SIZE_KEY, next); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
   function onPointerDown(e: React.PointerEvent) {
+    if (!isDesktop) return;
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -270,7 +307,7 @@ function DraggablePiP({ children }: { children: React.ReactNode }) {
     setDragging(false);
     ref.current?.releasePointerCapture(e.pointerId);
     setPos((p) => {
-      if (p) { try { localStorage.setItem(PIP_STORAGE_KEY, JSON.stringify(p)); } catch { /* ignore */ } }
+      if (p && isDesktop) { try { localStorage.setItem(PIP_STORAGE_KEY, JSON.stringify(p)); } catch { /* ignore */ } }
       return p;
     });
   }
@@ -282,16 +319,32 @@ function DraggablePiP({ children }: { children: React.ReactNode }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      // z-30 keeps it above the stage; touch-none stops the page scrolling
-      // while you drag on mobile. Hidden until measured to avoid a corner flash.
-      className={`group absolute z-30 w-28 h-20 sm:w-36 sm:h-24 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/15 touch-none select-none transition-[transform,box-shadow] ${
-        dragging ? 'cursor-grabbing scale-[1.03] ring-violet-400/60' : 'cursor-grab'
+      className={`group absolute z-30 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/15 touch-none select-none transition-[transform,box-shadow,width,height] ${
+        isDesktop ? (dragging ? 'cursor-grabbing scale-[1.02] ring-violet-400/60' : 'cursor-grab') : ''
       }`}
-      style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 84, visibility: 'hidden' }}
+      style={{
+        width: dims.w,
+        height: dims.h,
+        ...(pos ? { left: pos.x, top: pos.y } : { left: 16, bottom: 84, visibility: 'hidden' }),
+      }}
     >
       {children}
-      {/* Drag affordance — a grab bar, brighter on hover. */}
-      <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-7 h-1 rounded-full bg-white/40 group-hover:bg-white/70 transition-colors pointer-events-none" />
+      {/* Desktop only: grab bar + a resize-cycle button (S → M → L). */}
+      {isDesktop && (
+        <>
+          <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-7 h-1 rounded-full bg-white/40 group-hover:bg-white/70 transition-colors pointer-events-none" />
+          <button
+            type="button"
+            onClick={cycleSize}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label={`Resize self-view (currently ${size === 'sm' ? 'small' : size === 'md' ? 'medium' : 'large'})`}
+            title="Resize"
+            className="absolute top-1 right-1 w-6 h-6 grid place-items-center rounded-full bg-black/55 text-white/80 hover:text-white hover:bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            {size === 'lg' ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          </button>
+        </>
+      )}
     </div>
   );
 }

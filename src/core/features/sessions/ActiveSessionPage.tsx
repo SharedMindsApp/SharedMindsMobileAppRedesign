@@ -1145,7 +1145,7 @@ export function ActiveSessionPage() {
       {/* relative z-40 so header-anchored popovers (the wizard dropdown)
           render ABOVE the session body, which comes later in the DOM and
           would otherwise paint over them. Hidden in focus mode. */}
-      <div className={`relative z-40 shrink-0 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm ${focusMode ? 'hidden' : ''}`}>
+      <div className={`relative z-40 shrink-0 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 pt-safe-or-3 pt-3 pb-3 bg-black/30 backdrop-blur-sm transition-[margin] duration-300 ${focusMode ? 'hidden' : ''} ${chatOpen ? 'sm:mr-[360px]' : ''}`}>
         {/* Goal */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
