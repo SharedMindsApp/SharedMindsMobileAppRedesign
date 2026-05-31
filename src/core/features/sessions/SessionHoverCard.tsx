@@ -12,6 +12,7 @@
 
 import { createPortal } from 'react-dom';
 import { SessionTagPills } from './SessionTagPills';
+import { lookupMood, lookupFocus } from '../../../lib/sessionMood';
 import type { GridSession } from './CalendarView';
 
 const CARD_W = 256;
@@ -89,6 +90,20 @@ export function SessionHoverCard({
           projectColor={session.project_color}
           size="sm"
         />
+        {(() => {
+          const m = lookupMood(session.start_mood);
+          const f = lookupFocus(session.start_focus);
+          if (!m && !f) return null;
+          return (
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold uppercase tracking-wider text-[9px] stitch-text-secondary">Going in</span>
+              <span className="font-semibold stitch-text-primary inline-flex items-center gap-2">
+                {m && <span className="inline-flex items-center gap-0.5"><span>{m.emoji}</span>{m.label}</span>}
+                {f && <span className="inline-flex items-center gap-0.5"><span>{f.emoji}</span>{f.label}</span>}
+              </span>
+            </div>
+          );
+        })()}
         <div className="mt-1 pt-2 border-t border-surface-container/60 text-primary font-bold text-[10px] text-center">
           Click for details →
         </div>

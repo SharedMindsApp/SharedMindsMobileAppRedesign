@@ -69,6 +69,21 @@ function modeHex(mode: SessionMode, isQuickTimer: boolean): string {
   return '#f43f5e';                            // rose (solo)
 }
 
+/** Tiny mode glyph so the block carries its TYPE at a glance (mirrors the
+ *  emoji used by SessionTagPills). Timer wins when it's a quick timer. */
+function modeEmoji(mode: SessionMode, isQuickTimer: boolean): string {
+  if (isQuickTimer) return '⏱️';
+  if (mode === 'one_on_one') return '🤝';
+  if (mode === 'group') return '👥';
+  return '🎯'; // solo
+}
+function modeLabel(mode: SessionMode, isQuickTimer: boolean): string {
+  if (isQuickTimer) return 'Timer';
+  if (mode === 'one_on_one') return '1-on-1 session';
+  if (mode === 'group') return 'Group session';
+  return 'Solo focus';
+}
+
 /** A focus session reduced to what the planner grid needs. Read-only —
  *  these are a record of work done/booked, laid over the editable blocks.
  *  Colour-coded by session mode, mirroring the /sessions calendar tags. */
@@ -117,7 +132,9 @@ function plannerToGrid(s: ScheduledSessionWithProfile): GridSession {
     startsAt: new Date((a.scheduled_at as string) ?? s.start_time),
     status: 'scheduled',
     session_kind: (a.session_kind as GridSession['session_kind']) ?? null,
+    session_intent: (a.session_intent as string) ?? null,
     start_mood: (a.start_mood as string) ?? null,
+    start_focus: (a.start_focus as string) ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
@@ -1774,14 +1791,18 @@ export function TodayPlannerCard({
                               onMouseLeave={() => setHoveredSession(null)}
                               className={`relative flex items-center gap-1.5 rounded-lg pl-3 pr-2 py-1.5 mb-1 cursor-pointer hover:brightness-[0.97] active:scale-[0.99] transition ${completed ? '' : 'opacity-90'}`}
                               style={style}
-                              title={`${ps.title} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
+                              title={`${modeLabel(ps.mode, ps.isQuickTimer)} · ${ps.title || 'Focus session'} · ${ps.durationMins}min · ${completed ? 'completed' : 'scheduled'}`}
                             >
                               <span className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg" style={{ backgroundColor: hex }} />
                               {completed
                                 ? <Check size={11} strokeWidth={3} className="shrink-0" style={{ color: hex }} />
                                 : <CalendarIcon size={10} className="shrink-0" style={{ color: hex }} />}
+                              {/* Type glyph — carries the session mode at a glance. */}
+                              <span className="text-[11px] leading-none shrink-0" aria-hidden>
+                                {modeEmoji(ps.mode, ps.isQuickTimer)}
+                              </span>
                               <span className="flex-1 min-w-0 text-[11px] font-bold truncate" style={{ color: hex }}>
-                                {ps.title}
+                                {ps.title || modeLabel(ps.mode, ps.isQuickTimer)}
                               </span>
                               <span className="text-[10px] font-semibold shrink-0 opacity-80" style={{ color: hex }}>
                                 {ps.durationMins}m

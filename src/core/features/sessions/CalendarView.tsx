@@ -64,7 +64,7 @@ import {
   fetchRsvpCounts,
   type ScheduledSessionWithProfile,
 } from '../../services/SessionService';
-import { lookupMood, kindMeta, type SessionKind } from '../../../lib/sessionMood';
+import { lookupMood, lookupFocus, kindMeta, type SessionKind } from '../../../lib/sessionMood';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { showToast } from '../../../components/Toast';
 
@@ -241,6 +241,7 @@ export type GridSession = {
   session_kind?: 'do' | 'plan' | 'reflect' | null;
   session_intent?: string | null;
   start_mood?: string | null;
+  start_focus?: string | null;
   project_id?: string | null;
   project_title?: string | null;
   project_color?: string | null;
@@ -273,6 +274,7 @@ function toGridSession(s: CommunitySession): GridSession {
     session_kind: (s as any).session_kind ?? null,
     session_intent: (s as any).session_intent ?? null,
     start_mood: (s as any).start_mood ?? null,
+    start_focus: (s as any).start_focus ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
@@ -298,6 +300,7 @@ export function toGridScheduled(s: ScheduledSessionWithProfile): GridSession {
     session_kind: (s as any).session_kind ?? null,
     session_intent: (s as any).session_intent ?? null,
     start_mood: (s as any).start_mood ?? null,
+    start_focus: (s as any).start_focus ?? null,
     project_id: s.project_id ?? null,
     project_title: s.project?.title ?? null,
     project_color: s.project?.color ?? null,
@@ -1564,6 +1567,7 @@ export function SessionDetailSheet({
   const isRecap = !isActive && (session.status === 'completed' || isPast);
   const [recapOutcome, setRecapOutcome] = useState<string | null>(null);
   const [recapEndMood, setRecapEndMood] = useState<string | null>(null);
+  const [recapEndFocus, setRecapEndFocus] = useState<string | null>(null);
   // Privacy: we keep only the COUNT of participants, never the list of who.
   const [participantCount, setParticipantCount] = useState(0);
   const [recapLoaded, setRecapLoaded] = useState(false);
@@ -1576,6 +1580,7 @@ export function SessionDetailSheet({
         const mine = rows.find((r) => r.user_id === user?.id) ?? rows[0];
         setRecapOutcome(mine?.outcome ?? null);
         setRecapEndMood(mine?.end_mood ?? null);
+        setRecapEndFocus(mine?.end_focus ?? null);
         setParticipantCount(rows.length);
       })
       .catch(() => {})
@@ -1930,6 +1935,20 @@ export function SessionDetailSheet({
               Session recap
             </p>
 
+            {/* Type — at-a-glance mode / quiet / project pills */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-1">Type</p>
+              <SessionTagPills
+                mode={session.session_mode}
+                quietMode={session.quiet_mode}
+                partnerOpen={session.session_mode === 'one_on_one' && !session.partner_user_id}
+                isQuickTimer={session.is_quick_timer}
+                projectTitle={session.project_title}
+                projectColor={session.project_color}
+                size="sm"
+              />
+            </div>
+
             {/* Intention */}
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Intention</p>
@@ -1981,11 +2000,77 @@ export function SessionDetailSheet({
                 </div>
               );
             })()}
+
+            {/* Focus — a separate dimension from mood, before → after */}
+            {(() => {
+              const startF = lookupFocus(session.start_focus);
+              const endF = lookupFocus(recapEndFocus);
+              if (!startF && !endF) return null;
+              return (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-1">Focus</p>
+                  <div className="flex items-center gap-2 text-sm font-semibold stitch-text-primary">
+                    <span className="inline-flex items-center gap-1">
+                      <span>{startF?.emoji ?? '–'}</span>{startF?.label ?? 'Not set'}
+                    </span>
+                    <span className="stitch-text-secondary">→</span>
+                    <span className="inline-flex items-center gap-1">
+                      <span>{endF?.emoji ?? '–'}</span>{endF?.label ?? 'Not set'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
-          <p className="text-sm stitch-text-primary leading-snug mb-4">
-            {sessionLabelOr(session, 'Working on something')}
-          </p>
+          <div className="mb-4 space-y-3">
+            {/* Type — at-a-glance mode / quiet / project pills */}
+            <SessionTagPills
+              mode={session.session_mode}
+              quietMode={session.quiet_mode}
+              partnerOpen={session.session_mode === 'one_on_one' && !session.partner_user_id}
+              isQuickTimer={session.is_quick_timer}
+              projectTitle={session.project_title}
+              projectColor={session.project_color}
+              size="sm"
+            />
+
+            {/* Intention */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Intention</p>
+              <p className="text-sm stitch-text-primary leading-snug">
+                {sessionLabelOr(session, 'Working on something')}
+              </p>
+            </div>
+
+            {/* Going-in mood + focus — only once recorded (set at session start). */}
+            {(() => {
+              const startM = lookupMood(session.start_mood);
+              const startF = lookupFocus(session.start_focus);
+              if (!startM && !startF) return null;
+              const axisLabel = kindMeta(session.session_kind as SessionKind).axis === 'clarity' ? 'Clarity' : 'Energy';
+              return (
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {startM && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Going in · {axisLabel}</p>
+                      <p className="text-sm font-semibold stitch-text-primary inline-flex items-center gap-1">
+                        <span>{startM.emoji}</span>{startM.label}
+                      </p>
+                    </div>
+                  )}
+                  {startF && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider stitch-text-secondary mb-0.5">Focus</p>
+                      <p className="text-sm font-semibold stitch-text-primary inline-flex items-center gap-1">
+                        <span>{startF.emoji}</span>{startF.label}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         )}
 
         {/* Segment timeline — only shown when the session has a
