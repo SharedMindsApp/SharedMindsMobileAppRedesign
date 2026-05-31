@@ -182,11 +182,17 @@ export function CameraGatedMeeting({
   function handleShare() {
     setShared(true);
     sharedRef.current = true;
-    // Broadcast intent; peers (and we) re-evaluate the open condition.
+    // Broadcast intent so peers re-evaluate (anyone already here opens too).
     channelRef.current?.track({ user_id: currentUserId, sharing: true, hasCam: hasCamRef.current });
-    // If a peer is already here, open immediately for us too — releasing the
-    // preview camera first so Daily can acquire it (iOS exclusive-camera).
-    if (presentCount >= minPeers) { releasePreview(); setOpen(true); }
+    // Explicit "Share my camera" tap = clear intent to go live, so open the
+    // room NOW regardless of who else is here yet. The presser joins on
+    // camera; anyone who arrives later lands in the same room. (Previously we
+    // waited for a 2nd person to be present, which made the button look dead
+    // when you were the first/only one there — especially on mobile.)
+    // releasePreview() must run synchronously before mounting Daily so iOS/iPad
+    // (exclusive camera) frees the device for Daily to acquire.
+    releasePreview();
+    setOpen(true);
   }
 
   if (open) {
@@ -228,11 +234,9 @@ export function CameraGatedMeeting({
           </p>
           <p className="text-xs text-white/50 leading-relaxed mt-1.5">
             {shared
-              ? alone
-                ? 'Camera ready — video starts automatically when someone joins.'
-                : 'Starting the call…'
+              ? 'Starting the call…'
               : alone
-                ? 'This preview is just for you. Video only starts once someone joins.'
+                ? 'This preview is just for you. Tap “Share my camera” to go live — they’ll drop into the same room when they arrive.'
                 : 'Someone’s here. Share your camera to start the call for both of you.'}
           </p>
         </div>
