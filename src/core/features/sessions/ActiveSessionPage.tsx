@@ -17,7 +17,7 @@ import { DailyMeeting } from './DailyMeeting';
 import { useWakeLock } from '../../../lib/useWakeLock';
 import { showToast } from '../../../components/Toast';
 import { SessionChat } from './SessionChat';
-import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, fetchOpenSessions, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
+import { markSessionEnded, triggerDebriefForSession, extendSession, promoteCoHost, setAcceptJoiners, closeTheDoor, finishIntroPhase, takeOverAsHost, reopenForNewMatch, updatePlannedWizards, updateSessionGoal, updateSessionStartCheckIn, touchDoorPresence, claimOpenSession, deleteScheduledSession, skipMatchDoors, MIN_MATCH_MINUTES_LEFT, DOOR_HEARTBEAT_MS } from '../../services/SessionService';
 import type { CommunitySession } from '../../../lib/sessions/focusTypes';
 import { playJoinChime, playPhaseTransition } from './sessionSounds';
 import { musicAudioBus } from './musicAudioBus';
@@ -919,58 +919,18 @@ export function ActiveSessionPage() {
     return () => clearInterval(t);
   }, [isOpenUnmatchedHost, session?.id]);
 
-  // ── Auto-connect: two compatible waiting hosts → merge ─────────
-  // While this user is a waiting host, look for another open door with the
-  // SAME purpose + vibe that opened BEFORE theirs. Only the LATER opener is
-  // prompted (the earlier door is the anchor and is never surfaced its own
-  // partner), so exactly one side initiates — no double-merge race. skips are
-  // already filtered out by fetchOpenSessions.
+  // ── Background auto-matching: DISABLED ─────────────────────────
+  // Previously, while you waited as an open-to-match host, the app scanned for
+  // another compatible open door and surfaced a "someone's waiting too" merge
+  // prompt in the background. That read as the app pairing people up on its
+  // own. Matching is now EXPLICIT only — you connect to someone by going to
+  // "Find a session" and tapping their door. Nothing pairs you automatically.
+  // (mergeAnchor stays null, so the merge banner never renders; handleMerge
+  // remains for any future explicit use.)
   useEffect(() => {
-    if (!isOpenUnmatchedHost || !session?.id || merging) {
-      if (!isOpenUnmatchedHost) { mergeAnchorIdRef.current = null; setMergeAnchor(null); }
-      return;
-    }
-    const sid = session.id;
-    const myIntent = session.session_intent ?? 'work';
-    const myVibe = session.vibe ?? 'brief_hi';
-    let cancelled = false;
-
-    const openedAt = (s: { door_opened_at?: string | null; start_time: string }) =>
-      s.door_opened_at ? new Date(s.door_opened_at).getTime() : Date.parse(s.start_time);
-
-    const findAnchor = async () => {
-      // My own door-open time (door_opened_at isn't on the cached row, so read it).
-      let myOpened = Date.parse(session.start_time);
-      try {
-        const { data } = await supabase.from('focus_sessions').select('door_opened_at').eq('id', sid).maybeSingle();
-        if (data?.door_opened_at) myOpened = new Date(data.door_opened_at as string).getTime();
-      } catch { /* fall back to start_time */ }
-
-      let open: CommunitySession[] = [];
-      try { open = await fetchOpenSessions(); } catch { return; }
-      if (cancelled) return;
-
-      const anchor = open
-        .filter((o) => (o.session_intent ?? 'work') === myIntent)
-        .filter((o) => (o.vibe ?? 'brief_hi') === myVibe)
-        .filter((o) => !mergeDismissedRef.current.has(o.user_id))
-        .filter((o) => openedAt(o as any) < myOpened)   // they opened first → anchor
-        .sort((a, b) => openedAt(a as any) - openedAt(b as any))[0] ?? null;
-
-      if (cancelled) return;
-      if (anchor) {
-        mergeAnchorIdRef.current = anchor.id;
-        setMergeAnchor(anchor);
-      } else {
-        mergeAnchorIdRef.current = null;
-        setMergeAnchor(null);
-      }
-    };
-
-    void findAnchor();
-    const t = setInterval(() => { void findAnchor(); }, 12_000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [isOpenUnmatchedHost, session?.id, session?.session_intent, session?.vibe, merging]);
+    mergeAnchorIdRef.current = null;
+    setMergeAnchor(null);
+  }, [isOpenUnmatchedHost, session?.id]);
 
   // NOTE: connecting is opt-in only. There is deliberately NO countdown that
   // auto-joins the anchor — the user must tap "Join now" on the invite below.
