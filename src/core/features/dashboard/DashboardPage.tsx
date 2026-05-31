@@ -628,6 +628,9 @@ export function DashboardPage() {
     const nowMs = Date.now();
     const soon = upcomingScheduled.find((s) => {
       if (s.status !== 'scheduled') return false;
+      // Only nudge about sessions the user actually committed to (hosts or is
+      // the matched partner of) — not every public session in the community.
+      if (s.user_id !== user?.id && s.partner_user_id !== user?.id) return false;
       const startMs = new Date((s.scheduled_at ?? s.start_time) as string).getTime();
       return startMs > nowMs - 60_000 && startMs <= nowMs + SOON_MS && !sessionSoonPromptSeen(s.id);
     });
@@ -692,14 +695,18 @@ export function DashboardPage() {
         }
         nextUpcoming={(() => {
           // The soonest upcoming scheduled session within the next 24 h
-          // (or just-started within the last 10 min). Sorted server-side
-          // ascending already, so we just pick the first that's still
-          // in-window.
+          // (or just-started within the last 10 min). The dashboard list is
+          // community-wide (it also feeds the discovery strips), so the
+          // hero countdown is scoped to sessions the user actually committed
+          // to: ones they host or are the matched partner on. Public sessions
+          // they haven't scheduled stay in the "Upcoming sessions" strip, not
+          // the personal countdown.
           const nowMs = Date.now();
           const ahead = 24 * 60 * 60 * 1000;
           const grace = 10 * 60 * 1000;
           return (
             upcomingScheduled.find((s) => {
+              if (s.user_id !== user?.id && s.partner_user_id !== user?.id) return false;
               const t = new Date(s.scheduled_at ?? s.start_time).getTime();
               return t > nowMs - grace && t < nowMs + ahead;
             }) ?? null
@@ -718,6 +725,9 @@ export function DashboardPage() {
           const lead = 5 * 60_000; // 5 min pre-start lead
           return (
             upcomingScheduled.find((s) => {
+              // Only your own committed sessions — never auto-prompt
+              // "Join your session" for a public session you didn't schedule.
+              if (s.user_id !== user?.id && s.partner_user_id !== user?.id) return false;
               const start = new Date(s.scheduled_at ?? s.start_time).getTime();
               const dur = (s.intended_duration_minutes ?? 25) * 60_000;
               const end = start + dur;
