@@ -14,7 +14,7 @@
  * look at the other person than yourself.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useParticipantIds,
   useLocalSessionId,
@@ -106,11 +106,11 @@ export function VideoGrid({ focusSessionId }: Props = {}) {
         />
       )}
 
-      {/* ── Self PiP when minimised ─────────────────────────────────── */}
+      {/* ── Self PiP when minimised — drag it anywhere ──────────────── */}
       {selfMinimized && localId && (
-        <div className="absolute bottom-4 right-4 z-30 w-28 h-20 sm:w-36 sm:h-24 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/15">
+        <DraggablePiP>
           <ParticipantTile sessionId={localId} isLocal compact />
-        </div>
+        </DraggablePiP>
       )}
     </div>
   );
@@ -197,6 +197,101 @@ function SpotlightStage({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Draggable self picture-in-picture ────────────────────────────────────────
+// The minimised self-view floats over the stage and can be dragged anywhere
+// inside the video area (mouse + touch), so the user can move it off whatever
+// it's overlapping (chat button, music pill, a speaker's face). Position is
+// clamped to the container and remembered per-device. Defaults to the
+// bottom-LEFT corner, which clears the bottom control bar and the
+// bottom-right chat/music cluster.
+
+const PIP_STORAGE_KEY = 'sm_self_pip_pos';
+
+function DraggablePiP({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const clamp = useCallback((x: number, y: number) => {
+    const el = ref.current;
+    const parent = el?.parentElement;
+    if (!el || !parent) return { x, y };
+    const w = el.offsetWidth, h = el.offsetHeight;
+    return {
+      x: Math.max(8, Math.min(x, parent.clientWidth - w - 8)),
+      y: Math.max(8, Math.min(y, parent.clientHeight - h - 8)),
+    };
+  }, []);
+
+  // Initial placement: restore the saved spot, else default bottom-left above
+  // the control bar.
+  useEffect(() => {
+    const el = ref.current;
+    const parent = el?.parentElement;
+    if (!el || !parent) return;
+    let initial: { x: number; y: number } | null = null;
+    try {
+      const s = localStorage.getItem(PIP_STORAGE_KEY);
+      if (s) initial = JSON.parse(s);
+    } catch { /* ignore */ }
+    if (!initial) initial = { x: 16, y: parent.clientHeight - el.offsetHeight - 84 };
+    setPos(clamp(initial.x, initial.y));
+  }, [clamp]);
+
+  // Keep it on-screen if the viewport / layout changes (focus toggle, resize).
+  useEffect(() => {
+    const onResize = () => setPos((p) => (p ? clamp(p.x, p.y) : p));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [clamp]);
+
+  function onPointerDown(e: React.PointerEvent) {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    setDragging(true);
+    el.setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!dragRef.current) return;
+    const parent = ref.current?.parentElement;
+    if (!parent) return;
+    const pr = parent.getBoundingClientRect();
+    setPos(clamp(e.clientX - pr.left - dragRef.current.dx, e.clientY - pr.top - dragRef.current.dy));
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    dragRef.current = null;
+    setDragging(false);
+    ref.current?.releasePointerCapture(e.pointerId);
+    setPos((p) => {
+      if (p) { try { localStorage.setItem(PIP_STORAGE_KEY, JSON.stringify(p)); } catch { /* ignore */ } }
+      return p;
+    });
+  }
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      // z-30 keeps it above the stage; touch-none stops the page scrolling
+      // while you drag on mobile. Hidden until measured to avoid a corner flash.
+      className={`group absolute z-30 w-28 h-20 sm:w-36 sm:h-24 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/15 touch-none select-none transition-[transform,box-shadow] ${
+        dragging ? 'cursor-grabbing scale-[1.03] ring-violet-400/60' : 'cursor-grab'
+      }`}
+      style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 84, visibility: 'hidden' }}
+    >
+      {children}
+      {/* Drag affordance — a grab bar, brighter on hover. */}
+      <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-7 h-1 rounded-full bg-white/40 group-hover:bg-white/70 transition-colors pointer-events-none" />
     </div>
   );
 }
