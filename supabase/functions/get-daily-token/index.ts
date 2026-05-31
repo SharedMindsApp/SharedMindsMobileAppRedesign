@@ -95,7 +95,6 @@ async function createMeetingToken(
   displayName: string,
   isModerator: boolean,
   userId: string,
-  avatarUrl: string | null,
   bodyDouble: boolean,
 ): Promise<string> {
   // Body-double mode: camera required ON, mic permanently OFF. Enforced at
@@ -169,21 +168,13 @@ serve(async (req) => {
   // Sanitise: Daily allows letters, numbers, hyphens, underscores (≤ 99 chars)
   const safeRoom = roomName.replace(/[^a-zA-Z0-9\-_]/g, '-').slice(0, 99);
 
-  // Fetch the user's avatar so we can pass it to Daily in userData.
-  // Best-effort — if the profile lookup fails we still issue the token.
-  let avatarUrl: string | null = null;
-  try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('avatar_url')
-      .eq('id', user.id)
-      .maybeSingle();
-    avatarUrl = (profile?.avatar_url as string | null) ?? null;
-  } catch { /* ignore — token still valid without avatar */ }
+  // Avatar URL is no longer fetched here — the client sets it on the call
+  // object via setUserData() after joining (Daily rejects a `user_data`
+  // meeting-token property).
 
   try {
     await upsertRoom(safeRoom, bodyDouble);
-    const token = await createMeetingToken(safeRoom, displayName, isModerator, user.id, avatarUrl, bodyDouble);
+    const token = await createMeetingToken(safeRoom, displayName, isModerator, user.id, bodyDouble);
     const url = `https://${DAILY_DOMAIN}.daily.co/${safeRoom}`;
     return json({ url, token });
   } catch (err) {

@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Video, Loader2, Play, Users } from 'lucide-react';
+import { Video, Loader2, Play, Users, Mic, MicOff } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { DailyMeeting, type DailyMeetingProps } from './DailyMeeting';
 
@@ -53,6 +53,8 @@ export function HostGatedMeeting({
   const { roomName } = daily;
 
   const [presentCount, setPresentCount] = useState(1);
+  // Pre-join mic preference (defaults to the requested startAudioMuted).
+  const [micOn, setMicOn] = useState(!daily.startAudioMuted);
   const [open, setOpen] = useState(false);            // latched: render DailyMeeting
   const [hasCam, setHasCam] = useState<boolean | null>(null);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
@@ -136,7 +138,7 @@ export function HostGatedMeeting({
     channelRef.current?.track({ user_id: currentUserId, started: true });
   }
 
-  if (open) return <DailyMeeting {...daily} startVideoMuted={false} />;
+  if (open) return <DailyMeeting {...daily} startVideoMuted={false} startAudioMuted={!micOn} />;
 
   // ── Lobby ─────────────────────────────────────────────────────────────────
   const others = Math.max(0, presentCount - 1);
@@ -172,6 +174,21 @@ export function HostGatedMeeting({
         {goal && <p className="text-sm text-white/70 leading-snug">{goal}</p>}
 
         <p className="text-4xl font-extrabold text-white tabular-nums leading-none">{fmt(secondsRemaining)}</p>
+
+        {/* Mic preference — applied when the room starts. */}
+        <button
+          type="button"
+          onClick={() => setMicOn((v) => !v)}
+          aria-pressed={micOn}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all active:scale-95 ${
+            micOn
+              ? 'bg-white/10 hover:bg-white/15 text-white'
+              : 'bg-red-500/80 hover:bg-red-500 text-white'
+          }`}
+        >
+          {micOn ? <Mic size={15} /> : <MicOff size={15} />}
+          {micOn ? 'Mic on' : 'Mic off'}
+        </button>
 
         {isHost ? (
           <button

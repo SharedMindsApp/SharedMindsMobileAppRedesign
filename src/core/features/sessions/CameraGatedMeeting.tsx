@@ -24,7 +24,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Video, Loader2, Check, Users } from 'lucide-react';
+import { Video, Loader2, Check, Users, Mic, MicOff } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { DailyMeeting, type DailyMeetingProps } from './DailyMeeting';
 
@@ -66,6 +66,9 @@ export function CameraGatedMeeting({
 
   const [presentCount, setPresentCount] = useState(1);
   const [shared, setShared] = useState(false);          // did I press "Share my camera"
+  // Pre-join mic preference. Defaults to whatever startAudioMuted requested
+  // (silent/quiet vibes start muted); the user can flip it in the lobby.
+  const [micOn, setMicOn] = useState(!daily.startAudioMuted);
   const [open, setOpen] = useState(false);              // latched: render DailyMeeting
   const [hasCam, setHasCam] = useState<boolean | null>(null);
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
@@ -175,8 +178,9 @@ export function CameraGatedMeeting({
 
   if (open) {
     // The presser joins camera-on; everyone else camera-off (avatar) until
-    // they press Share themselves via the in-call controls.
-    return <DailyMeeting {...daily} startVideoMuted={!shared} />;
+    // they press Share themselves via the in-call controls. Mic follows the
+    // lobby preference.
+    return <DailyMeeting {...daily} startVideoMuted={!shared} startAudioMuted={!micOn} />;
   }
 
   // ── Lobby ─────────────────────────────────────────────────────────────────
@@ -223,6 +227,21 @@ export function CameraGatedMeeting({
         {goal && <p className="text-sm text-white/70 leading-snug">{goal}</p>}
 
         <p className="text-4xl font-extrabold text-white tabular-nums leading-none">{fmt(secondsRemaining)}</p>
+
+        {/* Mic preference — applied when the room starts. */}
+        <button
+          type="button"
+          onClick={() => setMicOn((v) => !v)}
+          aria-pressed={micOn}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all active:scale-95 ${
+            micOn
+              ? 'bg-white/10 hover:bg-white/15 text-white'
+              : 'bg-red-500/80 hover:bg-red-500 text-white'
+          }`}
+        >
+          {micOn ? <Mic size={15} /> : <MicOff size={15} />}
+          {micOn ? 'Mic on' : 'Mic off'}
+        </button>
 
         {/* Share button — only meaningful when a camera exists. */}
         {hasCam !== false && (
