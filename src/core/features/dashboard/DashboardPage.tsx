@@ -445,6 +445,8 @@ export function DashboardPage() {
   /** Purpose the user picked in the Match-me-now sheet — carried into the
    *  door they open so it matches what they chose. */
   const [declareIntent, setDeclareIntent] = useState<SessionIntent | undefined>(undefined);
+  /** Audio-only mode chosen in the Match-me-now sheet, carried into the door. */
+  const [declareAudioOnly, setDeclareAudioOnly] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
@@ -950,6 +952,7 @@ export function DashboardPage() {
             setDeclareForceSolo(false);
             setDeclareProjectId(undefined);
             setDeclareIntent(undefined);
+            setDeclareAudioOnly(false);
           }}
           initialGoal={declareGoal}
           initialDuration={templateDuration}
@@ -958,6 +961,7 @@ export function DashboardPage() {
           startOpenToMatch={declareOpenToMatch}
           forceSoloMode={declareForceSolo}
           initialIntent={declareIntent}
+          initialAudioOnly={declareAudioOnly}
         />
       )}
       {showSchedule && <ScheduleSessionModal onClose={() => setShowSchedule(false)} />}
@@ -967,15 +971,7 @@ export function DashboardPage() {
       )}
 
       {showMatchSheet && (
-        <MatchMeNowSheet
-          onClose={() => setShowMatchSheet(false)}
-          onOpenOwnDoor={(intent) => {
-            setShowMatchSheet(false);
-            setDeclareOpenToMatch(true);
-            setDeclareIntent(intent);
-            setShowDeclare(true);
-          }}
-        />
+        <MatchMeNowSheet onClose={() => setShowMatchSheet(false)} />
       )}
 
       {/* Re-entry wizard — mood → matched task shortlist */}

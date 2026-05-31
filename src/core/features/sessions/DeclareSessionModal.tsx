@@ -14,7 +14,7 @@ import { TaskLoadBadge } from '../../ui/TaskLoadBadge';
 import { InputWell } from '../../ui/CorePage';
 import { taskUrgency } from '../../../lib/taskUrgency';
 import { SESSION_KINDS, type SessionKind } from '../../../lib/sessionMood';
-import { SESSION_INTENTS, intentMeta, WORK_MIN_MINUTES, type SessionIntent } from '../../../lib/sessionIntent';
+import { SESSION_INTENTS, intentMeta, WORK_MIN_MINUTES, DURATIONS_BY_INTENT, fmtDuration, type SessionIntent } from '../../../lib/sessionIntent';
 import { useAuth } from '../../auth/AuthProvider';
 import { ConductGateModal } from '../moderation/ConductGateModal';
 import { useSessionLimits } from '../../../hooks/useSessionLimits';
@@ -75,9 +75,12 @@ interface Props {
    *  Match-me-now sheet: the purpose the user picked there carries straight
    *  into the door they open here (e.g. picking "Plan" opens a plan door). */
   initialIntent?: SessionIntent;
+  /** Pre-selects audio-only mode. Set by the Match-me-now sheet when the user
+   *  chose audio-only there (or was video-blocked), so the door opens audio. */
+  initialAudioOnly?: boolean;
 }
 
-export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint, startOpenToMatch, initialIntent }: Props) {
+export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, forceSoloMode, initialProjectId, initialDuration, startWithSmallerHint, startOpenToMatch, initialIntent, initialAudioOnly }: Props) {
   const navigate = useNavigate();
   const { state: { tasks, projects, activeProjectId }, addTaskAsync, deleteTaskAsync } = useCoreData();
   const { setActiveSession } = useFocusSession();
@@ -148,7 +151,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   //   • Real world (no screen, mobile chrome, offline-friendly)
   const [bodyDouble, setBodyDouble] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
-  const [audioOnly, setAudioOnly] = useState(false);
+  const [audioOnly, setAudioOnly] = useState(!!initialAudioOnly);
   // Free-tier video allowance — when spent, video sessions are blocked and the
   // session is forced audio-only (with an upgrade nudge).
   const [videoBlocked, setVideoBlocked] = useState(false);
@@ -197,6 +200,27 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   useEffect(() => {
     if (intent === 'work' && duration < WORK_MIN_MINUTES) setIntent('plan');
   }, [duration, intent]);
+
+  // Purpose drives the room's social vibe:
+  //   • Meditate — silent: it's to sit together, not talk. Mics start off,
+  //     people say hi in chat. The vibe picker is replaced with a fixed note.
+  //   • Chat & connect — chatty: being social IS the point, so we skip the
+  //     vibe question and just open chatty.
+  useEffect(() => {
+    if (intent === 'meditate') setVibe('silent');
+    else if (intent === 'connect') setVibe('chatty');
+  }, [intent]);
+
+  // Match-me-now doors use purpose-tiered lengths (no free-text slider). Keep
+  // `duration` valid for the chosen purpose + tier — snap to the free default
+  // whenever the current value isn't an allowed option for this purpose.
+  const intentDurations = DURATIONS_BY_INTENT[intent].filter((d) => limits.isPaid || !d.paid);
+  useEffect(() => {
+    if (!startOpenToMatch) return;
+    const allowed = intentDurations.map((d) => d.value);
+    if (!allowed.includes(duration)) setDuration(allowed[0]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intent, startOpenToMatch, limits.isPaid]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     initialProjectId ?? activeProjectId ?? null
   );
@@ -1159,6 +1183,35 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               {duration < 60 ? `${duration} min` : `${Math.floor(duration / 60)}h ${duration % 60 ? `${duration % 60}m` : ''}`.trim()}
             </p>
           </div>
+          {startOpenToMatch ? (
+            /* Match-me-now: purpose-tiered lengths only — no free-text slider,
+               so a 25-min purpose can't become a 2-hour block. Paid lengths
+               show locked to free users. */
+            <div className="flex gap-2">
+              {DURATIONS_BY_INTENT[intent].map((d) => {
+                const locked = !!d.paid && !limits.isPaid;
+                const isActive = duration === d.value;
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => { if (locked) { onClose(); navigate('/settings'); } else setDuration(d.value); }}
+                    title={locked ? 'Upgrade to unlock longer sessions' : undefined}
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all duration-200 ${
+                      isActive
+                        ? 'stitch-btn--primary text-white shadow-md shadow-primary/20'
+                        : locked
+                          ? 'bg-surface-container-low stitch-text-secondary/60 hover:stitch-text-secondary'
+                          : 'bg-surface-container-low stitch-text-primary hover:bg-surface-container active:scale-[0.97]'
+                    }`}
+                  >
+                    {locked && <Lock size={11} />}
+                    <p className="text-sm font-extrabold leading-none">{fmtDuration(d.value)}</p>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
           <div className="flex gap-2">
             {visiblePresets.map(({ value, label, sublabel, icon: Icon }) => {
               const isActive = duration === value;
@@ -1184,11 +1237,12 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               );
             })}
           </div>
+          )}
 
-          {/* Custom-duration slider — only shown when the tier allows it.
-              Lets deep workers dial in exact lengths (e.g. 75 min, 135 min)
-              that don't fit a preset. Capped to the tier's maxMinutes. */}
-          {limits.canUseCustomDuration && (
+          {/* Custom-duration slider — only shown when the tier allows it AND
+              this isn't a purpose-tiered match door. Lets deep workers dial in
+              exact lengths (e.g. 75 min). Capped to the tier's maxMinutes. */}
+          {!startOpenToMatch && limits.canUseCustomDuration && (
             <div className="mt-3">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] font-bold stitch-text-secondary tracking-widest uppercase">
@@ -1445,10 +1499,21 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               </button>
               )}
 
-              {/* Vibe picker — only relevant when the door is open.
-                  Three options drive intro-phase + auto-mute behavior
-                  if a joiner arrives. Default brief_hi covers most cases.  */}
-              {openToMatch && (
+              {/* Vibe picker — only relevant when the door is open, and only
+                  for purposes where talking is a choice. Meditate is silent
+                  by definition; Chat & connect is chatty by definition — both
+                  skip the question. */}
+              {openToMatch && intent === 'meditate' && (
+                <div className="pl-2">
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-container-low ring-1 ring-surface-container">
+                    <Volume2 size={15} className="stitch-text-secondary shrink-0" />
+                    <p className="text-[11px] stitch-text-secondary leading-snug">
+                      <span className="font-bold stitch-text-primary">Silent session.</span> Mics stay off — sit together and say hi in chat.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {openToMatch && intent !== 'meditate' && intent !== 'connect' && (
                 <div className="pl-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest stitch-text-secondary px-2 pt-1 pb-1.5">
                     Vibe when they arrive

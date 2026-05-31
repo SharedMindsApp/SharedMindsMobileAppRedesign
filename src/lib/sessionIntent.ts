@@ -42,3 +42,20 @@ export function intentMeta(intent: SessionIntent | null | undefined): IntentMeta
 export function intentsForDuration(durationMin: number): IntentMeta[] {
   return SESSION_INTENTS.filter((i) => durationMin >= i.minMinutes);
 }
+
+// ── Per-purpose session lengths ────────────────────────────────────────────
+// Short purposes stay short (a 2-hour meditation isn't a thing). A `paid`
+// length is offered only to paid users — shown locked to free users so they
+// see what upgrading unlocks. The FIRST entry is always the free default.
+export interface IntentDuration { value: number; paid?: boolean }
+
+export const DURATIONS_BY_INTENT: Record<SessionIntent, IntentDuration[]> = {
+  work:     [{ value: 50 }, { value: 90, paid: true }],  // deep work: 50 free, 1h30 paid
+  plan:     [{ value: 25 }],
+  connect:  [{ value: 25 }, { value: 50, paid: true }],  // chat: 25 free, 50 paid
+  meditate: [{ value: 25 }],
+};
+
+export function fmtDuration(min: number): string {
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ''}`;
+}

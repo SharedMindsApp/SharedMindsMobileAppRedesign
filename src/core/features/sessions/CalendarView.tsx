@@ -348,11 +348,10 @@ export function CalendarView() {
     | { kind: 'schedule'; at: Date }
     // 'matchsheet' = the Match-me-now chooser: surfaces live open doors to
     // drop into, with "open my own door" as the fallback.
+    // The matchsheet is now fully self-contained: it opens the chosen door
+    // directly (purpose + camera + length all live in the sheet), so there's
+    // no longer a second declare-modal step for hosting your own door.
     | { kind: 'matchsheet' }
-    // 'match' = host your own open-to-match session. The declare modal opens
-    // with forceSoloMode + startOpenToMatch flipped on so the user just picks
-    // goal + duration. Reached from the matchsheet's "open my own door".
-    | { kind: 'match' }
   >({ kind: 'closed' });
   const [detail, setDetail] = useState<GridSession | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -1133,17 +1132,7 @@ export function CalendarView() {
         />
       )}
       {modalState.kind === 'matchsheet' && (
-        <MatchMeNowSheet
-          onClose={() => setModalState({ kind: 'closed' })}
-          onOpenOwnDoor={() => setModalState({ kind: 'match' })}
-        />
-      )}
-      {modalState.kind === 'match' && (
-        <DeclareSessionModal
-          onClose={() => { setModalState({ kind: 'closed' }); reloadScheduled(); }}
-          forceSoloMode
-          startOpenToMatch
-        />
+        <MatchMeNowSheet onClose={() => setModalState({ kind: 'closed' })} />
       )}
 
       {findOpen && (
