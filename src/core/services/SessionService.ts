@@ -126,6 +126,59 @@ export function defaultVisibilityFor(
   return 'public';
 }
 
+// ── Video allowance (free-tier fair use) ───────────────────────────────────────
+// Free users get a limited number of live-VIDEO sessions per week; audio-only
+// + solo are unlimited (cheap). Once the weekly video allowance is spent, the
+// user is "video-blocked": their sessions become audio-only and they're only
+// matched into audio-only doors (a video room is uniformly billed, so we never
+// mix a video user with an out-of-allowance one). Paid roles are unlimited.
+
+export const FREE_WEEKLY_VIDEO_SESSIONS = 3;
+
+export interface VideoAllowance {
+  tier: 'free' | 'paid';
+  limit: number;          // Infinity for paid
+  used: number;
+  remaining: number;      // Infinity for paid
+  blocked: boolean;       // true → force audio-only
+}
+
+/** Monday 00:00 of the current week (local), as an ISO string. */
+function startOfWeekIso(): string {
+  const d = new Date();
+  const day = (d.getDay() + 6) % 7;        // 0 = Monday
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - day);
+  return d.toISOString();
+}
+
+export async function getVideoAllowance(): Promise<VideoAllowance> {
+  const free = { tier: 'free' as const, limit: FREE_WEEKLY_VIDEO_SESSIONS };
+  const me = await getAuthedUser();
+  if (!me) return { ...free, used: 0, remaining: FREE_WEEKLY_VIDEO_SESSIONS, blocked: false };
+
+  // Paid / admin → unlimited video.
+  const { data: prof } = await supabase.from('profiles').select('role').eq('id', me.id).maybeSingle();
+  const role = (prof as { role?: string } | null)?.role;
+  if (role === 'premium' || role === 'admin') {
+    return { tier: 'paid', limit: Infinity, used: 0, remaining: Infinity, blocked: false };
+  }
+
+  // Free: count this week's live-video sessions (a room that wasn't audio-only)
+  // the user hosted or partnered in.
+  const { count } = await supabase
+    .from('focus_sessions')
+    .select('id', { count: 'exact', head: true })
+    .neq('session_mode', 'solo')
+    .eq('audio_only', false)
+    .gte('start_time', startOfWeekIso())
+    .or(`user_id.eq.${me.id},partner_user_id.eq.${me.id}`);
+
+  const used = count ?? 0;
+  const remaining = Math.max(0, FREE_WEEKLY_VIDEO_SESSIONS - used);
+  return { tier: 'free', limit: FREE_WEEKLY_VIDEO_SESSIONS, used, remaining, blocked: remaining <= 0 };
+}
+
 export async function startCommunitySession(
   input: StartCommunitySessionInput
 ): Promise<FocusSession> {
@@ -142,6 +195,19 @@ export async function startCommunitySession(
   const now = new Date();
   const targetEnd = new Date(now.getTime() + input.durationMinutes * 60 * 1000);
 
+  // Does this session open a billable room? Non-solo always does; a solo
+  // open-to-match door becomes a room when claimed. Solo timers never do.
+  const mode = input.sessionMode ?? 'group';
+  const opensRoom = mode !== 'solo' || !!input.openToMatch;
+  // Cost guard: if the user is out of their video allowance, force the room
+  // audio-only — so they can still cowork, just without video, and they never
+  // pull a partner into a billable video room. (No-op for paid/unlimited.)
+  let forceAudio = false;
+  if (opensRoom && !input.audioOnly) {
+    try { forceAudio = (await getVideoAllowance()).blocked; } catch { /* fail open */ }
+  }
+  const audioOnly = opensRoom && (!!input.audioOnly || forceAudio);
+
   const { data, error } = await supabase
     .from('focus_sessions')
     .insert({
@@ -155,8 +221,9 @@ export async function startCommunitySession(
       project_id: input.projectId ?? null,
       session_mode: input.sessionMode ?? 'group',
       quiet_mode: input.quietMode ?? false,
-      // Audio-only only applies when a room is created (non-solo).
-      audio_only: (input.sessionMode ?? 'group') !== 'solo' && !!input.audioOnly,
+      // Audio-only applies whenever a room can open (incl. match doors), and is
+      // forced on when the opener is out of video allowance.
+      audio_only: audioOnly,
       // Body-double and offline are mutually exclusive solo variants.
       // Offline takes precedence — if both are passed, body_double off.
       body_double: input.sessionMode === 'solo' && !input.isOffline && !!input.bodyDouble,
@@ -1118,6 +1185,13 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
   // "that one just filled up" (self-claims are blocked at the DB).
   if (!me) return [];
 
+  // Cost guard: a video room is billed for everyone in it, so a user who's out
+  // of their video allowance must NEVER be matched into a video door (it would
+  // pull a paying/allowed user into video too). Show them audio-only doors
+  // only. Audio doors stay visible to everyone (cheap, uniformly audio).
+  let audioOnlyForMe = false;
+  try { audioOnlyForMe = (await getVideoAllowance()).blocked; } catch { /* fail open */ }
+
   // Only sessions whose time hasn't elapsed yet. We compute the cutoff as
   // now - max_reasonable_session (3h) so we always fetch at least something,
   // then filter client-side on the actual (start_time + duration > now) check.
@@ -1135,6 +1209,7 @@ export async function fetchOpenSessions(limit = 12): Promise<CommunitySession[]>
     .order('start_time', { ascending: false })
     .limit(limit);
   if (me) query = query.neq('user_id', me.id);
+  if (audioOnlyForMe) query = query.eq('audio_only', true);
 
   const { data, error } = await query;
 

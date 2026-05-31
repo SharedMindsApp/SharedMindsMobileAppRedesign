@@ -6,7 +6,7 @@ import { usePublicHostingEligibility } from '../../../hooks/usePublicHostingElig
 import { useCoreData } from '../../data/CoreDataContext';
 import type { CoreTask } from '../../data/CoreDataContext';
 import { useFocusSession } from '../../../contexts/FocusSessionContext';
-import { startCommunitySession, createScheduledSession, fetchConflictingSessions, inviteConnectionToSession, inviteEmailToSession, fetchMatchWaitStats, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
+import { startCommunitySession, createScheduledSession, fetchConflictingSessions, inviteConnectionToSession, inviteEmailToSession, fetchMatchWaitStats, getVideoAllowance, MIN_MATCH_MINUTES_LEFT } from '../../services/SessionService';
 import { fetchConnections, type ConnectionWithProfile } from '../../services/ConnectionService';
 import type { FocusSession } from '../../../lib/sessions/focusTypes';
 import { TaskService } from '../../services/TaskService';
@@ -149,6 +149,21 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   const [bodyDouble, setBodyDouble] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
   const [audioOnly, setAudioOnly] = useState(false);
+  // Free-tier video allowance — when spent, video sessions are blocked and the
+  // session is forced audio-only (with an upgrade nudge).
+  const [videoBlocked, setVideoBlocked] = useState(false);
+  const [videoRemaining, setVideoRemaining] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getVideoAllowance()
+      .then((a) => {
+        if (!alive) return;
+        setVideoRemaining(Number.isFinite(a.remaining) ? a.remaining : null);
+        if (a.blocked) { setVideoBlocked(true); setAudioOnly(true); }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   /** Open-to-match: "I'm starting solo, but if someone wants to drop in
    *  for a body-double, the door's open." See migration 20260527000015. */
   const [openToMatch, setOpenToMatch] = useState<boolean>(!!startOpenToMatch);
@@ -1510,12 +1525,13 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
           <div className="shrink-0 px-5 pt-3">
             <button
               type="button"
-              onClick={() => setAudioOnly((v) => !v)}
+              onClick={() => { if (!videoBlocked) setAudioOnly((v) => !v); }}
+              disabled={videoBlocked}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 audioOnly
                   ? 'bg-primary/8 ring-2 ring-primary/25'
                   : 'bg-surface-container-low hover:bg-surface-container'
-              }`}
+              } ${videoBlocked ? 'cursor-default' : ''}`}
             >
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                 audioOnly ? 'bg-primary text-white' : 'bg-white stitch-text-secondary'
@@ -1527,17 +1543,32 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
                   Audio only {audioOnly && <span className="text-primary">· on</span>}
                 </p>
                 <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
-                  Voice + avatars, no camera — lighter on data, easier to join
+                  {videoBlocked
+                    ? 'You’ve used your free video sessions this week — this one is audio-only.'
+                    : videoRemaining != null
+                      ? `Voice + avatars, no camera. ${videoRemaining} video session${videoRemaining === 1 ? '' : 's'} left this week.`
+                      : 'Voice + avatars, no camera — lighter on data, easier to join'}
                 </p>
               </div>
-              <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
-                audioOnly ? 'bg-primary' : 'bg-surface-container'
-              }`}>
-                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
-                  audioOnly ? 'translate-x-4' : 'translate-x-0'
-                }`} />
-              </div>
+              {!videoBlocked && (
+                <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                  audioOnly ? 'bg-primary' : 'bg-surface-container'
+                }`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                    audioOnly ? 'translate-x-4' : 'translate-x-0'
+                  }`} />
+                </div>
+              )}
             </button>
+            {videoBlocked && (
+              <button
+                type="button"
+                onClick={() => { onClose(); navigate('/settings'); }}
+                className="mt-1.5 w-full text-center text-[11px] font-bold text-primary hover:underline"
+              >
+                Upgrade for unlimited video →
+              </button>
+            )}
           </div>
         )}
 
