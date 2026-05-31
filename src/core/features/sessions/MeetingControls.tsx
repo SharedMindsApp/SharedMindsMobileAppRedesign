@@ -9,10 +9,10 @@
  * can't be invisible without first proving who you are.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDaily, useLocalParticipant, useScreenShare } from '@daily-co/daily-react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, PhoneOff, ShieldAlert, X } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, PhoneOff, ShieldAlert, X, Sparkles, Waves } from 'lucide-react';
 
 interface MeetingControlsProps {
   onLeave: () => void;
@@ -20,11 +20,67 @@ interface MeetingControlsProps {
   avatarVerified: boolean;
 }
 
+// localStorage keys so the user's blur / noise-suppression preferences stick
+// across sessions (these are per-device, local-only processor settings).
+const BLUR_KEY = 'sm_fx_blur';
+const DENOISE_KEY = 'sm_fx_denoise';
+
 export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProps) {
   const call = useDaily();
   const localParticipant = useLocalParticipant();
   const { isSharingScreen, startScreenShare, stopScreenShare } = useScreenShare();
   const [showAvatarModal, setShowAvatarModal] = useState(false);
+
+  // ── Background blur + noise suppression (local processors) ─────────────────
+  // Blur defaults OFF (people opt in); Krisp noise-cancellation defaults ON
+  // (home coworking is noisy — quieter is the better default). Both degrade
+  // gracefully: if the browser/plan doesn't support a processor, the toggle
+  // hides itself rather than erroring.
+  const [blurOn, setBlurOn] = useState<boolean>(() => localStorage.getItem(BLUR_KEY) === '1');
+  const [denoiseOn, setDenoiseOn] = useState<boolean>(() => localStorage.getItem(DENOISE_KEY) !== '0');
+  const [blurSupported, setBlurSupported] = useState(true);
+  const [denoiseSupported, setDenoiseSupported] = useState(true);
+
+  useEffect(() => {
+    if (!call) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await call.updateInputSettings({
+          video: {
+            processor: blurOn
+              ? { type: 'background-blur', config: { strength: 0.6 } }
+              : { type: 'none' },
+          },
+        });
+      } catch {
+        if (!cancelled) setBlurSupported(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [call, blurOn]);
+
+  useEffect(() => {
+    if (!call) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await call.updateInputSettings({
+          audio: { processor: { type: denoiseOn ? 'noise-cancellation' : 'none' } },
+        });
+      } catch {
+        if (!cancelled) setDenoiseSupported(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [call, denoiseOn]);
+
+  function toggleBlur() {
+    setBlurOn((v) => { localStorage.setItem(BLUR_KEY, v ? '0' : '1'); return !v; });
+  }
+  function toggleDenoise() {
+    setDenoiseOn((v) => { localStorage.setItem(DENOISE_KEY, v ? '0' : '1'); return !v; });
+  }
 
   const micOn = !!localParticipant?.tracks.audio.state
     && localParticipant.tracks.audio.state !== 'off'
@@ -78,6 +134,20 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
           {isSharingScreen ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
         </ControlButton>
 
+        {/* Background blur — opt-in, hides your room. */}
+        {blurSupported && (
+          <ControlButton onClick={toggleBlur} active={blurOn} variant="accent" label={blurOn ? 'Turn off background blur' : 'Blur my background'}>
+            <Sparkles size={18} />
+          </ControlButton>
+        )}
+
+        {/* Noise suppression (Krisp) — on by default; quiet wins for home coworking. */}
+        {denoiseSupported && (
+          <ControlButton onClick={toggleDenoise} active={denoiseOn} variant="accent" label={denoiseOn ? 'Turn off noise suppression' : 'Suppress background noise'}>
+            <Waves size={18} />
+          </ControlButton>
+        )}
+
         <button
           type="button"
           onClick={onLeave}
@@ -97,27 +167,34 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
 }
 
 function ControlButton({
-  onClick, active, label, children, locked = false,
+  onClick, active, label, children, locked = false, variant = 'danger',
 }: {
   onClick: () => void;
   active: boolean;
   label: string;
   children: React.ReactNode;
   locked?: boolean;
+  /** 'danger' (default): inactive renders red (mic/cam off = warning).
+   *  'accent': inactive is neutral, active is a violet highlight — for
+   *  on/off enhancements like blur + noise suppression. */
+  variant?: 'danger' | 'accent';
 }) {
+  const stateCls = locked
+    ? 'bg-white/5 text-white/30 cursor-not-allowed hover:bg-white/5'
+    : variant === 'accent'
+      ? active
+        ? 'bg-violet-500/80 hover:bg-violet-500 text-white'
+        : 'bg-white/10 hover:bg-white/15 text-white/70'
+      : active
+        ? 'bg-white/10 hover:bg-white/15 text-white'
+        : 'bg-red-500/80 hover:bg-red-500 text-white';
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`relative flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-95 ${
-        locked
-          ? 'bg-white/5 text-white/30 cursor-not-allowed hover:bg-white/5'
-          : active
-          ? 'bg-white/10 hover:bg-white/15 text-white'
-          : 'bg-red-500/80 hover:bg-red-500 text-white'
-      }`}
+      className={`relative flex items-center justify-center w-11 h-11 rounded-full transition-all active:scale-95 ${stateCls}`}
     >
       {children}
       {locked && (

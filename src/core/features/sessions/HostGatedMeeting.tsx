@@ -140,7 +140,7 @@ export function HostGatedMeeting({
     channelRef.current?.track({ user_id: currentUserId, started: true });
   }
 
-  if (open) return <DailyMeeting {...daily} startVideoMuted={false} startAudioMuted={!micOn} />;
+  if (open) return <DailyMeeting {...daily} goal={goal} secondsRemaining={secondsRemaining} startVideoMuted={false} startAudioMuted={!micOn} />;
 
   // ── Lobby ─────────────────────────────────────────────────────────────────
   const others = Math.max(0, presentCount - 1);

@@ -22,10 +22,18 @@
 import { useEffect, useRef, useState } from 'react';
 import DailyIframe, { DailyCall } from '@daily-co/daily-js';
 import { DailyProvider } from '@daily-co/daily-react';
-import { Loader2, WifiOff, RefreshCw, MicOff, X } from 'lucide-react';
+import { Loader2, WifiOff, RefreshCw, MicOff, X, Wifi } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { VideoGrid } from './VideoGrid';
 import { MeetingControls } from './MeetingControls';
+
+/** Seconds → m:ss for the in-call timer. */
+function fmtClock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
 
 // ── Token fetcher ─────────────────────────────────────────────────────────────
 
@@ -62,7 +70,7 @@ async function fetchDailyToken(
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ConnectionState = 'loading' | 'connected' | 'error';
+type ConnectionState = 'loading' | 'connected' | 'reconnecting' | 'error';
 
 export interface DailyMeetingProps {
   roomName: string;
@@ -115,6 +123,12 @@ export interface DailyMeetingProps {
    *  signal, not a sticky setting — the user can immediately unmute
    *  again if they want. Subsequent value changes mute again. */
   muteAudioSignal?: number;
+  /** The declared session goal — surfaced as an in-call "now bar" so coworkers
+   *  always see what this session is for without leaving the video. */
+  goal?: string;
+  /** Live seconds remaining in the session. When provided, an in-call
+   *  countdown is shown next to the goal. Updates each second from the parent. */
+  secondsRemaining?: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -134,10 +148,16 @@ export function DailyMeeting({
   onParticipantJoined,
   onLeave,
   muteAudioSignal,
+  goal,
+  secondsRemaining,
 }: DailyMeetingProps) {
   const callRef = useRef<DailyCall | null>(null);
   const [call, setCall] = useState<DailyCall | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>('loading');
+  // Network-quality threshold from Daily ('good' | 'low' | 'very-low'). Drives
+  // a subtle "weak connection" indicator so a degrading call is legible
+  // before it drops.
+  const [netQuality, setNetQuality] = useState<'good' | 'low' | 'very-low'>('good');
   const [retryKey, setRetryKey] = useState(0);
   const [deviceWarning, setDeviceWarning] = useState<null | 'not_found' | 'permission_denied'>(null);
   const [deviceWarningDismissed, setDeviceWarningDismissed] = useState(false);
@@ -274,6 +294,25 @@ export function DailyMeeting({
           setConnectionState('error');
         });
 
+        // ── Reliability: surface transient network drops + auto-rejoin ──
+        // Daily reconnects on its own; we just reflect the state so the call
+        // shows "Reconnecting…" (keeping everyone's tiles up) instead of
+        // tearing down or looking frozen. 'connected' clears it.
+        daily.on('network-connection', (evt) => {
+          if (cancelled) return;
+          const ev = evt?.event;
+          if (ev === 'interrupted') {
+            setConnectionState((s) => (s === 'connected' ? 'reconnecting' : s));
+          } else if (ev === 'connected') {
+            setConnectionState((s) => (s === 'reconnecting' ? 'connected' : s));
+          }
+        });
+        daily.on('network-quality-change', (evt) => {
+          if (cancelled) return;
+          const t = evt?.threshold;
+          if (t === 'good' || t === 'low' || t === 'very-low') setNetQuality(t);
+        });
+
         // ── Join ──────────────────────────────────────────────────────
         try {
           await daily.join({ url, token, startAudioOff: forceAudioOff, startVideoOff: forceVideoOff });
@@ -318,13 +357,18 @@ export function DailyMeeting({
     cbLeaveRef.current?.();
   }
 
+  // "Live" = in the call, whether the link is solid or momentarily
+  // reconnecting. We keep the grid + chrome mounted across a reconnect so
+  // tiles don't flash away on a transient blip.
+  const live = connectionState === 'connected' || connectionState === 'reconnecting';
+
   return (
     <div
       className="absolute inset-0 bg-[#1a1a2e] flex flex-col"
-      onMouseMove={connectionState === 'connected' ? bumpChrome : undefined}
-      onTouchStart={connectionState === 'connected' ? bumpChrome : undefined}
-      onClick={connectionState === 'connected' ? bumpChrome : undefined}
-      style={connectionState === 'connected' && !chromeVisible ? { cursor: 'none' } : undefined}
+      onMouseMove={live ? bumpChrome : undefined}
+      onTouchStart={live ? bumpChrome : undefined}
+      onClick={live ? bumpChrome : undefined}
+      style={live && !chromeVisible ? { cursor: 'none' } : undefined}
     >
       {/* ── Loading overlay ─────────────────────────────────────── */}
       {connectionState === 'loading' && (
@@ -362,9 +406,46 @@ export function DailyMeeting({
       )}
 
       {/* ── Connected: video grid + controls ─────────────────────── */}
-      {call && connectionState === 'connected' && (
+      {call && live && (
         <DailyProvider callObject={call}>
           <div className="flex-1 min-h-0 relative">
+            {/* In-call "now bar" — the session goal + live countdown, so
+                coworkers always see what this block is for and how long is
+                left without leaving the video. Top-left so it clears the
+                VideoGrid layout toolbar (top-right) and reconnect pill. */}
+            {(goal || secondsRemaining != null) && (
+              <div className="absolute top-3 left-3 z-30 flex items-center gap-2 max-w-[55%] rounded-full bg-black/55 backdrop-blur-sm pl-3 pr-3.5 py-1.5 ring-1 ring-white/10">
+                {secondsRemaining != null && (
+                  <span className="text-sm font-extrabold text-white tabular-nums leading-none">
+                    {fmtClock(secondsRemaining)}
+                  </span>
+                )}
+                {goal && (
+                  <span className="text-xs font-semibold text-white/80 truncate leading-tight">
+                    {goal}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Reconnecting pill — transient network drop, call kept alive. */}
+            {connectionState === 'reconnecting' && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full bg-amber-500/90 px-3.5 py-1.5 shadow-lg">
+                <Loader2 size={13} className="animate-spin text-amber-950" />
+                <span className="text-xs font-bold text-amber-950">Reconnecting…</span>
+              </div>
+            )}
+
+            {/* Weak-signal indicator — only when degraded + still connected. */}
+            {connectionState === 'connected' && netQuality !== 'good' && (
+              <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 rounded-full bg-black/55 backdrop-blur-sm px-3 py-1 ring-1 ring-white/10">
+                <Wifi size={13} className={netQuality === 'very-low' ? 'text-red-400' : 'text-amber-300'} />
+                <span className="text-[11px] font-semibold text-white/80">
+                  {netQuality === 'very-low' ? 'Very weak connection' : 'Weak connection'}
+                </span>
+              </div>
+            )}
+
             <VideoGrid focusSessionId={focusSessionId} />
           </div>
           {!chromeless && (

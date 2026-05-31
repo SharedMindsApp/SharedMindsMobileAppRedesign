@@ -193,7 +193,7 @@ export function CameraGatedMeeting({
     // The presser joins camera-on; everyone else camera-off (avatar) until
     // they press Share themselves via the in-call controls. Mic follows the
     // lobby preference.
-    return <DailyMeeting {...daily} startVideoMuted={!shared} startAudioMuted={!micOn} />;
+    return <DailyMeeting {...daily} goal={goal} secondsRemaining={secondsRemaining} startVideoMuted={!shared} startAudioMuted={!micOn} />;
   }
 
   // ── Lobby ─────────────────────────────────────────────────────────────────
