@@ -1380,3 +1380,54 @@ export async function fetchActiveCommunitySessionsWithProfiles(): Promise<Commun
     work_type: row.profiles?.work_type ?? null,
   })) as CommunitySession[];
 }
+
+// ── RSVP / "sign up" for a scheduled session ────────────────────────────────
+// A member can add a public group session (one they don't host) to their
+// calendar so it shows in their home countdown + reminders. One row per
+// (session, user); idempotent.
+
+/** Sign up for a scheduled session. Idempotent — re-signing is a no-op. */
+export async function rsvpToSession(sessionId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { error } = await supabase
+    .from('scheduled_session_rsvps')
+    .upsert({ session_id: sessionId, user_id: user.id }, { onConflict: 'session_id,user_id' });
+  if (error) throw error;
+}
+
+/** Cancel your sign-up for a scheduled session. */
+export async function cancelRsvp(sessionId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { error } = await supabase
+    .from('scheduled_session_rsvps')
+    .delete()
+    .eq('session_id', sessionId)
+    .eq('user_id', user.id);
+  if (error) throw error;
+}
+
+/** The set of scheduled-session ids the current user has signed up for.
+ *  Degrades to an empty set if the table doesn't exist yet (pre-migration). */
+export async function fetchMyRsvpedSessionIds(): Promise<Set<string>> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return new Set();
+  const { data, error } = await supabase
+    .from('scheduled_session_rsvps')
+    .select('session_id')
+    .eq('user_id', user.id);
+  if (error || !data) return new Set();
+  return new Set(data.map((r: { session_id: string }) => r.session_id));
+}
+
+/** Map of session id → number of sign-ups, for a set of sessions.
+ *  Aggregate-only (never exposes who). Empty on error / pre-migration. */
+export async function fetchRsvpCounts(sessionIds: string[]): Promise<Record<string, number>> {
+  if (sessionIds.length === 0) return {};
+  const { data, error } = await supabase.rpc('get_session_rsvp_counts', { p_session_ids: sessionIds });
+  if (error || !data) return {};
+  const out: Record<string, number> = {};
+  for (const r of data as { session_id: string; going: number }[]) out[r.session_id] = r.going;
+  return out;
+}

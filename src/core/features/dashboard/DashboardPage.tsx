@@ -83,6 +83,7 @@ import { supabase } from '../../../lib/supabase';
 import type { SessionIntent } from '../../../lib/sessionIntent';
 import type { ProfileStats } from '../../services/ProfileService';
 import type { ShippedSession, ScheduledSessionWithProfile } from '../../services/SessionService';
+import { fetchMyRsvpedSessionIds } from '../../services/SessionService';
 
 // ── Utilities ─────────────────────────────────────────────────────
 
@@ -449,6 +450,9 @@ export function DashboardPage() {
   const [weekSessions, setWeekSessions] = useState<{ start_time: string }[]>([]);
   const [myShips, setMyShips] = useState<ShippedSession[]>([]);
   const [upcomingScheduled, setUpcomingScheduled] = useState<ScheduledSessionWithProfile[]>([]);
+  // Scheduled sessions the user has signed up for (RSVP'd) but doesn't host —
+  // these also count as "yours" for the home countdown + starting-soon nudge.
+  const [rsvpedIds, setRsvpedIds] = useState<Set<string>>(new Set());
   // Single-call home dashboard. The previous progressive-render approach
   // had four separate queries paint sections at different times, which
   // felt janky. Now: one server-side RPC bundles everything into a
@@ -535,6 +539,8 @@ export function DashboardPage() {
       // so the whole dashboard paints in a single render.
       setHasAnySession(dash.hasAnySession);
       setUpcomingScheduled(dash.upcomingScheduled);
+      // Which of those upcoming sessions has the user signed up for?
+      fetchMyRsvpedSessionIds().then((ids) => { if (!cancelled) setRsvpedIds(ids); }).catch(() => {});
       setMyShips(dash.recentShips);
       setWeekSessions(dash.weekSessions);
       setLastActiveAt(dash.lastActiveAt);
@@ -630,7 +636,7 @@ export function DashboardPage() {
       if (s.status !== 'scheduled') return false;
       // Only nudge about sessions the user actually committed to (hosts or is
       // the matched partner of) — not every public session in the community.
-      if (s.user_id !== user?.id && s.partner_user_id !== user?.id) return false;
+      if (s.user_id !== user?.id && s.partner_user_id !== user?.id && !rsvpedIds.has(s.id)) return false;
       const startMs = new Date((s.scheduled_at ?? s.start_time) as string).getTime();
       return startMs > nowMs - 60_000 && startMs <= nowMs + SOON_MS && !sessionSoonPromptSeen(s.id);
     });
@@ -706,7 +712,7 @@ export function DashboardPage() {
           const grace = 10 * 60 * 1000;
           return (
             upcomingScheduled.find((s) => {
-              if (s.user_id !== user?.id && s.partner_user_id !== user?.id) return false;
+              if (s.user_id !== user?.id && s.partner_user_id !== user?.id && !rsvpedIds.has(s.id)) return false;
               const t = new Date(s.scheduled_at ?? s.start_time).getTime();
               return t > nowMs - grace && t < nowMs + ahead;
             }) ?? null
@@ -727,7 +733,7 @@ export function DashboardPage() {
             upcomingScheduled.find((s) => {
               // Only your own committed sessions — never auto-prompt
               // "Join your session" for a public session you didn't schedule.
-              if (s.user_id !== user?.id && s.partner_user_id !== user?.id) return false;
+              if (s.user_id !== user?.id && s.partner_user_id !== user?.id && !rsvpedIds.has(s.id)) return false;
               const start = new Date(s.scheduled_at ?? s.start_time).getTime();
               const dur = (s.intended_duration_minutes ?? 25) * 60_000;
               const end = start + dur;

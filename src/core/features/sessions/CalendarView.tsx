@@ -58,6 +58,9 @@ import {
   markSessionEnded,
   updateScheduledSession,
   deleteScheduledSession,
+  rsvpToSession,
+  cancelRsvp,
+  fetchMyRsvpedSessionIds,
   type ScheduledSessionWithProfile,
 } from '../../services/SessionService';
 import { lookupMood, kindMeta, type SessionKind } from '../../../lib/sessionMood';
@@ -1584,6 +1587,37 @@ export function SessionDetailSheet({
   const isMissed = isRecap && recapLoaded && session.status !== 'completed' && recapOutcome == null;
   const isGroup = session.session_mode === 'group';
 
+  // ── RSVP / sign-up (someone else's upcoming group session) ─────────
+  // Lets a member add a public group session to their calendar so it shows
+  // in their home countdown + reminders. Only meaningful for a future group
+  // session they don't host.
+  const canRsvp = !isMine && isScheduled && !isRecap && isGroup;
+  const [rsvped, setRsvped] = useState(false);
+  const [rsvpBusy, setRsvpBusy] = useState(false);
+  useEffect(() => {
+    if (!canRsvp) return;
+    let cancelled = false;
+    fetchMyRsvpedSessionIds()
+      .then((ids) => { if (!cancelled) setRsvped(ids.has(session.id)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [canRsvp, session.id]);
+  async function toggleRsvp() {
+    if (rsvpBusy) return;
+    const next = !rsvped;
+    setRsvped(next);          // optimistic
+    setRsvpBusy(true);
+    try {
+      if (next) await rsvpToSession(session.id);
+      else await cancelRsvp(session.id);
+      onChanged?.();          // refresh home countdown / calendar
+    } catch {
+      setRsvped(!next);       // revert on failure
+    } finally {
+      setRsvpBusy(false);
+    }
+  }
+
   // ── Edit state ─────────────────────────────────────────────
   // Only scheduled sessions are editable. Inline form (no separate
   // modal) — quicker for small tweaks like changing the start time.
@@ -1976,7 +2010,28 @@ export function SessionDetailSheet({
               {joining ? 'Joining…' : 'Take the partner slot'}
             </button>
           )}
-          {!isMine && !isActive && (
+          {!isMine && !isActive && canRsvp && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={toggleRsvp}
+                disabled={rsvpBusy}
+                className={`w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-colors disabled:opacity-60 ${
+                  rsvped
+                    ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    : 'stitch-btn--primary text-white'
+                }`}
+              >
+                {rsvped ? <><Check size={15} /> You're going</> : <><CalendarPlus size={15} /> Sign up</>}
+              </button>
+              <p className="text-[11px] stitch-text-secondary text-center leading-snug">
+                {rsvped
+                  ? `Added to your calendar. You'll get the countdown + a reminder — join when it starts ${session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.`
+                  : `Starts ${session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}. Sign up to add it to your calendar and get a reminder.`}
+              </p>
+            </div>
+          )}
+          {!isMine && !isActive && !canRsvp && (
             <div className="rounded-xl bg-surface-container-low px-3 py-2.5 text-xs stitch-text-secondary text-center">
               This session starts {session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}. Come back then to join.
             </div>
