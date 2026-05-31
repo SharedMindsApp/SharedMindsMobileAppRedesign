@@ -137,7 +137,7 @@ export function HomeHero({
     setJoining(sessionId);
     try {
       const claimed = await claimOpenSession(sessionId);
-      if (claimed) navigate(`/session/${claimed.id}`);
+      if (claimed) navigate(`/session/${claimed.id}`, { state: { session: claimed } });
       else setOpenDoors((prev) => prev.filter((s) => s.id !== sessionId)); // slot gone
     } catch { /* swallow — stale card just disappears on next refresh */ }
     finally { setJoining(null); }

@@ -85,7 +85,7 @@ export function LiveNowDropInStrip({ excludeSessionId, hidden }: Props) {
         await refresh();
         return;
       }
-      navigate(`/session/${claimed.id}`);
+      navigate(`/session/${claimed.id}`, { state: { session: claimed } });
     } catch (e: any) {
       console.warn('[LiveNowDropInStrip] claim failed:', e);
       await refresh();

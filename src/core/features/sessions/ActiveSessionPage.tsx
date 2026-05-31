@@ -215,6 +215,14 @@ export function ActiveSessionPage() {
   // Router state is synchronously available on first render and avoids the
   // React 18 batching race where context flushes after the component mounts.
   const routerSession = (location.state as { session?: FocusSession } | null)?.session ?? null;
+  // Did the user arrive here by a deliberate action (declaring / claiming /
+  // dropping into a session), which carries the session in router state? If
+  // they did NOT — e.g. the session was restored in the background by
+  // FocusSessionContext, or they reopened the tab — we must NEVER auto-join
+  // the video room. Otherwise a second account whose row was left as
+  // partner_user_id (a stale/zombie 1-on-1) gets pulled into the call with no
+  // click. Passive arrivals always go through the "Share my camera" gate.
+  const arrivedExplicitly = !!routerSession;
   const [session, setSession] = useState<FocusSession | null>(activeSession ?? routerSession);
   const [loadingSession, setLoadingSession] = useState(!(activeSession ?? routerSession));
   // True when a hard-refresh restore hit a persistent transient error. We keep
@@ -929,6 +937,30 @@ export function ActiveSessionPage() {
     return () => clearInterval(t);
   }, [isOpenUnmatchedHost, session?.id]);
 
+  // ── Close an abandoned open door when the host leaves ──────────────
+  // If the host opened a match door and walks away (closes the tab, hits a nav
+  // link) WITHOUT anyone joining, the row would otherwise stay status='active'
+  // open_to_match forever — a zombie "LIVE NOW · Join" door for everyone else.
+  // We end it on real page-leave (pagehide) and on component unmount. Refs keep
+  // the latest state so the unmount cleanup NEVER fires when the door has since
+  // matched (that would kill a freshly-paired session).
+  const openUnmatchedRef = useRef(false);
+  const sessionIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => { openUnmatchedRef.current = isOpenUnmatchedHost; }, [isOpenUnmatchedHost]);
+  useEffect(() => { sessionIdRef.current = session?.id; }, [session?.id]);
+  useEffect(() => {
+    const endIfAbandoned = () => {
+      if (openUnmatchedRef.current && sessionIdRef.current) {
+        void markSessionEnded(sessionIdRef.current).catch(() => { /* best-effort */ });
+      }
+    };
+    window.addEventListener('pagehide', endIfAbandoned);
+    return () => {
+      window.removeEventListener('pagehide', endIfAbandoned);
+      endIfAbandoned();
+    };
+  }, []); // mount-only; reads live values via refs
+
   // ── Background auto-matching: DISABLED ─────────────────────────
   // Previously, while you waited as an open-to-match host, the app scanned for
   // another compatible open door and surfaced a "someone's waiting too" merge
@@ -1596,7 +1628,7 @@ export function ActiveSessionPage() {
                paired up to co-work — connect immediately (connectNow). */
             <CameraGatedMeeting
               currentUserId={user?.id ?? session.id}
-              connectNow={!!session.partner_user_id}
+              connectNow={arrivedExplicitly && !!session.partner_user_id}
               goal={currentGoal}
               secondsRemaining={timerSecondsRemaining}
               roomName={roomName}

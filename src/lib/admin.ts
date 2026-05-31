@@ -158,10 +158,14 @@ export async function updateUserRole(
   targetUserId: string,
   newRole: 'free' | 'premium' | 'admin',
 ) {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ role: newRole, updated_at: new Date().toISOString() })
-    .eq('id', targetUserId);
+  // Goes through a SECURITY DEFINER RPC (admin_set_user_role) gated by
+  // is_admin(). A direct table UPDATE silently matched 0 rows because the only
+  // profiles UPDATE policy is self-only — so the write never persisted and the
+  // UI falsely reported success.
+  const { error } = await supabase.rpc('admin_set_user_role', {
+    target_user_id: targetUserId,
+    new_role: newRole,
+  });
   if (error) throw error;
   return { success: true };
 }

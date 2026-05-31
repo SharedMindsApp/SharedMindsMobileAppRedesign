@@ -192,7 +192,7 @@ export function FindSessionsSheet({
         return;
       }
       onClose();
-      navigate(`/session/${claimed.id}`);
+      navigate(`/session/${claimed.id}`, { state: { session: claimed } });
     } catch (e: any) {
       setError(e?.message ?? 'Could not drop in.');
       fetchOpenSessions().then(setOpenSessions).catch(() => {});

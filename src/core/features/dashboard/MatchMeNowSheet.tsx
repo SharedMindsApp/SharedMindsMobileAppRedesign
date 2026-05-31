@@ -145,7 +145,7 @@ export function MatchMeNowSheet({
         return;
       }
       onClose();
-      navigate(`/session/${claimed.id}`);
+      navigate(`/session/${claimed.id}`, { state: { session: claimed } });
     } catch (e: any) {
       setError(e?.message ?? 'Could not drop in. Try again.');
       await refresh();
