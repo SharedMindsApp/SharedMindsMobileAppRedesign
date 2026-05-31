@@ -31,9 +31,13 @@ interface ParticipantTileProps {
    *  can Report or Block them. Evidence (screenshot + last 5m of chat)
    *  is captured automatically on report submission. */
   focusSessionId?: string;
+  /** Compact = filmstrip thumbnail. Drops the tall min-height, shrinks the
+   *  avatar + rings, and hides the Safety menu (still reachable from the
+   *  big spotlight tile / by tapping the name). */
+  compact?: boolean;
 }
 
-function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: ParticipantTileProps) {
+function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId, compact = false }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -95,7 +99,9 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
       // helper (src/lib/evidenceCapture.ts) can locate the <video>
       // element by Daily session id when a user reports this participant.
       data-daily-participant={sessionId}
-      className="relative rounded-2xl overflow-hidden bg-[#0f0f1e] flex items-center justify-center min-h-[200px]"
+      className={`relative rounded-2xl overflow-hidden bg-[#0f0f1e] flex items-center justify-center ${
+        compact ? 'w-full h-full min-h-0' : 'min-h-[200px]'
+      }`}
       style={{
         outline: isSpeaking ? '2px solid #a78bfa' : '2px solid transparent',
         outlineOffset: '-2px',
@@ -109,7 +115,7 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
           SharedMinds user_id. Floats top-right with a semi-opaque chip
           so it reads against any video background. Reporting from here
           triggers evidence capture (video frame + chat transcript). */}
-      {!isLocal && sharedmindsUserId && (
+      {!isLocal && sharedmindsUserId && !compact && (
         <div className="absolute top-2 right-2 z-20">
           <SafetyMenu
             targetUserId={sharedmindsUserId}
@@ -137,9 +143,11 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
       {!hasVideo && (
         <div className="absolute inset-0 flex items-center justify-center">
           {/* Rings sit behind the avatar */}
-          <PulsingRings audioLevel={audioLevel} size={120} />
+          <PulsingRings audioLevel={audioLevel} size={compact ? 56 : 120} />
 
-          <div className="relative z-10 w-24 h-24 sm:w-32 sm:h-32 rounded-full overflow-hidden bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
+          <div className={`relative z-10 rounded-full overflow-hidden bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg ${
+            compact ? 'w-11 h-11' : 'w-24 h-24 sm:w-32 sm:h-32'
+          }`}>
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -148,7 +156,7 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
                 draggable={false}
               />
             ) : (
-              <span className="text-3xl sm:text-4xl font-bold text-white">{initial}</span>
+              <span className={`font-bold text-white ${compact ? 'text-base' : 'text-3xl sm:text-4xl'}`}>{initial}</span>
             )}
           </div>
         </div>
