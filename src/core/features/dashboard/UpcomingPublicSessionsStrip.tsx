@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, ArrowRight, Sparkles, Globe2, Users } from 'lucide-react';
 import { fetchRsvpCounts, type ScheduledSessionWithProfile } from '../../services/SessionService';
 import { SessionTagPills } from '../sessions/SessionTagPills';
+import { SessionDetailSheet, toGridScheduled } from '../sessions/CalendarView';
 
 const PURPOSE_META: Record<string, { label: string; cls: string; Icon: typeof Sparkles }> = {
   weekly_review: { label: 'Weekly review', cls: 'bg-violet-100 text-violet-700', Icon: Sparkles },
@@ -82,6 +83,11 @@ export function UpcomingPublicSessionsStrip({
     })
     .slice(0, 6);
 
+  // Tapping a card opens the shared SessionDetailSheet (sign up / details /
+  // host edit) as a bottom sheet — no full-page navigation.
+  const [openSession, setOpenSession] = useState<ScheduledSessionWithProfile | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // "N going" social proof — aggregate sign-up counts for the shown sessions.
   const [going, setGoing] = useState<Record<string, number>>({});
   const idsKey = upcoming.map((s) => s.id).join(',');
@@ -92,7 +98,7 @@ export function UpcomingPublicSessionsStrip({
       .then((c) => { if (!cancelled) setGoing(c); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [idsKey]);
+  }, [idsKey, refreshKey]);
 
   if (upcoming.length === 0) return null;
 
@@ -122,10 +128,7 @@ export function UpcomingPublicSessionsStrip({
             <button
               key={s.id}
               type="button"
-              onClick={() => {
-                if (s.join_code) navigate(`/join/${s.join_code}`);
-                else navigate('/sessions');
-              }}
+              onClick={() => setOpenSession(s)}
               className="snap-start shrink-0 w-[220px] text-left rounded-2xl bg-surface-container-low hover:bg-surface-container transition-all p-3 active:scale-[0.98]"
             >
               <div className="flex items-center gap-1.5 mb-2.5 flex-wrap">
@@ -188,6 +191,16 @@ export function UpcomingPublicSessionsStrip({
           <span className="text-xs font-bold text-primary">View calendar</span>
         </button>
       </div>
+
+      {openSession && (
+        <SessionDetailSheet
+          session={toGridScheduled(openSession)}
+          isMine={openSession.user_id === myUserId}
+          onClose={() => setOpenSession(null)}
+          onJoined={(id) => { setOpenSession(null); navigate(`/session/${id}`); }}
+          onChanged={() => setRefreshKey((k) => k + 1)}
+        />
+      )}
     </section>
   );
 }
