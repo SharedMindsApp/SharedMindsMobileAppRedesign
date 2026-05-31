@@ -2042,12 +2042,12 @@ export function SessionDetailSheet({
                     : 'stitch-btn--primary text-white'
                 }`}
               >
-                {rsvped ? <><Check size={15} /> You're going</> : <><CalendarPlus size={15} /> Sign up</>}
+                {rsvped ? <><Check size={15} /> On your calendar</> : <><CalendarPlus size={15} /> Add to calendar</>}
               </button>
               <p className="text-[11px] stitch-text-secondary text-center leading-snug">
                 {rsvped
-                  ? `Added to your calendar. You'll get the countdown + a reminder — join when it starts ${session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.`
-                  : `Starts ${session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}. Sign up to add it to your calendar and get a reminder.`}
+                  ? `You'll get the countdown + a reminder — join when it starts ${session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.`
+                  : `Starts ${session.startsAt.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}. Add it to your calendar to get the countdown + a reminder.`}
               </p>
             </div>
           )}
@@ -2152,9 +2152,11 @@ export function SessionDetailSheet({
           )}
           {!editing && !confirmingDelete && (
             <>
-              {/* Add-to-calendar only makes sense for sessions that haven't
-                  happened yet — a past session is history. */}
-              {!isRecap && (
+              {/* Device-calendar (.ics) export. Hidden when the RSVP
+                  "Add to calendar" button is showing (canRsvp) so there's
+                  exactly one add-to-calendar action; for those, sign-up IS
+                  the add-to-calendar. Only for sessions that haven't happened. */}
+              {!isRecap && !canRsvp && (
                 <button
                   type="button"
                   onClick={handleAddToCalendar}
