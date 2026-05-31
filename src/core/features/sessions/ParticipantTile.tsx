@@ -21,6 +21,7 @@ import {
 import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { PulsingRings } from './PulsingRings';
 import { SafetyMenu } from '../moderation/SafetyMenu';
+import { SessionProfileSheet } from './SessionProfileSheet';
 
 interface ParticipantTileProps {
   sessionId: string;        // Daily session ID (not SharedMinds session)
@@ -61,6 +62,11 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
   //    visualiser never pulsed.
   const [audioLevel, setAudioLevel] = useState(0);
   useAudioLevelObserver(sessionId, (v) => setAudioLevel(v));
+
+  // Tap a remote participant's name to peek their public profile + projects
+  // without leaving the session.
+  const [profileOpen, setProfileOpen] = useState(false);
+  const canViewProfile = !isLocal && !!sharedmindsUserId;
 
   // ── Wire the video track into the <video> element
   useEffect(() => {
@@ -148,9 +154,18 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
         </div>
       )}
 
-      {/* Name + mute badge */}
+      {/* Name + mute badge. For remote participants the pill is tappable —
+          it opens their public profile + projects without leaving the call. */}
       <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5 pointer-events-none">
-        <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 max-w-full">
+        <button
+          type="button"
+          disabled={!canViewProfile}
+          onClick={canViewProfile ? () => setProfileOpen(true) : undefined}
+          className={`flex items-center gap-1.5 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 max-w-full text-left ${
+            canViewProfile ? 'pointer-events-auto hover:bg-black/75 active:scale-95 transition cursor-pointer' : ''
+          }`}
+          aria-label={canViewProfile ? `View ${userName ?? 'participant'}'s profile` : undefined}
+        >
           {/* Mic + camera state — at-a-glance icons. */}
           {isMuted
             ? <MicOff size={11} className="text-red-400 shrink-0" />
@@ -161,8 +176,17 @@ function ParticipantTileImpl({ sessionId, isLocal = false, focusSessionId }: Par
           <span className="text-[11px] font-bold text-white truncate">
             {isLocal ? `${userName ?? 'You'} (You)` : userName ?? 'Guest'}
           </span>
-        </div>
+        </button>
       </div>
+
+      {profileOpen && sharedmindsUserId && (
+        <SessionProfileSheet
+          userId={sharedmindsUserId}
+          fallbackName={userName ?? undefined}
+          fallbackAvatar={avatarUrl}
+          onClose={() => setProfileOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, X, MessageSquare } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { SessionProfileSheet } from './SessionProfileSheet';
 
 interface ChatMessage {
   id: string;
@@ -36,6 +37,8 @@ export function SessionChat({ sessionId, currentUserId, displayName, avatarUrl =
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [unread, setUnread] = useState(0);
   const [draft, setDraft] = useState('');
+  // Tap a sender (avatar/name) to peek their public profile + projects.
+  const [peek, setPeek] = useState<{ userId: string; name: string; avatarUrl: string | null } | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const openRef = useRef(open); openRef.current = open;
   const listEndRef = useRef<HTMLDivElement | null>(null);
@@ -121,15 +124,34 @@ export function SessionChat({ sessionId, currentUserId, displayName, avatarUrl =
               ) : (
                 messages.map((m, i) => {
                   const mine = m.userId === currentUserId;
+                  const peekable = !mine && !!m.userId;
+                  const openPeek = peekable ? () => setPeek({ userId: m.userId, name: m.name, avatarUrl: m.avatarUrl }) : undefined;
                   return (
                     <div key={`${m.id}-${i}`} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
                       {!mine && (
-                        m.avatarUrl
-                          ? <img src={m.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-                          : <div className="w-6 h-6 rounded-full bg-violet-500/40 grid place-items-center text-[10px] font-bold text-white shrink-0">{(m.name || '?').charAt(0).toUpperCase()}</div>
+                        <button
+                          type="button"
+                          onClick={openPeek}
+                          disabled={!peekable}
+                          className={`shrink-0 ${peekable ? 'cursor-pointer active:scale-90 transition' : ''}`}
+                          aria-label={peekable ? `View ${m.name}'s profile` : undefined}
+                        >
+                          {m.avatarUrl
+                            ? <img src={m.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover" />
+                            : <div className="w-6 h-6 rounded-full bg-violet-500/40 grid place-items-center text-[10px] font-bold text-white">{(m.name || '?').charAt(0).toUpperCase()}</div>}
+                        </button>
                       )}
                       <div className={`max-w-[78%] flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-                        {!mine && <span className="text-[10px] text-white/40 mb-0.5 px-1">{m.name}</span>}
+                        {!mine && (
+                          <button
+                            type="button"
+                            onClick={openPeek}
+                            disabled={!peekable}
+                            className={`text-[10px] text-white/40 mb-0.5 px-1 ${peekable ? 'hover:text-white/70 hover:underline cursor-pointer' : ''}`}
+                          >
+                            {m.name}
+                          </button>
+                        )}
                         <div className={`px-3 py-2 rounded-2xl text-sm leading-snug break-words ${mine ? 'bg-violet-500 text-white rounded-br-md' : 'bg-white/10 text-white/90 rounded-bl-md'}`}>
                           {m.text}
                         </div>
@@ -162,6 +184,15 @@ export function SessionChat({ sessionId, currentUserId, displayName, avatarUrl =
             </div>
           </div>
         </div>
+      )}
+
+      {peek && (
+        <SessionProfileSheet
+          userId={peek.userId}
+          fallbackName={peek.name}
+          fallbackAvatar={peek.avatarUrl}
+          onClose={() => setPeek(null)}
+        />
       )}
     </>,
     document.body,
