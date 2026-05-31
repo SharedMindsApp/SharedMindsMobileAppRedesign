@@ -76,6 +76,13 @@ export interface StartCommunitySessionInput {
    */
   bodyDouble?: boolean;
   /**
+   * Audio-only session — voice + avatar, no camera/screen. ~4× cheaper to
+   * host (Daily bills audio at ~1/4 the video rate). Only meaningful for
+   * non-solo sessions (a room is created). Enforced server-side via the
+   * meeting-token canSend permission.
+   */
+  audioOnly?: boolean;
+  /**
    * Real-world / offline session — user is away from the screen entirely.
    * UI flips to phone-optimised chrome (no big timer circle, no Jitsi),
    * and Web Notifications fire when the timer completes. Implies solo
@@ -148,6 +155,8 @@ export async function startCommunitySession(
       project_id: input.projectId ?? null,
       session_mode: input.sessionMode ?? 'group',
       quiet_mode: input.quietMode ?? false,
+      // Audio-only only applies when a room is created (non-solo).
+      audio_only: (input.sessionMode ?? 'group') !== 'solo' && !!input.audioOnly,
       // Body-double and offline are mutually exclusive solo variants.
       // Offline takes precedence — if both are passed, body_double off.
       body_double: input.sessionMode === 'solo' && !input.isOffline && !!input.bodyDouble,

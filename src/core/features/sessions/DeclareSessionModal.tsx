@@ -148,6 +148,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
   //   • Real world (no screen, mobile chrome, offline-friendly)
   const [bodyDouble, setBodyDouble] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
+  const [audioOnly, setAudioOnly] = useState(false);
   /** Open-to-match: "I'm starting solo, but if someone wants to drop in
    *  for a body-double, the door's open." See migration 20260527000015. */
   const [openToMatch, setOpenToMatch] = useState<boolean>(!!startOpenToMatch);
@@ -425,6 +426,7 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
         sessionMode,
         // Solo has no audio room — quiet mode is meaningless there
         quietMode: sessionMode === 'solo' ? false : quietMode,
+        audioOnly: sessionMode === 'solo' ? false : audioOnly,
         bodyDouble: sessionMode === 'solo' ? bodyDouble : false,
         isOffline: false,
         // Open-to-match is solo-only (the service layer enforces this too).
@@ -1497,6 +1499,42 @@ export function DeclareSessionModal({ onClose, initialGoal, initialScheduledAt, 
               }`}>
                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
                   quietMode ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* ── Audio-only toggle (non-solo) — voice + avatars, no camera ── */}
+        {sessionMode !== 'solo' && (
+          <div className="shrink-0 px-5 pt-3">
+            <button
+              type="button"
+              onClick={() => setAudioOnly((v) => !v)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                audioOnly
+                  ? 'bg-primary/8 ring-2 ring-primary/25'
+                  : 'bg-surface-container-low hover:bg-surface-container'
+              }`}
+            >
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                audioOnly ? 'bg-primary text-white' : 'bg-white stitch-text-secondary'
+              }`}>
+                {audioOnly ? <Volume2 size={14} /> : <Video size={14} />}
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-sm font-bold stitch-text-primary leading-tight">
+                  Audio only {audioOnly && <span className="text-primary">· on</span>}
+                </p>
+                <p className="text-[11px] stitch-text-secondary leading-tight mt-0.5">
+                  Voice + avatars, no camera — lighter on data, easier to join
+                </p>
+              </div>
+              <div className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 ${
+                audioOnly ? 'bg-primary' : 'bg-surface-container'
+              }`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                  audioOnly ? 'translate-x-4' : 'translate-x-0'
                 }`} />
               </div>
             </button>

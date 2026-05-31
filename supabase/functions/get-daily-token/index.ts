@@ -101,13 +101,18 @@ async function createMeetingToken(
   isModerator: boolean,
   userId: string,
   bodyDouble: boolean,
+  audioOnly: boolean,
 ): Promise<string> {
-  // Body-double mode: camera required ON, mic permanently OFF. Enforced at
-  // the protocol layer via Daily's `permissions.canSend` — users physically
-  // cannot unmute themselves regardless of what their client tries.
-  const bodyDoublePermissions = bodyDouble
+  // Protocol-level send permissions — what tracks this participant may publish.
+  // Enforced by Daily server-side, so a client can't override them.
+  //   • body-double: video only (camera required, mic locked off)
+  //   • audio-only:  audio only (no camera/screen) → guarantees audio billing
+  //   • default:     audio + video + screenVideo
+  const permsObj = bodyDouble
     ? { permissions: { canSend: ['video'] as const, hasPresence: true } }
-    : {};
+    : audioOnly
+      ? { permissions: { canSend: ['audio'] as const, hasPresence: true } }
+      : {};
 
   const { ok, data } = await dailyFetch('/meeting-tokens', {
     method: 'POST',
@@ -123,7 +128,7 @@ async function createMeetingToken(
         // camera-off participants still render their profile picture.
         // Token valid for 4 hours — session can't legitimately run longer
         exp: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
-        ...bodyDoublePermissions,
+        ...permsObj,
       },
     }),
   });
@@ -162,13 +167,13 @@ serve(async (req) => {
   // Wrap in try/catch — a malformed body would otherwise throw before CORS
   // headers are attached, so the browser sees a confusing CORS error instead
   // of a clean 400.
-  let parsed: { roomName: string; displayName: string; isModerator?: boolean; bodyDouble?: boolean };
+  let parsed: { roomName: string; displayName: string; isModerator?: boolean; bodyDouble?: boolean; audioOnly?: boolean };
   try {
     parsed = await req.json();
   } catch {
     return json({ error: 'Invalid request body' }, 400);
   }
-  const { roomName, displayName, isModerator = false, bodyDouble = false } = parsed;
+  const { roomName, displayName, isModerator = false, bodyDouble = false, audioOnly = false } = parsed;
 
   if (!roomName || !displayName) {
     return json({ error: 'roomName and displayName are required' }, 400);
@@ -183,7 +188,7 @@ serve(async (req) => {
 
   try {
     await upsertRoom(safeRoom, bodyDouble);
-    const token = await createMeetingToken(safeRoom, displayName, isModerator, user.id, bodyDouble);
+    const token = await createMeetingToken(safeRoom, displayName, isModerator, user.id, bodyDouble, audioOnly);
     const url = `https://${DAILY_DOMAIN}.daily.co/${safeRoom}`;
     return json({ url, token });
   } catch (err) {

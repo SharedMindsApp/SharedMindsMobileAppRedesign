@@ -19,6 +19,8 @@ interface MeetingControlsProps {
   onLeave: () => void;
   /** True only if the local user's avatar passed face verification. */
   avatarVerified: boolean;
+  /** Audio-only room — hide camera, screen-share and blur (no video). */
+  audioOnly?: boolean;
 }
 
 // localStorage keys so the user's blur / noise-suppression preferences stick
@@ -26,7 +28,7 @@ interface MeetingControlsProps {
 const BLUR_KEY = 'sm_fx_blur';
 const DENOISE_KEY = 'sm_fx_denoise';
 
-export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProps) {
+export function MeetingControls({ onLeave, avatarVerified, audioOnly = false }: MeetingControlsProps) {
   const call = useDaily();
   const localParticipant = useLocalParticipant();
   const { isSharingScreen, startScreenShare, stopScreenShare } = useScreenShare();
@@ -119,22 +121,26 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
           {micOn ? <Mic size={18} /> : <MicOff size={18} />}
         </ControlButton>
 
-        <ControlButton
-          onClick={toggleCam}
-          active={camOn}
-          label={
-            camOn
-              ? avatarVerified ? 'Stop video' : 'Verified profile photo required'
-              : 'Start video'
-          }
-          locked={camOn && !avatarVerified}
-        >
-          {camOn ? <Video size={18} /> : <VideoOff size={18} />}
-        </ControlButton>
+        {!audioOnly && (
+          <ControlButton
+            onClick={toggleCam}
+            active={camOn}
+            label={
+              camOn
+                ? avatarVerified ? 'Stop video' : 'Verified profile photo required'
+                : 'Start video'
+            }
+            locked={camOn && !avatarVerified}
+          >
+            {camOn ? <Video size={18} /> : <VideoOff size={18} />}
+          </ControlButton>
+        )}
 
-        <ControlButton onClick={toggleShare} active={!isSharingScreen} label={isSharingScreen ? 'Stop sharing' : 'Share screen'}>
-          {isSharingScreen ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
-        </ControlButton>
+        {!audioOnly && (
+          <ControlButton onClick={toggleShare} active={!isSharingScreen} label={isSharingScreen ? 'Stop sharing' : 'Share screen'}>
+            {isSharingScreen ? <ScreenShareOff size={18} /> : <ScreenShare size={18} />}
+          </ControlButton>
+        )}
 
         {/* Session settings — blur, noise suppression, camera/mic/speaker.
             Keeps the bar to the essentials (mic / cam / share / leave). */}
@@ -156,7 +162,7 @@ export function MeetingControls({ onLeave, avatarVerified }: MeetingControlsProp
       {settingsOpen && (
         <SessionSettingsSheet
           blurOn={blurOn}
-          blurSupported={blurSupported}
+          blurSupported={blurSupported && !audioOnly}
           onToggleBlur={toggleBlur}
           denoiseOn={denoiseOn}
           denoiseSupported={denoiseSupported}

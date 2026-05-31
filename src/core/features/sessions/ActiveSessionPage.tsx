@@ -13,6 +13,7 @@ import type { WizardId } from './SessionWizards/types';
 import { PresenceGatedMeeting } from './PresenceGatedMeeting';
 import { CameraGatedMeeting } from './CameraGatedMeeting';
 import { HostGatedMeeting } from './HostGatedMeeting';
+import { DailyMeeting } from './DailyMeeting';
 import { useWakeLock } from '../../../lib/useWakeLock';
 import { showToast } from '../../../components/Toast';
 import { SessionChat } from './SessionChat';
@@ -730,6 +731,7 @@ export function ActiveSessionPage() {
   const isSolo = session?.session_mode === 'solo';
   const isOneOnOne = session?.session_mode === 'one_on_one';
   const isQuiet = session?.quiet_mode === true;
+  const isAudioOnly = session?.audio_only === true;
 
   // ── Match-me-now: declare the task WHILE WAITING ───────────────
   // Open-to-match sessions start goal-less (the modal skips the goal step).
@@ -1577,7 +1579,30 @@ export function ActiveSessionPage() {
           // On mobile the chat is a full-screen overlay, so no margin there.
           className={`relative min-h-0 flex-1 transition-[margin] duration-300 ${chatOpen ? 'sm:mr-[360px]' : ''}`}
         >
-          {isOneOnOne ? (
+          {isAudioOnly ? (
+            /* Audio-only: voice + avatars, no camera. No camera gate needed —
+               connect straight into the (cheap) audio room. The token enforces
+               audio-only, so video can never be published. */
+            <DailyMeeting
+              roomName={roomName}
+              displayName={profile?.display_name ?? 'Member'}
+              isModerator={isModerator}
+              startAudioMuted={isQuiet || isSilentVibe}
+              startVideoMuted
+              audioOnly
+              goal={currentGoal}
+              secondsRemaining={timerSecondsRemaining}
+              avatarVerified={profile?.avatar_status === 'approved'}
+              avatarUrl={profile?.avatar_url ?? null}
+              focusSessionId={session.id}
+              muteAudioSignal={muteAudioSignal}
+              onParticipantJoined={() => {
+                setPartnerJoined(true);
+                setShowNoShowBanner(false);
+              }}
+              onLeave={() => navigate('/sessions')}
+            />
+          ) : isOneOnOne ? (
             /* 1-on-1 / match: while waiting alone, a local preview +
                "Share my camera" gate (no Daily). Once actually matched, both
                paired up to co-work — connect immediately (connectNow). */

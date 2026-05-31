@@ -47,6 +47,9 @@ export interface FocusSession {
   /** Solo body-double mode: silent video coworking in a shared room.
       Only meaningful when session_mode = 'solo'. */
   body_double?: boolean;
+  /** Audio-only (voice + avatar, no camera/screen). ~4× cheaper to host.
+      Enforced at the Daily token layer (canSend=[audio]). */
+  audio_only?: boolean;
   /** Real-world / offline mode. User is away from their screen entirely
       (allotment, exercise, household, etc). The active-session UI flips
       to a phone-optimised chrome and the community feed shows a

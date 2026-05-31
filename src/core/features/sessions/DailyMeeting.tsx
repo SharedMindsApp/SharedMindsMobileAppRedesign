@@ -42,6 +42,7 @@ async function fetchDailyToken(
   displayName: string,
   isModerator: boolean,
   bodyDouble: boolean,
+  audioOnly: boolean,
 ): Promise<{ url: string; token: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
@@ -54,7 +55,7 @@ async function fetchDailyToken(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${authToken}`,
     },
-    body: JSON.stringify({ roomName, displayName, isModerator, bodyDouble }),
+    body: JSON.stringify({ roomName, displayName, isModerator, bodyDouble, audioOnly }),
   });
 
   const body = await res.json().catch(() => ({}));
@@ -123,6 +124,9 @@ export interface DailyMeetingProps {
    *  signal, not a sticky setting — the user can immediately unmute
    *  again if they want. Subsequent value changes mute again. */
   muteAudioSignal?: number;
+  /** Audio-only room — voice + avatars, no camera/screen. Forces video off,
+   *  hides the camera/screen/blur controls. ~4× cheaper to host. */
+  audioOnly?: boolean;
   /** The declared session goal — surfaced as an in-call "now bar" so coworkers
    *  always see what this session is for without leaving the video. */
   goal?: string;
@@ -148,6 +152,7 @@ export function DailyMeeting({
   onParticipantJoined,
   onLeave,
   muteAudioSignal,
+  audioOnly = false,
   goal,
   secondsRemaining,
 }: DailyMeetingProps) {
@@ -231,7 +236,7 @@ export function DailyMeeting({
     let cancelled = false;
     setConnectionState('loading');
 
-    fetchDailyToken(roomName, displayName, isModerator, bodyDouble)
+    fetchDailyToken(roomName, displayName, isModerator, bodyDouble, audioOnly)
       .then(async ({ url, token }) => {
         if (cancelled) return;
 
@@ -245,7 +250,7 @@ export function DailyMeeting({
         // If there are no devices at all, force mic + cam off so Daily
         // doesn't stall trying to acquire tracks.
         let forceAudioOff = startAudioMuted;
-        let forceVideoOff = startVideoMuted;
+        let forceVideoOff = startVideoMuted || audioOnly;   // audio-only never publishes video
         try {
           const devices = await navigator.mediaDevices?.enumerateDevices?.();
           const hasAudio = devices?.some((d) => d.kind === 'audioinput');
@@ -464,7 +469,7 @@ export function DailyMeeting({
                 chromeVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
               }`}
             >
-              <MeetingControls onLeave={handleLeave} avatarVerified={avatarVerified} />
+              <MeetingControls onLeave={handleLeave} avatarVerified={avatarVerified} audioOnly={audioOnly} />
             </div>
           )}
         </DailyProvider>
